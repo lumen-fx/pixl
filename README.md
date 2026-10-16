@@ -80,7 +80,9 @@ colors, and share pixl's license.
 
 The editor builds against Lumen 0.0.10, which is not on crates.io yet. Until it
 is, building `pixl` needs `lumenui` and `lumenui-canvas` patched in from a Lumen
-checkout, and CI fails on the app crate.
+checkout, and CI fails on the app crate. A release build reads its
+stylesheets, font, icons and `lumen.toml` from the directory it starts in, so
+run it from `app/`: `cd app && ../target/release/pixl`.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
