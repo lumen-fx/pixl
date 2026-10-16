@@ -32,7 +32,9 @@ not fit the renderer's image budget. Large redraws run on worker threads and
 show tile by tile as they finish.
 
 The tools run on `pixl-core`: the pencil (pixel-perfect by default), eraser,
-line, rectangle, ellipse, bucket, eyedropper, rectangle selection and move.
+line, rectangle, ellipse, bucket, eyedropper, rectangle selection and move. The
+tool bar shows each as a pixel icon, and its tooltip names the tool and its
+key.
 Their keys are B, E, L, U (Shift+U for the ellipse), G, I, M and V; X swaps the
 foreground and background colors, the secondary button paints with the
 background color, and Shift snaps lines to clean pixel steps and shapes to
@@ -58,7 +60,9 @@ The editor has its own theme, written entirely in CSS over its own tokens: a
 dark set of neutral greys so the colors in the art read true, and a light set
 built from the same tokens. The UI font is Pixelify Sans by Stefie Justprince,
 under the SIL Open Font License (`app/assets/fonts/OFL.txt`); a setting in the
-menu row switches the UI to the platform's sans-serif instead.
+menu row switches the UI to the platform's sans-serif instead. The tool
+icons are pixl's own, drawn in `app/assets/icons/draw.py` in the theme's ink
+colors, and share pixl's license.
 
 The editor builds against Lumen 0.0.10, which is not on crates.io yet. Until it
 is, building `pixl` needs `lumenui` and `lumenui-canvas` patched in from a Lumen
