@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
-    Key, Modifiers, ModifiersState, MouseWheel, NamedKey, PointerButton, PointerData, PointerKind,
-    PointerMoved, PointerPressed, PointerReleased,
+    Key, MenuClicked, Modifiers, ModifiersState, MouseWheel, NamedKey, PointerButton, PointerData,
+    PointerKind, PointerMoved, PointerPressed, PointerReleased,
 };
 use lumenui::prelude::*;
 use pixl::view::View;
@@ -43,6 +43,8 @@ pub enum Step {
     Ctrl(&'static str, bool),
     /// A click on the element with this id.
     Click(&'static str),
+    /// A click on a menu item.
+    Menu(&'static str),
     /// A control writing a number to a signal, as a slider does.
     Number(&'static str, f64),
     /// A control writing text to a signal, as a dropdown does.
@@ -102,6 +104,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    mut moved: MessageWriter<PointerMoved>,
                    mut up: MessageWriter<PointerReleased>,
                    mut clicks: MessageWriter<ClickEvent>,
+                   mut menu: MessageWriter<MenuClicked>,
                    elements: Query<(Entity, &LumenId)>,
                    mut signals: Signals| {
                 *tick += 1;
@@ -245,6 +248,9 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             pointer: PointerData::mouse(0),
                         });
                     }
+                    Step::Menu(id) => {
+                        menu.write(MenuClicked { id: id.to_string() });
+                    }
                     Step::Number(name, v) => signals.set(name, v),
                     Step::Text(name, v) => signals.set(name, v),
                     Step::Edit(f) => f(&mut editor),
@@ -252,7 +258,8 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 }
             })
             .before(pixl::input::navigate)
-            .before(pixl::panels::panel_clicks),
+            .before(pixl::panels::panel_clicks)
+            .before(pixl::files::file_commands),
         )
         .add_systems(
             TickStage::Systems,

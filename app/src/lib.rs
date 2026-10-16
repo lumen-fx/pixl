@@ -2,6 +2,7 @@
 //! document model in `pixl-core`.
 
 pub mod editor;
+pub mod files;
 pub mod input;
 pub mod panels;
 pub mod progressive;
@@ -44,29 +45,43 @@ pub fn editor(source: Source) -> App {
         .insert_resource(view::Drawn::default())
         .insert_resource(view::Layers::default())
         .insert_resource(input::Navigation::default())
+        .insert_signal("new_width", "64")
+        .insert_signal("new_height", "64")
         .insert_resource(tools::Gesture::default())
         .insert_resource(panels::Panels::default())
+        .insert_resource(files::Files::default())
         .add_systems(
             TickStage::Systems,
             (
-                settings::look_switches,
-                settings::show_look,
-                view::read_view_colors,
-                view::measure_stage,
-                input::navigate,
-                panels::panel_clicks,
-                panels::history_keys,
-                panels::layer_controls,
-                panels::color_controls,
-                tools::pick_tool,
-                tools::tool_options,
-                tools::use_tools,
-                view::sync_layers,
-                view::draw_stage,
-                tools::track_pointer,
-                panels::show_panels,
-                tools::show_tool,
-                tools::stage_cursor,
+                // What the user did this tick, in the order it applies.
+                (
+                    settings::look_switches,
+                    settings::show_look,
+                    view::read_view_colors,
+                    view::measure_stage,
+                    input::navigate,
+                    files::file_commands,
+                    panels::panel_clicks,
+                    panels::history_keys,
+                    panels::layer_controls,
+                    panels::color_controls,
+                    tools::pick_tool,
+                    tools::tool_options,
+                    tools::use_tools,
+                )
+                    .chain(),
+                // Then what the window shows of it.
+                (
+                    view::sync_layers,
+                    view::draw_stage,
+                    tools::track_pointer,
+                    panels::show_panels,
+                    files::autosave,
+                    files::show_message,
+                    tools::show_tool,
+                    tools::stage_cursor,
+                )
+                    .chain(),
             )
                 .chain()
                 .after(ClickSet::Producers)

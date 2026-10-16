@@ -2,6 +2,19 @@
   <row id="menubar">
     <label class="brand" text="pixl"/>
     <button id="menu-file" class="menu-title" text="File"/>
+    <menu id="file-menu">
+      <menuitem id="file-new" label="New... (Ctrl+N)"/>
+      <menuitem id="file-open" label="Open... (Ctrl+O)"/>
+      <separator/>
+      <menuitem id="file-save" label="Save (Ctrl+S)"/>
+      <menuitem id="file-save-as" label="Save as... (Ctrl+Shift+S)"/>
+      <separator/>
+      <menuitem id="file-import-png" label="Import PNG..."/>
+      <menuitem id="file-import-aseprite" label="Import Aseprite..."/>
+      <separator/>
+      <menuitem id="file-export-png" label="Export PNG... (Ctrl+E)"/>
+      <menuitem id="file-export-gif" label="Export GIF..."/>
+    </menu>
     <button id="menu-edit" class="menu-title" text="Edit"/>
     <button id="menu-view" class="menu-title" text="View"/>
     <button id="menu-layer" class="menu-title" text="Layer"/>
@@ -134,6 +147,47 @@
     </column>
   </row>
 
+  <dialog open="new_open">
+    <column class="dialog-card">
+      <label class="dialog-title" text="New document"/>
+      <row class="dialog-row">
+        <label class="option-label" text="Width"/>
+        <input id="new-width" class="size-field" bind-text="new_width" text="64"/>
+        <label class="option-label" text="Height"/>
+        <input id="new-height" class="size-field" bind-text="new_height" text="64"/>
+      </row>
+      <row class="dialog-actions">
+        <spacer/>
+        <button id="new-cancel" text="Cancel"/>
+        <button id="new-create" class="primary" default="true" text="Create"/>
+      </row>
+    </column>
+  </dialog>
+
+  <dialog open="discard_open">
+    <column class="dialog-card">
+      <label class="dialog-title" text="Discard unsaved changes?"/>
+      <label class="dialog-text" text="The document has edits that are not saved."/>
+      <row class="dialog-actions">
+        <spacer/>
+        <button id="discard-no" text="Keep editing"/>
+        <button id="discard-yes" class="primary" default="true" text="Discard"/>
+      </row>
+    </column>
+  </dialog>
+
+  <dialog open="recover_open">
+    <column class="dialog-card">
+      <label class="dialog-title" text="Recover unsaved edits?"/>
+      <label class="dialog-text" text="An autosaved copy of this document is newer than the file."/>
+      <row class="dialog-actions">
+        <spacer/>
+        <button id="recover-no" text="Open the file"/>
+        <button id="recover-yes" class="primary" default="true" text="Recover"/>
+      </row>
+    </column>
+  </dialog>
+
   <tile id="probes" class="probe">
     <tile id="probe-checker-a"/>
     <tile id="probe-checker-b"/>
@@ -147,6 +201,7 @@
     <label id="status-pos" class="status" bind-text="status_pos" text="-"/>
     <label id="status-color" class="status" bind-text="status_color" text="-"/>
     <label id="status-size" class="status" bind-text="status_size" text="-"/>
+    <label id="status-message" class="status message" bind-text="status_message" text=""/>
     <spacer/>
     <label id="status-zoom" class="status" bind-text="status_zoom" text="100%"/>
   </row>

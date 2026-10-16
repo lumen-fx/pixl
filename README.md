@@ -45,6 +45,14 @@ panel adds, deletes, reorders and hides layers and sets the active layer's
 opacity and blend mode; the history panel lists every edit and jumps to any of
 them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
 
+The File menu makes a new document of a chosen size, opens and saves `.pixl`
+documents (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S), imports PNG and Aseprite
+files as new documents, and exports the current frame as a PNG (Ctrl+E) or the
+animation as a GIF. Replacing a document with unsaved edits asks first. While
+a saved document has unsaved edits, the editor writes its recovery copy beside
+it every 30 seconds, and opening a document whose recovery copy is newer
+offers to recover it.
+
 The editor has its own theme, written entirely in CSS over its own tokens: a
 dark set of neutral greys so the colors in the art read true, and a light set
 built from the same tokens. The UI font is Pixelify Sans by Stefie Justprince,
