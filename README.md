@@ -14,7 +14,13 @@ Rust SDK.
 Early. `pixl-core` holds the editor core with no UI: the document model,
 compositing, undo history, raster tools, transforms, and PNG and sprite sheet
 I/O (sheets carry Aseprite-compatible JSON). The editor UI comes next, on top
-of it. pixl has no native file format yet.
+of it.
+
+Documents save as `.pixl` files: one versioned, chunked, compressed file that
+stores each distinct tile once. Saves are atomic, and autosave keeps a
+recovery copy beside the document. A file from a newer pixl opens in an older
+one when the newer data is optional; what the older version cannot read is
+skipped with a warning.
 
 ## Quick start
 

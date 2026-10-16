@@ -30,6 +30,10 @@ pub enum Error {
     ColorModeMismatch,
     /// An image could not be decoded or encoded.
     Image(String),
+    /// A document file is truncated, corrupt or of an unsupported version.
+    Format(String),
+    /// Reading or writing a file failed.
+    Io(String),
 }
 
 impl fmt::Display for Error {
@@ -47,8 +51,16 @@ impl fmt::Display for Error {
             Error::InvalidSize { width, height } => write!(f, "invalid size {width}x{height}"),
             Error::ColorModeMismatch => f.write_str("the image does not match the color mode"),
             Error::Image(msg) => write!(f, "image error: {msg}"),
+            Error::Format(msg) => write!(f, "file error: {msg}"),
+            Error::Io(msg) => write!(f, "i/o error: {msg}"),
         }
     }
 }
 
 impl std::error::Error for Error {}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Io(e.to_string())
+    }
+}

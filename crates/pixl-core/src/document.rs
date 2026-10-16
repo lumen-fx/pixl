@@ -65,6 +65,36 @@ impl BlendMode {
         BlendMode::Add,
         BlendMode::Subtract,
     ];
+
+    /// The mode's number in stored files. pixl files use the numbering of
+    /// Aseprite files, so both formats share one table.
+    pub const fn code(self) -> u16 {
+        match self {
+            BlendMode::Normal => 0,
+            BlendMode::Multiply => 1,
+            BlendMode::Screen => 2,
+            BlendMode::Overlay => 3,
+            BlendMode::Darken => 4,
+            BlendMode::Lighten => 5,
+            BlendMode::ColorDodge => 6,
+            BlendMode::ColorBurn => 7,
+            BlendMode::HardLight => 8,
+            BlendMode::SoftLight => 9,
+            BlendMode::Difference => 10,
+            BlendMode::Exclusion => 11,
+            BlendMode::Hue => 12,
+            BlendMode::Saturation => 13,
+            BlendMode::Color => 14,
+            BlendMode::Luminosity => 15,
+            BlendMode::Add => 16,
+            BlendMode::Subtract => 17,
+        }
+    }
+
+    /// The mode with a stored number, or `None` for one pixl does not have.
+    pub fn from_code(code: u16) -> Option<BlendMode> {
+        BlendMode::ALL.into_iter().find(|m| m.code() == code)
+    }
 }
 
 /// What a lock forbids. A group's locks apply to everything inside it.

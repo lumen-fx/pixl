@@ -1,7 +1,8 @@
 //! The headless core of the pixl pixel art editor: document model,
-//! compositing, history, raster tools, transforms and image I/O. It has no UI
-//! dependency; the editor's UI drives it.
+//! compositing, history, raster tools, transforms, the native `.pixl` file
+//! format and image I/O. It has no UI dependency; the editor's UI drives it.
 
+mod bytes;
 pub mod color;
 pub mod composite;
 pub mod document;
@@ -10,6 +11,7 @@ pub mod geom;
 pub mod history;
 pub mod image;
 pub mod io;
+pub mod native;
 pub mod selection;
 pub mod tools;
 pub mod transform;
