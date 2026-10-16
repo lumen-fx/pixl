@@ -14,6 +14,31 @@
 
   <row id="tool-options">
     <label id="tool-name" class="tool-name" bind-text="tool_label" text="Pencil"/>
+    <if signal="show_size" mode="hide">
+      <row class="option">
+        <label class="option-label" text="Size"/>
+        <slider id="opt-size" class="option-slider" min="1" max="32" step="1" value="1" bind-value="opt_size"/>
+        <label class="option-value" bind-text="opt_size_text" text="1 px"/>
+      </row>
+    </if>
+    <if signal="show_pixel_perfect" mode="hide">
+      <checkbox id="opt-pixel-perfect" label="Pixel perfect" checked="true" bind-checked="opt_pixel_perfect"/>
+    </if>
+    <if signal="show_pressure" mode="hide">
+      <checkbox id="opt-pressure" label="Pressure size" checked="true" bind-checked="opt_pressure"/>
+    </if>
+    <if signal="show_filled" mode="hide">
+      <checkbox id="opt-filled" label="Filled" bind-checked="opt_filled"/>
+    </if>
+    <if signal="show_bucket" mode="hide">
+      <row class="option">
+        <label class="option-label" text="Tolerance"/>
+        <slider id="opt-tolerance" class="option-slider" min="0" max="255" step="1" value="0" bind-value="opt_tolerance"/>
+        <label class="option-value" bind-text="opt_tolerance_text" text="0"/>
+      </row>
+      <checkbox id="opt-contiguous" label="Contiguous" checked="true" bind-checked="opt_contiguous"/>
+    </if>
+    <label id="tool-hint" class="option-label" bind-text="tool_hint" text=""/>
   </row>
 
   <row id="workspace">

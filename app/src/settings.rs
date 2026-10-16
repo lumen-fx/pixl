@@ -1,6 +1,7 @@
 //! The look settings: the dark or light token set and the pixel or plain UI
 //! font. Both are classes on the root element; the stylesheet does the rest.
 
+use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 
 /// Which token set and which UI font the window uses.
@@ -57,7 +58,7 @@ pub fn look_switches(
 
 /// Puts the [`Look`] resource on the window until the root element shows
 /// it. DOM edits land on a later tick, so this checks rather than assumes.
-pub fn show_look(look: Res<Look>) {
+pub fn show_look(look: Res<Look>, wake: Option<Res<WakeDeadline>>) {
     let Some(root) = dom::get_by_id("app") else {
         return;
     };
@@ -68,5 +69,6 @@ pub fn show_look(look: Res<Look>) {
     expected.sort();
     if shown != expected {
         look.apply();
+        crate::repaint_soon(&wake);
     }
 }

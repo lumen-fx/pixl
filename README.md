@@ -30,6 +30,14 @@ CPU instead, and so are the bottom layers of a document whose layers would
 not fit the renderer's image budget. Large redraws run on worker threads and
 show tile by tile as they finish.
 
+The tools run on `pixl-core`: the pencil (pixel-perfect by default), eraser,
+line, rectangle, ellipse, bucket, eyedropper, rectangle selection and move.
+Their keys are B, E, L, U (Shift+U for the ellipse), G, I, M and V; X swaps the
+foreground and background colors, the secondary button paints with the
+background color, and Shift snaps lines to clean pixel steps and shapes to
+squares and circles. Every tool keeps to the selection. With a pen, pressure
+sets the brush size; the pen's eraser end erases.
+
 The editor has its own theme, written entirely in CSS over its own tokens: a
 dark set of neutral greys so the colors in the art read true, and a light set
 built from the same tokens. The UI font is Pixelify Sans by Stefie Justprince,
