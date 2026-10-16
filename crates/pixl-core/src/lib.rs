@@ -7,6 +7,7 @@ pub mod composite;
 pub mod document;
 pub mod error;
 pub mod geom;
+pub mod history;
 pub mod image;
 
 pub use color::{Color, ColorMode, Palette, Rgba};
@@ -17,4 +18,5 @@ pub use document::{
 };
 pub use error::Error;
 pub use geom::{Point, Rect};
+pub use history::{History, Scope, Transaction};
 pub use image::{Raster, TILE_SIZE, TiledImage};

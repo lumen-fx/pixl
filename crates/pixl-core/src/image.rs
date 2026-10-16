@@ -290,6 +290,23 @@ impl<P: Pixel> PartialEq for TiledImage<P> {
     }
 }
 
+/// One tile of a [`Raster`], held by pointer. History keeps these.
+#[derive(Clone, Debug)]
+pub enum TileSnap {
+    Rgba(Option<Arc<Tile<Rgba>>>),
+    Byte(Option<Arc<Tile<u8>>>),
+}
+
+impl TileSnap {
+    /// Bytes the tile holds, 0 when absent.
+    pub fn bytes(&self) -> usize {
+        match self {
+            TileSnap::Rgba(t) => t.as_ref().map_or(0, |_| std::mem::size_of::<Tile<Rgba>>()),
+            TileSnap::Byte(t) => t.as_ref().map_or(0, |_| std::mem::size_of::<Tile<u8>>()),
+        }
+    }
+}
+
 /// The pixels of a cel, a reference image or a layer mask.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Raster {
@@ -382,18 +399,6 @@ impl Raster {
         }
     }
 
-    /// Bytes of tile `index` if present.
-    pub fn tile_bytes(&self, index: usize) -> usize {
-        match self {
-            Raster::Rgba(i) => i
-                .tile(index)
-                .map_or(0, |_| std::mem::size_of::<Tile<Rgba>>()),
-            Raster::Indexed(i) | Raster::Mask(i) => {
-                i.tile(index).map_or(0, |_| std::mem::size_of::<Tile<u8>>())
-            }
-        }
-    }
-
     /// Whether tile `index` is shared with `other` (see [`TiledImage::same_tile`]).
     /// Rasters of different kinds share nothing.
     pub fn same_tile(&self, other: &Raster, index: usize) -> bool {
@@ -406,14 +411,23 @@ impl Raster {
         }
     }
 
-    /// Copies tile `index` from `other` (pointer copy). Kinds must match.
-    pub fn copy_tile_from(&mut self, other: &Raster, index: usize) {
-        match (self, other) {
-            (Raster::Rgba(a), Raster::Rgba(b)) => a.set_tile(index, b.tile(index).cloned()),
-            (Raster::Indexed(a), Raster::Indexed(b)) | (Raster::Mask(a), Raster::Mask(b)) => {
-                a.set_tile(index, b.tile(index).cloned())
+    /// A pointer copy of tile `index`.
+    pub fn tile_snap(&self, index: usize) -> TileSnap {
+        match self {
+            Raster::Rgba(i) => TileSnap::Rgba(i.tile(index).cloned()),
+            Raster::Indexed(i) | Raster::Mask(i) => TileSnap::Byte(i.tile(index).cloned()),
+        }
+    }
+
+    /// Puts back a tile taken with [`Raster::tile_snap`]. Panics if the kinds
+    /// differ.
+    pub fn restore_tile(&mut self, index: usize, snap: &TileSnap) {
+        match (self, snap) {
+            (Raster::Rgba(i), TileSnap::Rgba(t)) => i.set_tile(index, t.clone()),
+            (Raster::Indexed(i) | Raster::Mask(i), TileSnap::Byte(t)) => {
+                i.set_tile(index, t.clone())
             }
-            _ => panic!("copy_tile_from between rasters of different kinds"),
+            _ => panic!("restore_tile with a tile of another kind"),
         }
     }
 
