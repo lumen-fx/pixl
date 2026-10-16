@@ -20,7 +20,8 @@ palette, layers and history panels.
 
 The canvas view zooms from 1 to 6400 percent around the pointer (the wheel,
 or `+`, `-`, `0` to fit and `1` for 100 percent) and pans with the middle
-button or a drag with the space bar held. Pixels stay sharp at every zoom, a
+button, a drag with the space bar held, or W, A, S and D held down (Shift
+moves faster). Pixels stay sharp at every zoom, a
 grid outlines them from 800 percent, and a checkerboard shows through
 transparency. Each layer is its own pixel buffer that Lumen's renderer
 composites with the layer's blend mode and opacity, on the GPU when the app
