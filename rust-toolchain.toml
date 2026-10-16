@@ -1,0 +1,5 @@
+# Same toolchain as Lumen, so rustfmt and clippy output matches the framework
+# this app is built on. Bump together with Lumen, in one commit.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]

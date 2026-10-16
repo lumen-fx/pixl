@@ -1,0 +1,9 @@
+[package]
+name = "pixl-core"
+description = "Headless document model, compositing, history and tools for the pixl editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
