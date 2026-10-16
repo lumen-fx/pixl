@@ -11,6 +11,7 @@ pub mod history;
 pub mod image;
 pub mod selection;
 pub mod tools;
+pub mod transform;
 
 pub use color::{Color, ColorMode, Palette, Rgba};
 pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame};
@@ -26,3 +27,4 @@ pub use selection::{SelectOp, Selection};
 pub use tools::{
     Bayer, Brush, BrushShape, Canvas, Ink, Symmetry, SymmetryMode, ToolContext, edit_cel,
 };
+pub use transform::{CanvasTransform, CelTransform, Pixels, transform_canvas, transform_cel};
