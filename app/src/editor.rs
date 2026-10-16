@@ -125,6 +125,18 @@ pub struct Editor {
     pub generation: u64,
     /// A line for the status bar, such as a failed save.
     pub message: Option<String>,
+    /// What changed since a view last looked.
+    touched: Touched,
+}
+
+/// What changed in a document since a view last looked.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Touched {
+    /// Anything may have changed.
+    #[default]
+    All,
+    /// Only the pixels of these layers.
+    Layers(Vec<LayerId>),
 }
 
 impl Editor {
@@ -146,6 +158,7 @@ impl Editor {
             saved_revision: 1,
             generation: 0,
             message: None,
+            touched: Touched::All,
         }
     }
 
@@ -168,9 +181,29 @@ impl Editor {
         *self = next;
     }
 
-    /// Records that the document changed.
+    /// Records that the document changed, in ways a view must look for
+    /// everywhere: structure, properties, any layer's pixels.
     pub fn touch(&mut self) {
         self.revision += 1;
+        self.touched = Touched::All;
+    }
+
+    /// Records that only the active layer's pixels changed, so a view needs
+    /// to look at that layer alone.
+    pub fn touch_pixels(&mut self) {
+        self.revision += 1;
+        let layer = self.layer;
+        if let Touched::Layers(ids) = &mut self.touched
+            && !ids.contains(&layer)
+        {
+            ids.push(layer);
+        }
+    }
+
+    /// What changed since the last call, for a view to bring itself up to
+    /// date with.
+    pub fn take_touched(&mut self) -> Touched {
+        std::mem::replace(&mut self.touched, Touched::Layers(Vec::new()))
     }
 
     pub fn is_modified(&self) -> bool {

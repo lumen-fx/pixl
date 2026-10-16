@@ -454,7 +454,7 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                 |canvas| fill::bucket_fill(canvas, p, &ink, &opts, None),
             );
             match done {
-                Ok(((), dirty)) if !dirty.is_empty() => editor.touch(),
+                Ok(((), dirty)) if !dirty.is_empty() => editor.touch_pixels(),
                 Ok(_) => {}
                 Err(e) => refuse(editor, e),
             }
@@ -547,7 +547,7 @@ fn stroke_to(editor: &mut Editor, session: &mut Session, p: Point, pressure: f32
     }
     *last = p;
     if !canvas.dirty().is_empty() {
-        editor.touch();
+        editor.touch_pixels();
     }
 }
 
@@ -622,12 +622,12 @@ fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point
                 let mut canvas = Canvas::new(target, &ctx);
                 stroke.finish(&mut canvas);
                 if !canvas.dirty().is_empty() {
-                    editor.touch();
+                    editor.touch_pixels();
                 }
             }
             if let Some(tx) = tx.take() {
                 editor.history.commit(&editor.doc, tx);
-                editor.touch();
+                editor.touch_pixels();
             }
         }
         Session::Shape {
@@ -657,7 +657,7 @@ fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point
                 },
             );
             match done {
-                Ok(((), dirty)) if !dirty.is_empty() => editor.touch(),
+                Ok(((), dirty)) if !dirty.is_empty() => editor.touch_pixels(),
                 Ok(_) => {}
                 Err(e) => refuse(editor, e),
             }
@@ -680,7 +680,7 @@ fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point
         Session::Move { mut tx, .. } => {
             if let Some(tx) = tx.take() {
                 editor.history.commit(&editor.doc, tx);
-                editor.touch();
+                editor.touch_pixels();
             }
         }
     }
@@ -735,7 +735,7 @@ fn place(editor: &mut Editor, original: &Raster, rect: Rect, offset: Point) {
         Point::new(rect.x + offset.x, rect.y + offset.y),
         Some(clear),
     );
-    editor.touch();
+    editor.touch_pixels();
 }
 
 fn pick(editor: &mut Editor, p: Point, button: PointerButton) {

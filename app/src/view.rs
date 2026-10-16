@@ -33,7 +33,7 @@ use pixl_core::{
     Rect, Rgba, TILE_SIZE,
 };
 
-use crate::editor::Editor;
+use crate::editor::{Editor, Touched};
 use crate::progressive::{self, Pool};
 use crate::settings::Look;
 
@@ -739,8 +739,10 @@ impl Layers {
 
     /// Brings the buffers up to date with the document. `focus` is the
     /// document point in the middle of the view; progressive rewrites start
-    /// there.
-    pub fn sync(&mut self, editor: &Editor, focus: (f64, f64)) {
+    /// there. `touched` says what changed since the last call (see
+    /// [`Editor::take_touched`]); with only some layers' pixels touched, only
+    /// the buffers that show those layers are looked at.
+    pub fn sync(&mut self, editor: &Editor, touched: &Touched, focus: (f64, f64)) {
         let doc = &editor.doc;
         if editor.generation != self.seen_generation {
             for item in self.items.drain(..) {
@@ -757,6 +759,14 @@ impl Layers {
         self.seen_revision = editor.revision;
         self.seen_frame = editor.frame;
         let frame = editor.frame;
+        let pixels_only = match touched {
+            Touched::Layers(ids) if !self.items.is_empty() => Some(ids.as_slice()),
+            _ => None,
+        };
+        if let Some(ids) = pixels_only {
+            self.sync_pixels(doc, ids, frame);
+            return;
+        }
         let wanted = plan(doc, frame);
 
         // Keep the buffers whose source is still wanted, in the new order.
@@ -806,7 +816,6 @@ impl Layers {
         self.items = items;
 
         // Rewrite what changed in each buffer.
-        let cols = doc.width().div_ceil(TILE_SIZE as u32) as i32;
         for i in 0..self.items.len() {
             let now = shown_for(doc, &self.items[i].plan.source, frame);
             let item = &self.items[i];
@@ -829,85 +838,139 @@ impl Layers {
                     }
                 }
             }
-            let rects: Vec<Rect> = tiles
-                .iter()
-                .map(|&t| {
-                    let t = t as i32;
-                    Rect::new(
-                        (t % cols) * TILE_SIZE,
-                        (t / cols) * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE,
-                    )
-                    .intersect(&doc.bounds())
-                })
-                .collect();
-            let source = self.items[i].plan.source.clone();
             self.items[i].shown = now;
-            if rects.is_empty() {
-                continue;
+            self.rewrite(doc, i, frame, tiles, focus);
+        }
+    }
+
+    /// Looks only at the pixels of `layers`: the buffers that show them
+    /// rewrite the tiles those layers changed.
+    fn sync_pixels(&mut self, doc: &Document, layers: &[LayerId], frame: usize) {
+        for i in 0..self.items.len() {
+            let mut tiles = BTreeSet::new();
+            for id in layers {
+                let Some(entry) = self.items[i]
+                    .shown
+                    .images
+                    .iter_mut()
+                    .find(|(l, _, _)| l == id)
+                else {
+                    continue;
+                };
+                let Some(layer) = doc.layer(*id) else {
+                    continue;
+                };
+                let (img, mask) = layer_images(doc, layer, frame);
+                changed_tiles(entry.1.as_ref(), img.as_ref(), &mut tiles);
+                changed_tiles(entry.2.as_ref(), mask.as_ref(), &mut tiles);
+                entry.1 = img;
+                entry.2 = mask;
             }
-            self.art_dirty = true;
-            let work = match &source {
-                ItemSource::Layer(id) => {
-                    let layer = doc.layer(*id).expect("planned layers exist");
-                    let (img, _) = layer_images(doc, layer, frame);
-                    match img {
-                        Some(raster) => progressive::Source::Raster {
-                            raster,
-                            palette: doc.palette().clone(),
-                            transparent_index: doc.transparent_index(),
-                        },
-                        None => progressive::Source::Raster {
-                            raster: Raster::Rgba(pixl_core::TiledImage::new(
-                                doc.width(),
-                                doc.height(),
-                                Rgba::TRANSPARENT,
-                            )),
-                            palette: Palette::new(Vec::new()).expect("an empty palette"),
-                            transparent_index: 0,
-                        },
-                    }
+            // A stroke is near the view; nothing to order by.
+            self.rewrite(doc, i, frame, tiles, (0.0, 0.0));
+        }
+    }
+
+    /// Rewrites `tiles` of item `i`: a few on the spot, many on the workers.
+    fn rewrite(
+        &mut self,
+        doc: &Document,
+        i: usize,
+        frame: usize,
+        tiles: BTreeSet<usize>,
+        focus: (f64, f64),
+    ) {
+        let cols = doc.width().div_ceil(TILE_SIZE as u32) as i32;
+        let rects: Vec<Rect> = tiles
+            .iter()
+            .map(|&t| {
+                let t = t as i32;
+                Rect::new(
+                    (t % cols) * TILE_SIZE,
+                    (t / cols) * TILE_SIZE,
+                    TILE_SIZE,
+                    TILE_SIZE,
+                )
+                .intersect(&doc.bounds())
+            })
+            .collect();
+        if rects.is_empty() {
+            return;
+        }
+        self.art_dirty = true;
+        let source = self.items[i].plan.source.clone();
+        let work = match &source {
+            ItemSource::Layer(id) => {
+                let layer = doc.layer(*id).expect("planned layers exist");
+                let (img, _) = layer_images(doc, layer, frame);
+                match img {
+                    Some(raster) => progressive::Source::Raster {
+                        raster,
+                        palette: doc.palette().clone(),
+                        transparent_index: doc.transparent_index(),
+                    },
+                    None => progressive::Source::Raster {
+                        raster: Raster::Rgba(pixl_core::TiledImage::new(
+                            doc.width(),
+                            doc.height(),
+                            Rgba::TRANSPARENT,
+                        )),
+                        palette: Palette::new(Vec::new()).expect("an empty palette"),
+                        transparent_index: 0,
+                    },
                 }
-                other => {
-                    let (prepared, opts) = prepared(doc, other);
-                    progressive::Source::Composite {
-                        doc: prepared,
-                        frame,
-                        opts,
-                    }
+            }
+            other => {
+                let (prepared, opts) = prepared(doc, other);
+                progressive::Source::Composite {
+                    doc: prepared,
+                    frame,
+                    opts,
                 }
-            };
-            let item = &mut self.items[i];
-            if rects.len() <= SYNC_TILES {
-                let stamp = self.pool.stamp();
-                for r in rects {
-                    let rgba = work.render(r);
-                    write_tile(&item.buffer, &mut item.applied, cols, r, stamp, &rgba);
-                }
+            }
+        };
+        let item = &mut self.items[i];
+        if rects.len() <= SYNC_TILES {
+            // Render the tiles side by side, then write them in order.
+            let stamp = self.pool.stamp();
+            let rendered: Vec<Vec<u8>> = if rects.len() > 1 {
+                std::thread::scope(|s| {
+                    let work = &work;
+                    let jobs: Vec<_> = rects
+                        .iter()
+                        .map(|r| s.spawn(move || work.render(*r)))
+                        .collect();
+                    jobs.into_iter()
+                        .map(|j| j.join().expect("a tile renders"))
+                        .collect()
+                })
             } else {
-                let mut rects = rects;
-                let fx = focus.0;
-                let fy = focus.1;
-                rects.sort_by(|a, b| {
-                    let d = |r: &Rect| {
-                        let x = f64::from(r.x) + f64::from(r.w) / 2.0 - fx;
-                        let y = f64::from(r.y) + f64::from(r.h) / 2.0 - fy;
-                        x * x + y * y
-                    };
-                    d(a).total_cmp(&d(b))
-                });
-                self.pool.cancel(item.key);
-                self.rewrites.retain(|r| r.item != item.key);
-                self.rewrites.push(Rewrite {
-                    item: item.key,
-                    started: Instant::now(),
-                    tiles: rects.len(),
-                    done: 0,
-                    arrivals: Vec::new(),
-                });
-                self.pool.submit(item.key, work, rects);
+                rects.iter().map(|r| work.render(*r)).collect()
+            };
+            for (r, rgba) in rects.iter().zip(rendered) {
+                write_tile(&item.buffer, &mut item.applied, cols, *r, stamp, &rgba);
             }
+        } else {
+            let mut rects = rects;
+            let (fx, fy) = focus;
+            rects.sort_by(|a, b| {
+                let d = |r: &Rect| {
+                    let x = f64::from(r.x) + f64::from(r.w) / 2.0 - fx;
+                    let y = f64::from(r.y) + f64::from(r.h) / 2.0 - fy;
+                    x * x + y * y
+                };
+                d(a).total_cmp(&d(b))
+            });
+            self.pool.cancel(item.key);
+            self.rewrites.retain(|r| r.item != item.key);
+            self.rewrites.push(Rewrite {
+                item: item.key,
+                started: Instant::now(),
+                tiles: rects.len(),
+                done: 0,
+                arrivals: Vec::new(),
+            });
+            self.pool.submit(item.key, work, rects);
         }
     }
 
@@ -1038,13 +1101,18 @@ pub fn measure_stage(
 
 /// Keeps the layer buffers in step with the document.
 pub fn sync_layers(
-    editor: Res<Editor>,
+    mut editor: ResMut<Editor>,
     view: Res<View>,
     mut layers: ResMut<Layers>,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mid = view.to_doc(view.middle());
-    layers.sync(&editor, mid);
+    let touched = if editor.revision == layers.seen_revision {
+        Touched::Layers(Vec::new())
+    } else {
+        editor.take_touched()
+    };
+    layers.sync(&editor, &touched, mid);
     layers.drain(editor.doc.width());
     if layers.pending() > 0
         && let Some(wake) = wake

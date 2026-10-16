@@ -4,6 +4,7 @@
 use std::time::{Duration, Instant};
 
 use pixl::Editor;
+use pixl::editor::Touched;
 use pixl::view::{ItemSource, Layers};
 use pixl_core::{ColorMode, Document, NewLayer, Placement, Rgba, TILE_SIZE};
 
@@ -35,7 +36,7 @@ fn an_opened_document_reaches_its_buffer_tile_by_tile() {
     let editor = Editor::new(painted(side));
     let id = editor.doc.layers()[0].id;
     let mut layers = Layers::default();
-    layers.sync(&editor, (512.0, 512.0));
+    layers.sync(&editor, &Touched::All, (512.0, 512.0));
     let tiles = (side / TILE_SIZE as u32).pow(2) as usize;
     assert!(layers.pending() > 0, "a whole document goes to the workers");
     settle(&mut layers, side);
@@ -55,7 +56,8 @@ fn a_stroke_rewrites_only_its_tiles_on_the_spot() {
     let mut editor = Editor::new(painted(side));
     let id = editor.doc.layers()[0].id;
     let mut layers = Layers::default();
-    layers.sync(&editor, (0.0, 0.0));
+    let all = editor.take_touched();
+    layers.sync(&editor, &all, (0.0, 0.0));
     settle(&mut layers, side);
     let rewrites = layers.rewrites.len();
     editor
@@ -65,7 +67,7 @@ fn a_stroke_rewrites_only_its_tiles_on_the_spot() {
         .raster
         .set_raw(700, 700, Rgba::opaque(1, 2, 3).to_u32());
     editor.touch();
-    layers.sync(&editor, (0.0, 0.0));
+    layers.sync(&editor, &Touched::All, (0.0, 0.0));
     assert_eq!(
         layers.pending(),
         0,
@@ -107,7 +109,7 @@ fn a_group_is_composited_by_the_workers() {
     }
     let editor = Editor::new(doc);
     let mut layers = Layers::default();
-    layers.sync(&editor, (256.0, 256.0));
+    layers.sync(&editor, &Touched::All, (256.0, 256.0));
     settle(&mut layers, 512);
     let mut px = [0u8; 4];
     layers

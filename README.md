@@ -85,6 +85,10 @@ cargo run -p pixl
 cargo test
 ```
 
+`cargo bench -p pixl --bench view -- gpu` (or `cpu`) measures the canvas
+view on a 4096x4096 document of 32 layers: the progressive redraws, the time
+from a stroke to the frame that shows it, and the frame after a pan.
+
 On Linux the build links GTK 3, X11, xkbcommon and Wayland, so their
 development packages must be installed.
 

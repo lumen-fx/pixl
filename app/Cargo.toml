@@ -14,3 +14,7 @@ repository.workspace = true
 lumenui = "0.0.10"
 lumenui-canvas = "0.0.10"
 pixl-core = { path = "../core" }
+
+[[bench]]
+name = "view"
+harness = false
