@@ -7,6 +7,9 @@
     <button id="menu-layer" class="menu-title" text="Layer"/>
     <spacer/>
     <label id="doc-title" class="doc-title" bind-text="doc_title" text="untitled"/>
+    <spacer/>
+    <button id="toggle-font" class="flat" text="Plain font"/>
+    <button id="toggle-theme" class="flat" text="Light"/>
   </row>
 
   <row id="tool-options">
@@ -51,6 +54,15 @@
       </column>
     </column>
   </row>
+
+  <tile id="probes" class="probe">
+    <tile id="probe-checker-a"/>
+    <tile id="probe-checker-b"/>
+    <tile id="probe-grid"/>
+    <tile id="probe-marquee-a"/>
+    <tile id="probe-marquee-b"/>
+    <tile id="probe-preview"/>
+  </tile>
 
   <row id="statusbar">
     <label id="status-pos" class="status" bind-text="status_pos" text="-"/>

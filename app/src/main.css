@@ -1,18 +1,15 @@
-/* The window's regions. The look comes in theme.css. */
+@import "theme.css";
 
-#app { bg: #202020; text-color: #d0d0d0; font-size: 12; }
+/* The window's regions and how they share the space. */
 
-#menubar { height: 28; align: center; gap: 4; padding: 0 8; bg: #181818; }
-#tool-options { height: 32; align: center; gap: 8; padding: 0 8; bg: #242424; }
+#menubar { align: center; gap: var(--space-1); padding: 0 var(--space-2); }
+#tool-options { align: center; gap: var(--space-4); padding: 0 var(--space-4); }
 #workspace { grow: 1; min-height: 0; }
-#toolbar { width: 40; padding: 4; gap: 2; bg: #242424; }
-#stage { grow: 1; min-width: 0; bg: #141414; overflow: hidden; }
+#toolbar { padding: var(--space-2); gap: var(--space-1); align: center; }
+#stage { grow: 1; min-width: 0; overflow: hidden; }
 #stage canvas { position: absolute; inset: 0; }
-#panels { width: 260; bg: #242424; gap: 1; }
-.panel { bg: #2a2a2a; }
+#panels { gap: 1; }
 .panel.fill { grow: 1; min-height: 0; }
-.panel-header { height: 22; align: center; padding: 0 8; bg: #303030; }
-.panel-body { padding: 6; min-height: 40; }
-#statusbar { height: 22; align: center; gap: 16; padding: 0 8; bg: #181818; }
-.tool { width: 32; height: 32; min-height: 32; }
-.menu-title { min-height: 22; height: 22; padding: 0 8; }
+.panel-header { align: center; padding: 0 var(--space-4); gap: var(--space-2); }
+.panel-body { padding: var(--space-3); gap: var(--space-3); min-height: 36; }
+#statusbar { align: center; gap: 16; padding: 0 var(--space-4); }

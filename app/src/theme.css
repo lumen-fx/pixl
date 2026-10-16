@@ -1,0 +1,274 @@
+/* pixl's own theme. Every visual value lives in a token here; the rules below
+   and in main.css read the tokens, and the editor's Rust code reads its few
+   colors (checkerboard, grid, selection) from the probe elements at the end.
+   The dark set is the default; class "light" on the root swaps the set. */
+
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("assets/fonts/PixelifySans.ttf");
+}
+
+.pixl {
+  --font-ui: "Pixelify Sans", sans-serif;
+  --font-size-ui: 16;
+  --font-size-small: 14;
+  --line-ui: 1.1;
+
+  --space-1: 2;
+  --space-2: 4;
+  --space-3: 6;
+  --space-4: 8;
+  --radius: 2;
+  --control-h: 22;
+  --tool-size: 30;
+  --bar-h: 26;
+  --options-h: 32;
+  --header-h: 22;
+  --panel-w: 264;
+  --toolbar-w: 38;
+  --swatch: 16;
+  --scrollbar: 6;
+}
+
+/* The plain-font setting: the platform sans-serif at a denser size. */
+.pixl.font-plain {
+  --font-ui: sans-serif;
+  --font-size-ui: 12;
+  --font-size-small: 11;
+  --line-ui: 1.2;
+}
+
+/* Dark: neutral greys with no tint, so colors in the art read true. */
+.pixl.dark {
+  --surface-0: #121212;
+  --surface-1: #1a1a1a;
+  --surface-2: #222222;
+  --surface-3: #2b2b2b;
+  --surface-4: #353535;
+  --surface-5: #424242;
+  --edge: #0b0b0b;
+  --edge-soft: #2f2f2f;
+  --text: #d8d8d8;
+  --text-dim: #8c8c8c;
+  --text-faint: #5e5e5e;
+  --accent: #4f9cf0;
+  --accent-hover: #6cadf3;
+  --accent-press: #3a82d4;
+  --accent-soft: #4f9cf033;
+  --on-accent: #08111c;
+  --checker-a: #3c3c3c;
+  --checker-b: #2e2e2e;
+  --pixel-grid: #00000059;
+  --marquee-a: #ffffff;
+  --marquee-b: #000000;
+  --preview: #4f9cf0;
+}
+
+/* Light: the same roles, inverted. */
+.pixl.light {
+  --surface-0: #bdbdbd;
+  --surface-1: #e2e2e2;
+  --surface-2: #ececec;
+  --surface-3: #f5f5f5;
+  --surface-4: #dcdcdc;
+  --surface-5: #cfcfcf;
+  --edge: #a8a8a8;
+  --edge-soft: #d2d2d2;
+  --text: #1e1e1e;
+  --text-dim: #5c5c5c;
+  --text-faint: #8f8f8f;
+  --accent: #2f78d6;
+  --accent-hover: #4a8be0;
+  --accent-press: #2262b8;
+  --accent-soft: #2f78d633;
+  --on-accent: #ffffff;
+  --checker-a: #ffffff;
+  --checker-b: #d9d9d9;
+  --pixel-grid: #0000003d;
+  --marquee-a: #000000;
+  --marquee-b: #ffffff;
+  --preview: #2f78d6;
+}
+
+#app {
+  bg: var(--surface-0);
+  text-color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  line-height: var(--line-ui);
+  scrollbar-color: var(--surface-5) #00000000;
+  scrollbar-thickness: var(--scrollbar);
+  scrollbar-thickness-thin: 4;
+  scrollbar-margin: 1;
+  scrollbar-min-thumb: 20;
+  scrollbar-track-hover: var(--surface-3);
+}
+
+/* -- Controls ------------------------------------------------------------- */
+
+button {
+  min-height: var(--control-h);
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  radius: var(--radius);
+  bg: var(--surface-3);
+  text-color: var(--text);
+  border: 1px solid var(--edge);
+  justify: center;
+  transition: bg 80ms linear;
+}
+button:hover { bg: var(--surface-4); }
+button:active { bg: var(--surface-1); }
+button:focus-visible { outline: 1 var(--accent); }
+button:disabled { opacity: 0.4; }
+
+button.flat {
+  bg: #00000000;
+  border: none;
+  text-color: var(--text-dim);
+}
+button.flat:hover { bg: var(--surface-4); text-color: var(--text); }
+button.flat:active { bg: var(--surface-2); }
+
+button.primary { bg: var(--accent); text-color: var(--on-accent); border: 1px solid var(--accent-press); }
+button.primary:hover { bg: var(--accent-hover); }
+button.primary:active { bg: var(--accent-press); }
+
+input {
+  min-height: var(--control-h);
+  height: var(--control-h);
+  min-width: 40;
+  padding: 0 var(--space-3);
+  radius: var(--radius);
+  bg: var(--surface-1);
+  text-color: var(--text);
+  border: 1px solid var(--edge);
+  caret-color: var(--accent);
+  selection-color: var(--accent-soft);
+}
+input:focus { border: 1px solid var(--accent); }
+
+slider {
+  height: var(--control-h);
+  min-width: 60;
+  bg: var(--surface-1);
+  radius: var(--radius);
+  knob-color: var(--text);
+  thumb-size: 10;
+  knob-inset: 6;
+}
+
+checkbox { min-height: var(--control-h); gap: var(--space-3); }
+.checkbox-box {
+  width: 12;
+  height: 12;
+  radius: 1;
+  bg: var(--surface-1);
+  border: 1px solid var(--edge);
+}
+.checkbox-box:checked { bg: var(--accent); }
+.checkbox-label { text-color: var(--text-dim); }
+
+dropdown { height: var(--control-h); min-width: 90; }
+.dropdown-button {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  bg: var(--surface-1);
+  text-color: var(--text);
+  border: 1px solid var(--edge);
+  radius: var(--radius);
+  justify: start;
+  padding: 0 var(--space-3);
+}
+.dropdown-button:hover { bg: var(--surface-3); }
+.dropdown-panel {
+  bg: var(--surface-2);
+  border: 1px solid var(--edge);
+  radius: var(--radius);
+  shadow: 0 4 12 #00000066;
+}
+.dropdown-option {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  bg: #00000000;
+  border: none;
+  text-color: var(--text);
+  justify: start;
+}
+.dropdown-option:hover { bg: var(--accent); text-color: var(--on-accent); }
+
+/* -- Window regions ------------------------------------------------------- */
+
+#menubar {
+  height: var(--bar-h);
+  bg: var(--surface-1);
+  border-bottom: 1px solid var(--edge);
+}
+.brand { text-color: var(--accent); padding: 0 var(--space-4) 0 var(--space-2); }
+.menu-title { bg: #00000000; border: none; text-color: var(--text); padding: 0 var(--space-4); }
+.menu-title:hover { bg: var(--surface-4); }
+.menu-title:active { bg: var(--surface-3); }
+.doc-title { text-color: var(--text-dim); }
+
+#tool-options {
+  height: var(--options-h);
+  bg: var(--surface-2);
+  border-bottom: 1px solid var(--edge);
+}
+.tool-name { text-color: var(--text); min-width: 96; }
+.option-label { text-color: var(--text-dim); }
+
+#toolbar {
+  width: var(--toolbar-w);
+  bg: var(--surface-2);
+  border-right: 1px solid var(--edge);
+}
+
+/* Tool buttons: quiet at rest, lit on hover, sunk while pressed, accented
+   while the tool is the active one. */
+.tool {
+  width: var(--tool-size);
+  height: var(--tool-size);
+  min-height: var(--tool-size);
+  padding: 0;
+  bg: #00000000;
+  border: 1px solid #00000000;
+  text-color: var(--text-dim);
+}
+.tool:hover { bg: var(--surface-4); text-color: var(--text); }
+.tool:active { bg: var(--surface-0); text-color: var(--text); }
+.tool.active { bg: var(--accent); text-color: var(--on-accent); border: 1px solid var(--accent-press); }
+.tool.active:hover { bg: var(--accent-hover); }
+
+#stage { bg: var(--surface-0); }
+
+#panels {
+  width: var(--panel-w);
+  bg: var(--edge);
+  border-left: 1px solid var(--edge);
+}
+.panel { bg: var(--surface-2); }
+.panel-header {
+  height: var(--header-h);
+  bg: var(--surface-3);
+  border-bottom: 1px solid var(--edge);
+}
+.panel-title { text-color: var(--text-dim); font-size: var(--font-size-small); }
+
+#statusbar {
+  height: var(--bar-h);
+  bg: var(--surface-1);
+  border-top: 1px solid var(--edge);
+}
+.status { text-color: var(--text-dim); font-size: var(--font-size-small); }
+
+/* -- Colors the canvas view draws with ---------------------------------- */
+
+.probe { display: none; }
+#probe-checker-a { bg: var(--checker-a); }
+#probe-checker-b { bg: var(--checker-b); }
+#probe-grid { bg: var(--pixel-grid); }
+#probe-marquee-a { bg: var(--marquee-a); }
+#probe-marquee-b { bg: var(--marquee-b); }
+#probe-preview { bg: var(--preview); }

@@ -18,6 +18,12 @@ sheet I/O (sheets carry Aseprite-compatible JSON). The editor itself is the
 window, with a menu row, the tool bar, tool options, the canvas, and the color,
 palette, layers and history panels.
 
+The editor has its own theme, written entirely in CSS over its own tokens: a
+dark set of neutral greys so the colors in the art read true, and a light set
+built from the same tokens. The UI font is Pixelify Sans by Stefie Justprince,
+under the SIL Open Font License (`app/assets/fonts/OFL.txt`); a setting in the
+menu row switches the UI to the platform's sans-serif instead.
+
 The editor builds against Lumen 0.0.10, which is not on crates.io yet. Until it
 is, building `pixl` needs `lumenui` and `lumenui-canvas` patched in from a Lumen
 checkout, and CI fails on the app crate.
