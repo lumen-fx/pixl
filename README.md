@@ -18,6 +18,18 @@ sheet I/O (sheets carry Aseprite-compatible JSON). The editor itself is the
 window, with a menu row, the tool bar, tool options, the canvas, and the color,
 palette, layers and history panels.
 
+The canvas view zooms from 1 to 6400 percent around the pointer (the wheel,
+or `+`, `-`, `0` to fit and `1` for 100 percent) and pans with the middle
+button or a drag with the space bar held. Pixels stay sharp at every zoom, a
+grid outlines them from 800 percent, and a checkerboard shows through
+transparency. Each layer is its own pixel buffer that Lumen's renderer
+composites with the layer's blend mode and opacity, on the GPU when the app
+renders there; what the renderer cannot composite the way `pixl-core` does
+(add and subtract, clipping, masks, groups) is composited by `pixl-core` on the
+CPU instead, and so are the bottom layers of a document whose layers would
+not fit the renderer's image budget. Large redraws run on worker threads and
+show tile by tile as they finish.
+
 The editor has its own theme, written entirely in CSS over its own tokens: a
 dark set of neutral greys so the colors in the art read true, and a light set
 built from the same tokens. The UI font is Pixelify Sans by Stefie Justprince,
