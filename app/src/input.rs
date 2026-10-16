@@ -12,6 +12,7 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 
 use crate::editor::Editor;
+use crate::home::Home;
 use crate::view::View;
 
 /// One pointer event, in the order it happened.
@@ -243,6 +244,7 @@ pub fn navigate(
     mut pointer: PointerInput,
     modifiers: Res<ModifiersState>,
     mut focus: MessageReader<WindowFocused>,
+    home: Res<Home>,
     wake: Option<Res<WakeDeadline>>,
     mut status: Signals,
 ) {
@@ -253,6 +255,17 @@ pub fn navigate(
         let anchor = view.stage_point(w.position);
         let zoom = view.step(w.delta.y < 0.0);
         view.zoom_at(zoom, anchor);
+    }
+    if home.open {
+        // The canvas is not there: what was meant for it is dropped.
+        wheel.clear();
+        keys.pressed.clear();
+        keys.released.clear();
+        pointer.events();
+        nav.keys = PanKeys::default();
+        nav.panning = None;
+        nav.space_held = false;
+        return;
     }
     let text = keys.typing();
     // Keys that go to a text field, or to another window, no longer move

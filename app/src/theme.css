@@ -416,6 +416,58 @@ dialog { bg: #00000080; }
 .size-field { width: 64; }
 .status.message { text-color: var(--text); }
 
+.new-card { min-width: 480; }
+.field-label { width: 100; text-color: var(--text-dim); }
+.name-field { width: 240; }
+.new-choice { width: 140; }
+.preset {
+  height: 20;
+  min-height: 20;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-small);
+}
+.preset.active { bg: var(--accent); text-color: var(--on-accent); border: 1px solid var(--accent-press); }
+.preset.active:hover { bg: var(--accent-hover); }
+
+/* -- Start screen ------------------------------------------------------------ */
+
+#home { bg: var(--surface-0); }
+.home-top {
+  height: 64;
+  bg: var(--surface-1);
+  border-bottom: 1px solid var(--edge);
+}
+.home-brand { text-color: var(--accent); font-size: 32; }
+.home-tagline { text-color: var(--text-dim); }
+.home-action { height: 32; min-height: 32; justify: start; padding: 0 12; }
+.home-hint { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.home-message { text-color: var(--text); font-size: var(--font-size-small); }
+.home-section { text-color: var(--text-dim); }
+.home-search { width: 240; }
+
+.recent-list { bg: var(--surface-1); border: 1px solid var(--edge); }
+.recent {
+  min-height: 88;
+  bg: var(--surface-1);
+  border-bottom: 1px solid var(--edge-soft);
+}
+.recent:hover { bg: var(--surface-3); }
+.recent-name { text-color: var(--text); }
+.recent-folder { text-color: var(--text-dim); font-size: var(--font-size-small); text-overflow: ellipsis; }
+.recent-meta { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.recent.missing .recent-name { text-color: var(--text-faint); }
+.recent-flag { text-color: var(--accent); font-size: var(--font-size-small); }
+.recent-empty { text-color: var(--text-dim); padding: 16; }
+.thumb-frame {
+  width: 72;
+  height: 72;
+  min-width: 72;
+  bg: var(--checker-a);
+  border: 1px solid var(--edge);
+}
+.thumb-frame.empty { bg: var(--surface-2); }
+.thumb { width: 64; height: 64; image-rendering: pixelated; }
+
 /* -- Colors the canvas view draws with ---------------------------------- */
 
 .probe { display: none; }

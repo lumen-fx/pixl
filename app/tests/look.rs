@@ -13,7 +13,7 @@ fn shot(look: Look, name: &str) -> Frame {
     let _turn = ONE_APP_AT_A_TIME
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let frame = pixl::app()
+    let frame = pixl::editor(lumen_source!("src/main.lmn", "src/main.css"))
         .add_systems(TickStage::Systems, move |mut shown: ResMut<Look>| {
             *shown = look;
         })

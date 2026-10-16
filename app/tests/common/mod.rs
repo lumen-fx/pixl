@@ -28,11 +28,16 @@ pub fn app_dir(backend: &str) -> PathBuf {
         }
     }
     let toml = std::fs::read_to_string(app.join("lumen.toml")).expect("read lumen.toml");
-    std::fs::write(
-        dir.join("lumen.toml"),
-        format!("{toml}\n[render]\nbackend = \"{backend}\"\n\n[mcp]\nport = 0\n"),
-    )
-    .expect("write lumen.toml");
+    let toml = format!("{toml}\n[render]\nbackend = \"{backend}\"\n\n[mcp]\nport = 0\n");
+    // Another test in this process may be starting an app over this file:
+    // leave it alone when it already says this, and replace it whole
+    // otherwise.
+    let path = dir.join("lumen.toml");
+    if std::fs::read_to_string(&path).ok().as_deref() != Some(toml.as_str()) {
+        let tmp = dir.join(format!("lumen.toml.{:?}", std::thread::current().id()));
+        std::fs::write(&tmp, toml).expect("write lumen.toml");
+        std::fs::rename(&tmp, &path).expect("write lumen.toml");
+    }
     dir
 }
 

@@ -1,14 +1,18 @@
-//! The pixl editor: the window, its panels and the canvas view, over the
-//! document model in `pixl-core`.
+//! The pixl editor: the start screen, the window, its panels and the canvas
+//! view, over the document model in `pixl-core`.
 
 pub mod editor;
 pub mod files;
+pub mod home;
 pub mod input;
 pub mod panels;
 pub mod progressive;
+pub mod recents;
 pub mod settings;
 pub mod tools;
 pub mod view;
+
+use std::path::PathBuf;
 
 use lumenui::lumen_core::signals;
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -16,21 +20,40 @@ use lumenui::prelude::*;
 use lumenui_canvas::{CanvasPlugin, CanvasSet};
 
 pub use editor::{Editor, Tool};
+pub use home::Home;
+pub use recents::Recents;
 pub use settings::Look;
 
 /// The largest document side the view shows: one canvas buffer per layer,
 /// within the canvas module's per-buffer pixel cap.
 pub const MAX_VIEW_SIDE: u32 = 8192;
 
-/// The editor, with its markup and stylesheets from `src/`: read from disk
-/// with hot reload in a debug build, compiled in for a release build.
-pub fn app() -> App {
-    editor(lumen_source!("src/main.lmn", "src/main.css"))
+/// pixl as the `pixl` program runs it, with its markup and stylesheets from
+/// `src/` (read from disk with hot reload in a debug build, compiled in for
+/// a release build) and the user's recent documents: `file` opens in the
+/// editor, and with no file the start screen shows.
+pub fn app(file: Option<PathBuf>) -> App {
+    starting(
+        editor(lumen_source!("src/main.lmn", "src/main.css")),
+        Recents::user(),
+        file,
+    )
 }
 
-/// The editor over another copy of the UI sources. A directory source reads
-/// `lumen.toml` beside its `src/`, which is how a test runs the editor with
-/// its own settings.
+/// `app` (an [`editor`]) starting on the start screen over `recents`, or on
+/// `file` when there is one.
+pub fn starting(app: App, recents: Recents, file: Option<PathBuf>) -> App {
+    let home = match file {
+        Some(path) => Home::opening(path),
+        None => Home::start(),
+    };
+    app.insert_resource(recents).insert_resource(home)
+}
+
+/// The editor over another copy of the UI sources, open on a blank
+/// document with no start screen and a recent list kept in memory. A
+/// directory source reads `lumen.toml` beside its `src/`, which is how a
+/// test runs the editor with its own settings.
 pub fn editor(source: Source) -> App {
     let side = u64::from(MAX_VIEW_SIDE);
     App::new()
@@ -45,8 +68,17 @@ pub fn editor(source: Source) -> App {
         .insert_resource(view::Drawn::default())
         .insert_resource(view::Layers::default())
         .insert_resource(input::Navigation::default())
+        .insert_resource(Home::default())
+        .insert_resource(Recents::in_memory())
+        .insert_signal("new_name", "untitled")
         .insert_signal("new_width", "64")
         .insert_signal("new_height", "64")
+        .insert_signal("new_mode", "RGBA")
+        .insert_signal("new_background", "Transparent")
+        .insert_signal("new_bg_hex", "#ffffff")
+        .insert_signal("new_bg_color", false)
+        .insert_signal("home_filter", "")
+        .insert_signal("home_can_return", false)
         .insert_resource(tools::Gesture::default())
         .insert_resource(panels::Panels::default())
         .insert_resource(files::Files::default())
@@ -61,6 +93,7 @@ pub fn editor(source: Source) -> App {
                     view::measure_stage,
                     input::navigate,
                     files::file_commands,
+                    files::new_form,
                     panels::panel_clicks,
                     panels::history_keys,
                     panels::layer_controls,
@@ -78,6 +111,8 @@ pub fn editor(source: Source) -> App {
                     panels::show_panels,
                     files::autosave,
                     files::show_message,
+                    home::track_recents,
+                    home::show_home,
                     tools::show_tool,
                     tools::stage_cursor,
                 )

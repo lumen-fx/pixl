@@ -1,35 +1,45 @@
-//! Documents on disk: new, open, save and save as for `.pixl` files, import
-//! from PNG and Aseprite, export to PNG and GIF, and the autosave recovery
-//! copy pixl-core keeps beside a saved document.
+//! Documents on disk: new, open, save, save as and close for `.pixl` files,
+//! import from PNG, GIF and Aseprite, export to PNG and GIF, and the
+//! autosave recovery copy pixl-core keeps beside a saved document.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use lumenui::ecs::change_detection::Mut;
+use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::ecs::system::SystemParam;
 use lumenui::ecs::world::World;
 use lumenui::lumen_core::input::{MenuClicked, ModifiersState};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
-use pixl_core::gif::{GifOptions, export_gif};
+use pixl_core::gif::{GifOptions, export_gif, import_gif};
 use pixl_core::io::{export_frame_png, import_png};
 use pixl_core::native::{self, SaveOptions};
-use pixl_core::{ColorMode, Document, aseprite};
+use pixl_core::{Background, ColorMode, Document, aseprite};
 
 use crate::editor::Editor;
+use crate::home::Home;
 use crate::input::{KeyInput, key_char};
+use crate::recents::Recents;
+use crate::view::parse_hex;
 
 /// How often a modified document with a file writes its recovery copy.
 pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(30);
 
 /// Something that replaces the document, waiting for the user to agree to
 /// lose unsaved changes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Replace {
+    /// The New project dialog.
     New,
+    /// The Open dialog.
     Open,
-    ImportPng,
-    ImportAseprite,
+    /// File > Close: back to the start screen with no document.
+    Close,
+    /// A document from the start screen's list.
+    Recent(PathBuf),
+    /// A listed document's recovery copy.
+    Recover(PathBuf),
 }
 
 /// File work in progress.
@@ -44,6 +54,10 @@ pub struct Files {
 }
 
 /// The file kinds the dialogs offer.
+const OPENABLE: (&str, &[&str]) = (
+    "pixl, Aseprite, PNG and GIF files",
+    &["pixl", "aseprite", "ase", "png", "gif"],
+);
 const PIXL: (&str, &[&str]) = ("pixl documents", &["pixl"]);
 const PNG: (&str, &[&str]) = ("PNG images", &["png"]);
 const ASEPRITE: (&str, &[&str]) = ("Aseprite files", &["aseprite", "ase"]);
@@ -55,8 +69,8 @@ pub struct Opened {
     pub warnings: Vec<String>,
 }
 
-/// Reads a document: `.pixl` natively, `.aseprite` / `.ase` and `.png`
-/// through their importers.
+/// Reads a document: `.pixl` natively, `.aseprite` / `.ase`, `.png` and
+/// `.gif` through their importers.
 pub fn read_document(path: &Path) -> std::result::Result<Opened, String> {
     let ext = path
         .extension()
@@ -69,6 +83,14 @@ pub fn read_document(path: &Path) -> std::result::Result<Opened, String> {
                 .map_err(|e| format!("could not read {}: {e}", path.display()))?;
             Ok(Opened {
                 doc: import_png(&bytes).map_err(fail)?,
+                warnings: Vec::new(),
+            })
+        }
+        "gif" => {
+            let bytes = std::fs::read(path)
+                .map_err(|e| format!("could not read {}: {e}", path.display()))?;
+            Ok(Opened {
+                doc: import_gif(&bytes).map_err(fail)?,
                 warnings: Vec::new(),
             })
         }
@@ -91,19 +113,23 @@ pub fn read_document(path: &Path) -> std::result::Result<Opened, String> {
     }
 }
 
-/// Opens a `.pixl` document into the editor, offering its recovery copy
-/// when one is newer than the file.
+/// Opens a document into the editor, offering its recovery copy when one
+/// is newer than the file.
 pub fn open_path(editor: &mut Editor, files: &mut Files, path: &Path) {
     match read_document(path) {
         Ok(opened) => {
-            let native = !matches!(
-                path.extension().and_then(|e| e.to_str()),
-                Some("png" | "aseprite" | "ase")
-            );
+            let native = !path.extension().is_some_and(|e| {
+                ["png", "gif", "aseprite", "ase"]
+                    .iter()
+                    .any(|x| e.eq_ignore_ascii_case(x))
+            });
             // An imported file is a new, unsaved document: saving writes a
             // .pixl, never over the file it came from.
             let path_kept = native.then(|| path.to_path_buf());
             editor.replace(opened.doc, path_kept);
+            if !native {
+                editor.imported_from = Some(path.to_path_buf());
+            }
             editor.message = (!opened.warnings.is_empty()).then(|| opened.warnings.join("; "));
             files.recovery = native
                 .then(|| native::find_recovery(path))
@@ -112,6 +138,19 @@ pub fn open_path(editor: &mut Editor, files: &mut Files, path: &Path) {
             files.last_autosave = None;
         }
         Err(e) => editor.message = Some(e),
+    }
+}
+
+/// Opens the recovery copy of the document at `path` in place of the file:
+/// the document keeps the file's path and reads as modified until saved.
+pub fn recover_path(editor: &mut Editor, path: &Path) {
+    match native::load_file(&native::recovery_path(path)) {
+        Ok(loaded) => {
+            editor.replace(loaded.document, Some(path.to_path_buf()));
+            // The recovered edits are not in the file yet.
+            editor.touch();
+        }
+        Err(e) => editor.message = Some(format!("could not recover: {e}")),
     }
 }
 
@@ -170,46 +209,146 @@ fn with_extension(path: &Path, ext: &str) -> PathBuf {
     }
 }
 
-/// Makes a new document from the size fields of the New dialog.
-fn create_from_fields(editor: &mut Editor, signals: &Signals) {
-    let side = |name: &str| {
-        signals
-            .get::<String>(name)
-            .and_then(|s| s.trim().parse::<u32>().ok())
-            .filter(|v| (1..=crate::MAX_VIEW_SIDE).contains(v))
-    };
-    match (side("new_width"), side("new_height")) {
-        (Some(w), Some(h)) => match Document::new(w, h, ColorMode::Rgba) {
-            Ok(doc) => editor.replace(doc, None),
-            Err(e) => editor.message = Some(e.to_string()),
-        },
-        _ => {
-            editor.message = Some(format!(
+/// The sizes the New project dialog offers with one click: squares, then
+/// sprite and screen sizes. The dialog's markup has a button for each.
+pub const PRESETS: &[(u32, u32)] = &[
+    (16, 16),
+    (32, 32),
+    (64, 64),
+    (128, 128),
+    (256, 256),
+    (512, 512),
+    (16, 24),
+    (24, 32),
+    (32, 48),
+    (48, 48),
+    (160, 144),
+    (256, 224),
+    (256, 240),
+    (320, 180),
+    (320, 240),
+    (640, 360),
+];
+
+/// The id of a preset's button in the New project dialog.
+pub fn preset_id(w: u32, h: u32) -> String {
+    format!("preset-{w}x{h}")
+}
+
+/// What the New project dialog asks for.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NewProject {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub mode: ColorMode,
+    pub background: Background,
+}
+
+impl NewProject {
+    /// The dialog's fields, checked.
+    pub fn from_fields(signals: &Signals) -> std::result::Result<Self, String> {
+        let text = |name: &str| signals.get::<String>(name).unwrap_or_default();
+        let side = |name: &str| {
+            text(name)
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .filter(|v| (1..=crate::MAX_VIEW_SIDE).contains(v))
+        };
+        let (Some(width), Some(height)) = (side("new_width"), side("new_height")) else {
+            return Err(format!(
                 "A new document is 1 to {} pixels on each side",
                 crate::MAX_VIEW_SIDE
-            ))
-        }
+            ));
+        };
+        let mode = match text("new_mode").as_str() {
+            "Indexed" => ColorMode::Indexed,
+            _ => ColorMode::Rgba,
+        };
+        let background = match text("new_background").as_str() {
+            "Color" => Background::Color(
+                parse_hex(&text("new_bg_hex"))
+                    .ok_or("The background color is a hex color such as #ffffff")?,
+            ),
+            _ => Background::Transparent,
+        };
+        let name = text("new_name").trim().to_string();
+        Ok(Self {
+            name: if name.is_empty() {
+                "untitled".to_string()
+            } else {
+                name
+            },
+            width,
+            height,
+            mode,
+            background,
+        })
+    }
+
+    /// Replaces the editor's document with this new one.
+    pub fn create(&self, editor: &mut Editor) -> std::result::Result<(), String> {
+        let mut doc =
+            Document::new(self.width, self.height, self.mode).map_err(|e| e.to_string())?;
+        doc.set_background(self.background);
+        editor.replace(doc, None);
+        editor.name = Some(self.name.clone());
+        Ok(())
     }
 }
 
-fn start(replace: Replace, commands: &mut Commands, signals: &mut Signals) {
+/// Makes a new document from the fields of the New project dialog.
+fn create_from_fields(editor: &mut Editor, signals: &Signals) {
+    let made = NewProject::from_fields(signals).and_then(|p| p.create(editor));
+    if let Err(e) = made {
+        editor.message = Some(e);
+    }
+}
+
+/// Opens a document from the start screen's list, with the recovery offer
+/// when it has a newer recovery copy.
+fn open_recent(editor: &mut Editor, files: &mut Files, signals: &mut Signals, path: &Path) {
+    open_path(editor, files, path);
+    if files.recovery.is_some() {
+        signals.set("recover_open", true);
+    }
+}
+
+/// Carries out a replacement the user agreed to.
+fn start(
+    replace: Replace,
+    editor: &mut Editor,
+    files: &mut Files,
+    home: &mut Home,
+    commands: &mut Commands,
+    signals: &mut Signals,
+) {
     match replace {
-        Replace::New => signals.set("new_open", true),
+        Replace::New => {
+            signals.set("new_name", "untitled".to_string());
+            signals.set("new_open", true);
+        }
         Replace::Open => commands.queue(
             FileDialog::open()
+                .filter(OPENABLE.0, OPENABLE.1)
                 .filter(PIXL.0, PIXL.1)
-                .then(|world: &mut World, paths| opened(world, paths)),
-        ),
-        Replace::ImportPng => commands.queue(
-            FileDialog::open()
-                .filter(PNG.0, PNG.1)
-                .then(|world: &mut World, paths| opened(world, paths)),
-        ),
-        Replace::ImportAseprite => commands.queue(
-            FileDialog::open()
                 .filter(ASEPRITE.0, ASEPRITE.1)
+                .filter(PNG.0, PNG.1)
+                .filter(GIF.0, GIF.1)
                 .then(|world: &mut World, paths| opened(world, paths)),
         ),
+        Replace::Close => {
+            editor.replace(
+                Document::new(64, 64, ColorMode::Rgba).expect("64x64 is a valid size"),
+                None,
+            );
+            files.recovery = None;
+            files.last_autosave = None;
+            home.show(editor, false);
+        }
+        Replace::Recent(path) => open_recent(editor, files, signals, &path),
+        Replace::Recover(path) => recover_path(editor, &path),
     }
 }
 
@@ -271,25 +410,34 @@ fn export(commands: &mut Commands, gif: bool) {
 }
 
 /// The ways a file command arrives: a File menu item, a click on a dialog
-/// button, or a shortcut.
+/// or start screen button, or a shortcut.
 #[derive(SystemParam)]
 pub struct FileInput<'w, 's> {
     menu: MessageReader<'w, 's, MenuClicked>,
     clicks: MessageReader<'w, 's, ClickEvent>,
     ids: Query<'w, 's, &'static LumenId>,
+    parents: Query<'w, 's, &'static ChildOf>,
     keys: KeyInput<'w, 's>,
     modifiers: Res<'w, ModifiersState>,
 }
 
 impl FileInput<'_, '_> {
+    /// The id of `entity` or of its nearest ancestor that has one: a click
+    /// on a part of a start screen row is a click on the row.
+    fn id_of(&self, mut entity: Entity) -> Option<String> {
+        loop {
+            if let Ok(id) = self.ids.get(entity) {
+                return Some(id.0.clone());
+            }
+            entity = self.parents.get(entity).ok()?.parent();
+        }
+    }
+
     /// The ids of the commands chosen this tick.
     fn chosen(&mut self) -> Vec<String> {
         let mut chosen: Vec<String> = self.menu.read().map(|m| m.id.clone()).collect();
-        for click in self.clicks.read() {
-            if let Ok(id) = self.ids.get(click.entity) {
-                chosen.push(id.0.clone());
-            }
-        }
+        let clicked: Vec<Entity> = self.clicks.read().map(|c| c.entity).collect();
+        chosen.extend(clicked.into_iter().filter_map(|e| self.id_of(e)));
         let typing = self.keys.typing();
         for k in self.keys.pressed.read() {
             let ctrl = k.modifiers.ctrl || k.modifiers.super_ || self.modifiers.0.ctrl;
@@ -305,6 +453,7 @@ impl FileInput<'_, '_> {
                 Some("s" | "\x13") if shift => "file-save-as",
                 Some("s" | "\x13") => "file-save",
                 Some("e" | "\x05") => "file-export-png",
+                Some("w" | "\x17") => "file-close",
                 _ => continue,
             };
             chosen.push(id.to_string());
@@ -313,26 +462,62 @@ impl FileInput<'_, '_> {
     }
 }
 
-/// The File menu, its shortcuts, and the New, discard and recovery dialogs.
+/// The commands the start screen takes; the editor's others wait until a
+/// document is open.
+fn on_start_screen(id: &str) -> bool {
+    matches!(id, "file-new" | "file-open")
+        || ["home-", "recent-", "new-", "discard-", "recover-"]
+            .iter()
+            .any(|p| id.starts_with(p))
+}
+
+/// The File menu, its shortcuts, the start screen's buttons and list, and
+/// the New, discard and recovery dialogs.
+#[allow(clippy::too_many_arguments)]
 pub fn file_commands(
     mut editor: ResMut<Editor>,
     mut files: ResMut<Files>,
+    mut home: ResMut<Home>,
+    mut recents: ResMut<Recents>,
     mut commands: Commands,
     mut input: FileInput,
     mut signals: Signals,
 ) {
-    let chosen = input.chosen();
     let editor = &mut *editor;
+    if let Some(path) = home.pending.take() {
+        let before = editor.generation;
+        open_recent(editor, &mut files, &mut signals, &path);
+        if editor.generation == before {
+            // The file did not open: the start screen says why.
+            home.show(editor, false);
+        }
+    }
+    let chosen = input.chosen();
     for id in chosen {
+        if home.open && !on_start_screen(&id) {
+            continue;
+        }
+        let listed = |prefix: &str| {
+            id.strip_prefix(prefix)
+                .and_then(|k| recents.find(k))
+                .map(|r| r.path.clone())
+        };
         let replace = match id.as_str() {
             "menu-file" => {
                 signals.toggle("__menu_open:file-menu");
                 None
             }
-            "file-new" => Some(Replace::New),
-            "file-open" => Some(Replace::Open),
-            "file-import-png" => Some(Replace::ImportPng),
-            "file-import-aseprite" => Some(Replace::ImportAseprite),
+            "file-new" | "home-new" => Some(Replace::New),
+            "file-open" | "home-open" => Some(Replace::Open),
+            "file-close" => Some(Replace::Close),
+            "go-home" => {
+                home.show(editor, true);
+                None
+            }
+            "home-back" => {
+                home.open = false;
+                None
+            }
             "file-save" => {
                 match editor.path.clone() {
                     Some(path) => {
@@ -368,7 +553,14 @@ pub fn file_commands(
             "discard-yes" => {
                 signals.set("discard_open", false);
                 if let Some(r) = files.confirming.take() {
-                    start(r, &mut commands, &mut signals);
+                    start(
+                        r,
+                        editor,
+                        &mut files,
+                        &mut home,
+                        &mut commands,
+                        &mut signals,
+                    );
                 }
                 None
             }
@@ -380,14 +572,7 @@ pub fn file_commands(
             "recover-yes" => {
                 signals.set("recover_open", false);
                 if let Some(path) = files.recovery.take() {
-                    match native::load_file(&native::recovery_path(&path)) {
-                        Ok(loaded) => {
-                            editor.replace(loaded.document, Some(path));
-                            // The recovered edits are not in the file yet.
-                            editor.touch();
-                        }
-                        Err(e) => editor.message = Some(format!("could not recover: {e}")),
-                    }
+                    recover_path(editor, &path);
                 }
                 None
             }
@@ -398,17 +583,94 @@ pub fn file_commands(
                 }
                 None
             }
-            _ => None,
+            _ => {
+                if let Some(path) = listed("recent-remove-") {
+                    recents.remove(&path);
+                    None
+                } else if let Some(path) = listed("recent-recover-") {
+                    Some(Replace::Recover(path))
+                } else if let Some(path) = listed("recent-") {
+                    if path.exists() {
+                        Some(Replace::Recent(path))
+                    } else {
+                        editor.message = Some(format!("{} is missing", path.display()));
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
         };
         if let Some(r) = replace {
             if editor.is_modified() {
                 files.confirming = Some(r);
                 signals.set("discard_open", true);
             } else {
-                start(r, &mut commands, &mut signals);
+                start(
+                    r,
+                    editor,
+                    &mut files,
+                    &mut home,
+                    &mut commands,
+                    &mut signals,
+                );
             }
         }
     }
+}
+
+/// Keeps the New project dialog showing what its fields say: the preset
+/// that matches the size, and the background color field when the
+/// background is a color. A preset's button fills in its size.
+pub fn new_form(
+    mut clicks: MessageReader<ClickEvent>,
+    ids: Query<&LumenId>,
+    mut signals: Signals,
+    mut shown: Local<Option<(String, String, String)>>,
+) {
+    for click in clicks.read() {
+        let Ok(id) = ids.get(click.entity) else {
+            continue;
+        };
+        if let Some((w, h)) = id.0.strip_prefix("preset-").and_then(|s| s.split_once('x')) {
+            signals.set("new_width", w.to_string());
+            signals.set("new_height", h.to_string());
+        }
+    }
+    let text = |name: &str| signals.get::<String>(name).unwrap_or_default();
+    let now = (
+        format!("{}x{}", text("new_width").trim(), text("new_height").trim()),
+        text("new_background"),
+        text("new_bg_hex"),
+    );
+    if shown.as_ref() == Some(&now) {
+        return;
+    }
+    if dom::get_by_id("new-name").is_none() {
+        // The dialog is not built yet.
+        return;
+    }
+    for (w, h) in PRESETS {
+        if let Some(button) = dom::get_by_id(&preset_id(*w, *h)) {
+            if now.0 == format!("{w}x{h}") {
+                button.add_class("active");
+            } else {
+                button.remove_class("active");
+            }
+        }
+    }
+    let color = now.1 == "Color";
+    if signals.get::<bool>("new_bg_color") != Some(color) {
+        signals.set("new_bg_color", color);
+    }
+    // The swatch shows the color typed, which is the user's data. It exists
+    // while the background is a color.
+    if let (Some(c), Some(swatch)) = (parse_hex(&now.2), dom::get_by_id("new-bg-swatch")) {
+        swatch.set_style("bg", &crate::tools::hex(c));
+    } else if color {
+        return;
+    }
+    *shown = Some(now);
 }
 
 /// Writes the recovery copy of a modified document that has a file, every

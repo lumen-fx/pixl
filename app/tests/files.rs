@@ -91,6 +91,15 @@ fn exports_write_png_and_gif() {
     export_to(&mut editor, &gif, true).unwrap();
     let bytes = std::fs::read(gif.with_extension("gif")).unwrap();
     assert_eq!(&bytes[..6], b"GIF89a");
+    // Open reads a GIF back as a new document.
+    let back = read_document(&gif.with_extension("gif")).unwrap();
+    let shown = pixl_core::composite(
+        &back.doc,
+        0,
+        pixl_core::Rect::pixel(3, 4),
+        &pixl_core::CompositeOptions::EXPORT,
+    );
+    assert_eq!(shown, [Rgba::opaque(9, 8, 7)]);
 }
 
 #[test]

@@ -1,10 +1,11 @@
 //! Renders the editor with no window and checks the shape of the window.
 
 use lumenui::HeadlessOptions;
+use lumenui::lumen_source;
 
 #[test]
 fn the_window_has_its_regions() {
-    let frame = pixl::app()
+    let frame = pixl::editor(lumen_source!("src/main.lmn", "src/main.css"))
         .screenshot(HeadlessOptions {
             dpr: 1.0,
             ticks: Some(4),

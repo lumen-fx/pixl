@@ -12,6 +12,7 @@ use pixl_core::history::Transaction;
 use pixl_core::{BlendMode, LayerId, LayerKind, Rgba, Scope};
 
 use crate::editor::Editor;
+use crate::home::Home;
 use crate::input::{KeyInput, key_char};
 use crate::tools::{hex, set_if_changed};
 use crate::view::parse_hex;
@@ -467,8 +468,10 @@ pub fn history_keys(
     mut panels: ResMut<Panels>,
     mut keys: KeyInput,
     modifiers: Res<ModifiersState>,
+    home: Res<Home>,
 ) {
-    let typing = keys.typing();
+    // The start screen keeps the editor's keys until a document shows.
+    let typing = keys.typing() || home.open;
     let editor = &mut *editor;
     for k in keys.pressed.read() {
         let command = k.modifiers.ctrl || k.modifiers.super_ || modifiers.0.ctrl;

@@ -18,6 +18,17 @@ sheet I/O (sheets carry Aseprite-compatible JSON). The editor itself is the
 window, with a menu row, the tool bar, tool options, the canvas, and the color,
 palette, layers and history panels.
 
+Started without a file, pixl opens on its start screen: the documents opened
+or saved most recently, each with a thumbnail of its first frame, its folder,
+its size and when it last changed, with a field that filters them by name or
+folder. A click opens one. A document that is no longer there shows as
+missing, with a button that takes it off the list; one with a recovery copy
+newer than its file offers to recover it. Beside the list are New project
+and Open. The list and the thumbnails are kept in pixl's folder of the user
+data directory (`~/.local/share/lumen/pixl` on Linux), never beside the
+documents. File > Close (Ctrl+W) and the Home button in the menu row return
+to the start screen; Home keeps the open document to go back to.
+
 The canvas view zooms from 1 to 6400 percent around the pointer (the wheel,
 or `+`, `-`, `0` to fit and `1` for 100 percent) and pans with the middle
 button, a drag with the space bar held, or W, A, S and D held down (Shift
@@ -48,10 +59,13 @@ panel adds, deletes, reorders and hides layers and sets the active layer's
 opacity and blend mode; the history panel lists every edit and jumps to any of
 them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
 
-The File menu makes a new document of a chosen size, opens and saves `.pixl`
-documents (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S), imports PNG and Aseprite
-files as new documents, and exports the current frame as a PNG (Ctrl+E) or the
-animation as a GIF. Replacing a document with unsaved edits asks first. While
+The File menu makes a new project (Ctrl+N), opens and saves `.pixl`
+documents (Ctrl+O, Ctrl+S, Ctrl+Shift+S), and exports the current frame as a
+PNG (Ctrl+E) or the animation as a GIF. Open also reads Aseprite, PNG and GIF
+files, as new documents that save as `.pixl`. A new project has a name, a
+size (typed, or one click on a square, sprite or screen preset), RGBA or
+indexed color, and a transparent or colored background. Replacing a document
+with unsaved edits asks first. While
 a saved document has unsaved edits, the editor writes its recovery copy beside
 it every 30 seconds, and opening a document whose recovery copy is newer
 offers to recover it.
@@ -86,7 +100,8 @@ dithering. GIFs import with their frames, timing and disposal applied.
 ## Quick start
 
 ```sh
-cargo run -p pixl
+cargo run -p pixl                 # the start screen
+cargo run -p pixl -- art.pixl     # straight into a document
 cargo test
 ```
 

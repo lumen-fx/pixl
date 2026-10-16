@@ -1,6 +1,7 @@
 <root id="app" class="pixl dark">
   <row id="menubar">
     <label class="brand" text="pixl"/>
+    <tooltip text="Back to the start screen"><button id="go-home" class="menu-title" text="Home"/></tooltip>
     <button id="menu-file" class="menu-title" text="File"/>
     <menu id="file-menu">
       <menuitem id="file-new" label="New... (Ctrl+N)"/>
@@ -9,11 +10,10 @@
       <menuitem id="file-save" label="Save (Ctrl+S)"/>
       <menuitem id="file-save-as" label="Save as... (Ctrl+Shift+S)"/>
       <separator/>
-      <menuitem id="file-import-png" label="Import PNG..."/>
-      <menuitem id="file-import-aseprite" label="Import Aseprite..."/>
-      <separator/>
       <menuitem id="file-export-png" label="Export PNG... (Ctrl+E)"/>
       <menuitem id="file-export-gif" label="Export GIF..."/>
+      <separator/>
+      <menuitem id="file-close" label="Close (Ctrl+W)"/>
     </menu>
     <button id="menu-edit" class="menu-title" text="Edit"/>
     <button id="menu-view" class="menu-title" text="View"/>
@@ -148,13 +148,48 @@
   </row>
 
   <dialog open="new_open">
-    <column class="dialog-card">
-      <label class="dialog-title" text="New document"/>
+    <column class="dialog-card new-card">
+      <label class="dialog-title" text="New project"/>
       <row class="dialog-row">
-        <label class="option-label" text="Width"/>
+        <label class="field-label" text="Name"/>
+        <input id="new-name" class="name-field" bind-text="new_name" text="untitled"/>
+      </row>
+      <row class="dialog-row">
+        <label class="field-label" text="Size"/>
         <input id="new-width" class="size-field" bind-text="new_width" text="64"/>
-        <label class="option-label" text="Height"/>
+        <label class="option-label" text="x"/>
         <input id="new-height" class="size-field" bind-text="new_height" text="64"/>
+        <label class="option-label" text="px"/>
+      </row>
+      <row class="dialog-row presets">
+        <label class="field-label" text="Square"/>
+        <button id="preset-16x16" class="preset" text="16"/><button id="preset-32x32" class="preset" text="32"/><button id="preset-64x64" class="preset" text="64"/><button id="preset-128x128" class="preset" text="128"/><button id="preset-256x256" class="preset" text="256"/><button id="preset-512x512" class="preset" text="512"/>
+      </row>
+      <row class="dialog-row presets">
+        <label class="field-label" text="Sprite"/>
+        <tooltip text="Small character"><button id="preset-16x24" class="preset" text="16x24"/></tooltip><tooltip text="Character"><button id="preset-24x32" class="preset" text="24x32"/></tooltip><tooltip text="Tall character"><button id="preset-32x48" class="preset" text="32x48"/></tooltip><tooltip text="Large sprite"><button id="preset-48x48" class="preset" text="48x48"/></tooltip>
+      </row>
+      <row class="dialog-row presets">
+        <label class="field-label" text="Screen"/>
+        <tooltip text="Game Boy screen"><button id="preset-160x144" class="preset" text="160x144"/></tooltip><tooltip text="SNES screen"><button id="preset-256x224" class="preset" text="256x224"/></tooltip><tooltip text="NES screen"><button id="preset-256x240" class="preset" text="256x240"/></tooltip><tooltip text="16:9 low resolution"><button id="preset-320x180" class="preset" text="320x180"/></tooltip><tooltip text="4:3 low resolution"><button id="preset-320x240" class="preset" text="320x240"/></tooltip><tooltip text="16:9 screen"><button id="preset-640x360" class="preset" text="640x360"/></tooltip>
+      </row>
+      <row class="dialog-row">
+        <label class="field-label" text="Color mode"/>
+        <dropdown id="new-mode" class="new-choice" bind-value="new_mode">
+          <option value="RGBA"/>
+          <option value="Indexed"/>
+        </dropdown>
+      </row>
+      <row class="dialog-row">
+        <label class="field-label" text="Background"/>
+        <dropdown id="new-background" class="new-choice" bind-value="new_background">
+          <option value="Transparent"/>
+          <option value="Color"/>
+        </dropdown>
+        <if signal="new_bg_color" mode="hide">
+          <tile id="new-bg-swatch" class="swatch"/>
+          <input id="new-bg-hex" class="hex" bind-text="new_bg_hex" text="#ffffff"/>
+        </if>
       </row>
       <row class="dialog-actions">
         <spacer/>
@@ -187,6 +222,34 @@
       </row>
     </column>
   </dialog>
+
+  <column id="home">
+    <row class="home-top">
+      <label class="home-brand" text="pixl"/>
+      <label class="home-tagline" text="pixel art editor"/>
+      <spacer/>
+      <if signal="home_can_return" mode="hide">
+        <button id="home-back" class="flat" text="Back to the editor"/>
+      </if>
+    </row>
+    <row class="home-main">
+      <column class="home-actions">
+        <button id="home-new" class="primary home-action" text="New project..."/>
+        <button id="home-open" class="home-action" text="Open..."/>
+        <label class="home-hint" text="pixl, Aseprite, PNG and GIF files"/>
+        <spacer/>
+        <label id="home-message" class="home-message" bind-text="status_message" text=""/>
+      </column>
+      <column class="home-recents">
+        <row class="home-recents-head">
+          <label class="home-section" text="Recent"/>
+          <spacer/>
+          <input id="home-search" class="home-search" placeholder="Search" bind-text="home_filter" text=""/>
+        </row>
+        <scroll id="recent-list" class="recent-list"/>
+      </column>
+    </row>
+  </column>
 
   <tile id="probes" class="probe">
     <tile id="probe-checker-a"/>

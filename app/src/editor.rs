@@ -109,6 +109,11 @@ pub struct Editor {
     pub history: History,
     /// Where the document was opened from or last saved to.
     pub path: Option<PathBuf>,
+    /// The PNG, GIF or Aseprite file an imported document was read from. It
+    /// is not the document's file: saving never writes to it.
+    pub imported_from: Option<PathBuf>,
+    /// The name a new document was given, until it is saved to a file.
+    pub name: Option<String>,
     pub frame: usize,
     /// The layer tools paint on.
     pub layer: LayerId,
@@ -147,6 +152,8 @@ impl Editor {
             doc,
             history: History::default(),
             path: None,
+            imported_from: None,
+            name: None,
             frame: 0,
             layer,
             fg: Rgba::BLACK,
@@ -210,12 +217,24 @@ impl Editor {
         self.revision != self.saved_revision
     }
 
+    /// The document's name: its file's name, else the name it was made
+    /// with, else "untitled".
+    pub fn name(&self) -> String {
+        if let Some(n) = self.path.as_ref().and_then(|p| p.file_name()) {
+            return n.to_string_lossy().into_owned();
+        }
+        self.name.clone().unwrap_or_else(|| "untitled".to_string())
+    }
+
+    /// The file the start screen lists this document under: its own file,
+    /// or the file it was imported from.
+    pub fn recent_path(&self) -> Option<&PathBuf> {
+        self.path.as_ref().or(self.imported_from.as_ref())
+    }
+
     /// The document's name for the title bar.
     pub fn title(&self) -> String {
-        let name = self.path.as_ref().and_then(|p| p.file_name()).map_or_else(
-            || "untitled".to_string(),
-            |n| n.to_string_lossy().into_owned(),
-        );
+        let name = self.name();
         if self.is_modified() {
             format!("{name} *")
         } else {

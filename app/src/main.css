@@ -34,3 +34,23 @@
 .history-list { height: 120; }
 .history-row { align: center; padding: 0 var(--space-3); }
 #statusbar { align: center; gap: 16; padding: 0 var(--space-4); }
+
+/* The start screen takes the window in place of the editor. */
+#home { display: none; }
+.pixl.home #home { display: flex; grow: 1; min-height: 0; }
+.pixl.home #menubar { display: none; }
+.pixl.home #tool-options { display: none; }
+.pixl.home #workspace { display: none; }
+.pixl.home #statusbar { display: none; }
+.home-top { align: center; gap: var(--space-4); padding: 0 24; }
+.home-main { grow: 1; min-height: 0; gap: 24; padding: 16 24 24 24; }
+.home-actions { width: 220; gap: var(--space-4); }
+.home-recents { grow: 1; min-width: 0; gap: var(--space-4); }
+.home-recents-head { align: center; gap: var(--space-4); }
+.recent-list { grow: 1; min-height: 0; }
+.recent { align: center; gap: 12; padding: 8 12; }
+.recent-text { grow: 1; min-width: 0; gap: 2; }
+.thumb-frame { align: center; justify: center; }
+
+/* The New project dialog. */
+.presets { flex-wrap: wrap; gap: var(--space-2); }

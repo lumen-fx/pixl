@@ -18,6 +18,7 @@ use pixl_core::{
 };
 
 use crate::editor::{Editor, Tool};
+use crate::home::Home;
 use crate::input::{KeyInput, Navigation, Pointer, PointerInput, key_char};
 use crate::view::{Preview, View};
 
@@ -223,6 +224,7 @@ pub fn pick_tool(
     mut clicks: MessageReader<ClickEvent>,
     ids: Query<&LumenId>,
     gesture: Res<Gesture>,
+    home: Res<Home>,
 ) {
     let mut picked = None;
     for click in clicks.read() {
@@ -232,7 +234,8 @@ pub fn pick_tool(
             picked = Some(tool);
         }
     }
-    let typing = keys.typing();
+    // The start screen keeps the editor's keys until a document shows.
+    let typing = keys.typing() || home.open;
     for k in keys.pressed.read() {
         if typing || k.repeat || k.modifiers.ctrl || k.modifiers.alt || k.modifiers.super_ {
             continue;

@@ -1,16 +1,19 @@
 //! Drives the editor with input messages, one scripted step per tick, the
 //! way the window delivers them, and reports what the editor ended with.
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use lumenui::ecs::hierarchy::Children;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
     Key, MenuClicked, Modifiers, ModifiersState, MouseWheel, NamedKey, PointerButton, PointerData,
     PointerKind, PointerMoved, PointerPressed, PointerReleased,
 };
 use lumenui::prelude::*;
+use pixl::recents::Recent;
 use pixl::view::View;
-use pixl::{Editor, Tool};
+use pixl::{Editor, Home, Recents, Tool};
 use pixl_core::{Document, Point, Rgba, Selection};
 
 /// Where a pointer step lands.
@@ -43,6 +46,8 @@ pub enum Step {
     Ctrl(&'static str, bool),
     /// A click on the element with this id.
     Click(&'static str),
+    /// A click on the first child of the element with this id.
+    ClickInside(&'static str),
     /// A click on a menu item.
     Menu(&'static str),
     /// A control writing a number to a signal, as a slider does.
@@ -65,6 +70,13 @@ pub struct Outcome {
     pub undo: Vec<String>,
     pub views: Vec<View>,
     pub frame: Frame,
+    pub title: String,
+    pub modified: bool,
+    pub message: Option<String>,
+    pub home_open: bool,
+    pub recents: Vec<Recent>,
+    /// The thumbnail file of each recent document, once drawn.
+    pub thumbs: Vec<Option<PathBuf>>,
 }
 
 /// The editor's state at the end of a tick.
@@ -75,6 +87,12 @@ struct Snapshot {
     tool: Tool,
     selection: Option<Selection>,
     undo: Vec<String>,
+    title: String,
+    modified: bool,
+    message: Option<String>,
+    home_open: bool,
+    recents: Vec<Recent>,
+    thumbs: Vec<Option<PathBuf>>,
 }
 
 fn key(name: &str) -> Key {
@@ -106,6 +124,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    mut clicks: MessageWriter<ClickEvent>,
                    mut menu: MessageWriter<MenuClicked>,
                    elements: Query<(Entity, &LumenId)>,
+                   children: Query<&Children>,
                    mut signals: Signals| {
                 *tick += 1;
                 modifiers.0.shift = *shift;
@@ -228,12 +247,19 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             modifiers: m,
                         });
                     }
-                    Step::Click(id) => {
-                        let entity = elements
+                    Step::Click(id) | Step::ClickInside(id) => {
+                        let mut entity = elements
                             .iter()
                             .find(|(_, i)| i.0 == id)
                             .map(|(e, _)| e)
                             .unwrap_or_else(|| panic!("no element {id}"));
+                        if matches!(step, Step::ClickInside(_)) {
+                            entity = children
+                                .get(entity)
+                                .ok()
+                                .and_then(|c| c.first().copied())
+                                .unwrap_or_else(|| panic!("{id} has no children"));
+                        }
                         clicks.write(ClickEvent {
                             entity,
                             position: Vec2::ZERO,
@@ -263,8 +289,15 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         )
         .add_systems(
             TickStage::Systems,
-            (move |view: Res<View>, editor: Res<Editor>, mut tick: Local<usize>| {
+            (move |view: Res<View>,
+                   editor: Res<Editor>,
+                   home: Res<Home>,
+                   mut recents: ResMut<Recents>,
+                   mut tick: Local<usize>| {
                 *tick += 1;
+                // Thumbnails draw on worker threads; the harness waits for
+                // them so what it reports is settled.
+                recents.finish_thumbnails();
                 if *tick >= 5 {
                     views_out.lock().unwrap().push(view.clone());
                 }
@@ -275,9 +308,20 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     tool: editor.tool,
                     selection: editor.selection.clone(),
                     undo: editor.history.undo_labels().map(str::to_string).collect(),
+                    title: editor.title(),
+                    modified: editor.is_modified(),
+                    message: editor.message.clone(),
+                    home_open: home.open,
+                    recents: recents.entries.clone(),
+                    thumbs: recents
+                        .entries
+                        .iter()
+                        .map(|e| recents.thumb_path(e))
+                        .collect(),
                 });
             })
-            .after(pixl::view::draw_stage),
+            .after(pixl::view::draw_stage)
+            .after(pixl::home::show_home),
         )
         .screenshot(HeadlessOptions {
             dpr: 1.0,
@@ -295,6 +339,12 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         undo: end.undo,
         views,
         frame,
+        title: end.title,
+        modified: end.modified,
+        message: end.message,
+        home_open: end.home_open,
+        recents: end.recents,
+        thumbs: end.thumbs,
     }
 }
 

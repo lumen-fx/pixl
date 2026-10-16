@@ -296,6 +296,7 @@ dependencies = [
  "lumenui",
  "lumenui-canvas",
  "pixl-core",
+ "serde_json",
 ]
 
 [[package]]
