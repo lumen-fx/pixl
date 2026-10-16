@@ -38,6 +38,10 @@ impl Writer {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
 
+    pub fn i16(&mut self, v: i16) {
+        self.buf.extend_from_slice(&v.to_le_bytes());
+    }
+
     pub fn u32(&mut self, v: u32) {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
@@ -48,6 +52,10 @@ impl Writer {
 
     pub fn bytes(&mut self, v: &[u8]) {
         self.buf.extend_from_slice(v);
+    }
+
+    pub fn zeros(&mut self, n: usize) {
+        self.buf.resize(self.buf.len() + n, 0);
     }
 
     /// Overwrites a u32 written earlier at `at`.
@@ -89,6 +97,10 @@ impl<'a> Reader<'a> {
         Ok(s)
     }
 
+    pub fn skip(&mut self, n: usize) -> Result<(), Error> {
+        self.take(n).map(|_| ())
+    }
+
     pub fn array<const N: usize>(&mut self) -> Result<[u8; N], Error> {
         let mut out = [0; N];
         out.copy_from_slice(self.take(N)?);
@@ -101,6 +113,10 @@ impl<'a> Reader<'a> {
 
     pub fn u16(&mut self) -> Result<u16, Error> {
         Ok(u16::from_le_bytes(self.array()?))
+    }
+
+    pub fn i16(&mut self) -> Result<i16, Error> {
+        Ok(i16::from_le_bytes(self.array()?))
     }
 
     pub fn u32(&mut self) -> Result<u32, Error> {

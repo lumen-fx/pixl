@@ -22,6 +22,11 @@ recovery copy beside the document. A file from a newer pixl opens in an older
 one when the newer data is optional; what the older version cannot read is
 skipped with a warning.
 
+Aseprite `.ase` and `.aseprite` files open and save as a first-class format:
+layers and groups, linked cels, RGBA and indexed color, the palette, tags and
+slices carry over. What one side cannot hold (pixl's layer masks and clipping,
+Aseprite's tilemaps) is listed as a warning instead of dropped silently.
+
 ## Quick start
 
 ```sh

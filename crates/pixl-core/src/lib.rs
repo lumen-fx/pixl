@@ -2,6 +2,7 @@
 //! compositing, history, raster tools, transforms, the native `.pixl` file
 //! format and image I/O. It has no UI dependency; the editor's UI drives it.
 
+pub mod aseprite;
 mod bytes;
 pub mod color;
 pub mod composite;
