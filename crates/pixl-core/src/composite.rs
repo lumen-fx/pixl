@@ -291,8 +291,8 @@ fn sample_image(
         img: &TiledImage<P>,
         rect: Rect,
         transparent_fill: bool,
-        to: &dyn Fn(P) -> Rgba,
-        f: &mut dyn FnMut(usize, Rgba),
+        to: impl Fn(P) -> Rgba,
+        f: &mut impl FnMut(usize, Rgba),
     ) {
         let r = rect.intersect(&img.bounds());
         let tiles: Vec<usize> = img.tiles_in(&r).collect();
@@ -321,7 +321,7 @@ fn sample_image(
         }
     }
     match img {
-        Raster::Rgba(i) => walk(i, rect, i.fill().a == 0, &|c| c, &mut f),
+        Raster::Rgba(i) => walk(i, rect, i.fill().a == 0, |c| c, &mut f),
         Raster::Indexed(i) => {
             let to = |v: u8| {
                 if v == ti {
@@ -330,9 +330,9 @@ fn sample_image(
                     palette.get(v)
                 }
             };
-            walk(i, rect, to(i.fill()).a == 0, &to, &mut f)
+            walk(i, rect, to(i.fill()).a == 0, to, &mut f)
         }
-        Raster::Mask(i) => walk(i, rect, i.fill() == 0, &|v| Rgba::new(v, v, v, v), &mut f),
+        Raster::Mask(i) => walk(i, rect, i.fill() == 0, |v| Rgba::new(v, v, v, v), &mut f),
     }
 }
 

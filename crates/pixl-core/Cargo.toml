@@ -9,3 +9,7 @@ publish.workspace = true
 [dependencies]
 png = "0.18"
 serde_json = { version = "1", features = ["preserve_order"] }
+
+[[bench]]
+name = "core"
+harness = false
