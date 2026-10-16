@@ -295,7 +295,7 @@ pub fn import_png_layer(
     Ok(layer)
 }
 
-fn scale_pixels(width: u32, height: u32, pixels: &[Rgba], scale: u32) -> Vec<Rgba> {
+pub(crate) fn scale_pixels(width: u32, height: u32, pixels: &[Rgba], scale: u32) -> Vec<Rgba> {
     if scale <= 1 {
         return pixels.to_vec();
     }

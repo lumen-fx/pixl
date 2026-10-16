@@ -9,6 +9,7 @@ pub mod composite;
 pub mod document;
 pub mod error;
 pub mod geom;
+pub mod gif;
 pub mod history;
 pub mod image;
 pub mod io;

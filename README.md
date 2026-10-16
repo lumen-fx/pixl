@@ -27,6 +27,10 @@ layers and groups, linked cels, RGBA and indexed color, the palette, tags and
 slices carry over. What one side cannot hold (pixl's layer masks and clipping,
 Aseprite's tilemaps) is listed as a warning instead of dropped silently.
 
+Animations export as GIF with each frame's duration. One palette covers the
+whole animation; past 256 colors it is reduced by median cut, without
+dithering. GIFs import with their frames, timing and disposal applied.
+
 ## Quick start
 
 ```sh
