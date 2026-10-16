@@ -1,0 +1,41 @@
+name: bug report
+description: a tool, file, or export behaves differently than it should
+labels: [C-Bug, S-Needs-Triage]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: steps
+      description: what you did, from opening pixl; attach the file if you can
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: actual
+      description: what happened, with any error message in full
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: pixl version
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: os and version
+      placeholder: Arch Linux (kernel 6.15), Windows 11 24H2, macOS 15.3
+    validations:
+      required: true

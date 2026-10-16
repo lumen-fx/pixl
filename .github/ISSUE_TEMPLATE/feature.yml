@@ -1,0 +1,24 @@
+name: feature request
+description: propose a tool, format, or workflow change
+labels: [C-Feature, S-Needs-Triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: problem
+      description: what you are trying to draw or do and where pixl gets in the way
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: proposed behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: alternatives
+      description: how you do it today, in pixl or another editor

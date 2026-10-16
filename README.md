@@ -36,3 +36,7 @@ dithering. GIFs import with their frames, timing and disposal applied.
 ```sh
 cargo test
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
