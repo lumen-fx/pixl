@@ -9,6 +9,7 @@ pub mod error;
 pub mod geom;
 pub mod history;
 pub mod image;
+pub mod io;
 pub mod selection;
 pub mod tools;
 pub mod transform;

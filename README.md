@@ -13,7 +13,8 @@ Rust SDK.
 
 Early. `pixl-core` holds the editor core with no UI: the document model,
 compositing, undo history, raster tools, transforms, and PNG and sprite sheet
-I/O. The editor UI comes next, on top of it.
+I/O (sheets carry Aseprite-compatible JSON). The editor UI comes next, on top
+of it. pixl has no native file format yet.
 
 ## Quick start
 
