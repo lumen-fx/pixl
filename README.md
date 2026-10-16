@@ -11,10 +11,16 @@ Rust SDK.
 
 ## Status
 
-Early. `pixl-core` holds the editor core with no UI: the document model,
-compositing, undo history, raster tools, transforms, and PNG and sprite sheet
-I/O (sheets carry Aseprite-compatible JSON). The editor UI comes next, on top
-of it.
+Early. `pixl-core` (in `core/`) holds the editor core with no UI: the document
+model, compositing, undo history, raster tools, transforms, and PNG and sprite
+sheet I/O (sheets carry Aseprite-compatible JSON). The editor itself is the
+`pixl` program in `app/`, built with the Lumen Rust SDK: one document per
+window, with a menu row, the tool bar, tool options, the canvas, and the color,
+palette, layers and history panels.
+
+The editor builds against Lumen 0.0.10, which is not on crates.io yet. Until it
+is, building `pixl` needs `lumenui` and `lumenui-canvas` patched in from a Lumen
+checkout, and CI fails on the app crate.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
@@ -34,8 +40,12 @@ dithering. GIFs import with their frames, timing and disposal applied.
 ## Quick start
 
 ```sh
+cargo run -p pixl
 cargo test
 ```
+
+On Linux the build links GTK 3, X11, xkbcommon and Wayland, so their
+development packages must be installed.
 
 ## License
 

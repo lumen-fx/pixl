@@ -1,0 +1,62 @@
+<root id="app" class="pixl dark">
+  <row id="menubar">
+    <label class="brand" text="pixl"/>
+    <button id="menu-file" class="menu-title" text="File"/>
+    <button id="menu-edit" class="menu-title" text="Edit"/>
+    <button id="menu-view" class="menu-title" text="View"/>
+    <button id="menu-layer" class="menu-title" text="Layer"/>
+    <spacer/>
+    <label id="doc-title" class="doc-title" bind-text="doc_title" text="untitled"/>
+  </row>
+
+  <row id="tool-options">
+    <label id="tool-name" class="tool-name" bind-text="tool_label" text="Pencil"/>
+  </row>
+
+  <row id="workspace">
+    <column id="toolbar">
+      <tooltip text="Pencil (B)"><button id="tool-pencil" class="tool active" text="B"/></tooltip>
+      <tooltip text="Eraser (E)"><button id="tool-eraser" class="tool" text="E"/></tooltip>
+      <tooltip text="Line (L)"><button id="tool-line" class="tool" text="L"/></tooltip>
+      <tooltip text="Rectangle (U)"><button id="tool-rect" class="tool" text="U"/></tooltip>
+      <tooltip text="Ellipse (Shift+U)"><button id="tool-ellipse" class="tool" text="O"/></tooltip>
+      <tooltip text="Bucket (G)"><button id="tool-bucket" class="tool" text="G"/></tooltip>
+      <tooltip text="Eyedropper (I)"><button id="tool-eyedropper" class="tool" text="I"/></tooltip>
+      <tooltip text="Rectangle select (M)"><button id="tool-select" class="tool" text="M"/></tooltip>
+      <tooltip text="Move (V)"><button id="tool-move" class="tool" text="V"/></tooltip>
+    </column>
+
+    <column id="stage">
+      <canvas id="checker"/>
+      <canvas id="art"/>
+      <canvas id="overlay"/>
+    </column>
+
+    <column id="panels">
+      <column id="panel-color" class="panel">
+        <row class="panel-header"><label class="panel-title" text="Color"/></row>
+        <column id="color-body" class="panel-body"/>
+      </column>
+      <column id="panel-palette" class="panel">
+        <row class="panel-header"><label class="panel-title" text="Palette"/></row>
+        <column id="palette-body" class="panel-body"/>
+      </column>
+      <column id="panel-layers" class="panel fill">
+        <row class="panel-header"><label class="panel-title" text="Layers"/></row>
+        <column id="layers-body" class="panel-body"/>
+      </column>
+      <column id="panel-history" class="panel">
+        <row class="panel-header"><label class="panel-title" text="History"/></row>
+        <column id="history-body" class="panel-body"/>
+      </column>
+    </column>
+  </row>
+
+  <row id="statusbar">
+    <label id="status-pos" class="status" bind-text="status_pos" text="-"/>
+    <label id="status-color" class="status" bind-text="status_color" text="-"/>
+    <label id="status-size" class="status" bind-text="status_size" text="-"/>
+    <spacer/>
+    <label id="status-zoom" class="status" bind-text="status_zoom" text="100%"/>
+  </row>
+</root>

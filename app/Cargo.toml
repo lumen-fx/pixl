@@ -1,0 +1,16 @@
+[package]
+name = "pixl"
+description = "The pixl pixel art editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Both link the prebuilt engine of one Lumen release; move them together, and
+# keep rust-toolchain.toml on the compiler that release names.
+lumenui = "0.0.10"
+lumenui-canvas = "0.0.10"
+pixl-core = { path = "../core" }
