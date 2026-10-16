@@ -70,6 +70,19 @@ pub struct Transaction {
     watched: BTreeMap<ImageId, Raster>,
 }
 
+impl Transaction {
+    /// Adds an image to the scope. An image created since [`History::begin`]
+    /// needs no watching: the commit records it whole.
+    pub fn watch(&mut self, doc: &Document, image: ImageId) {
+        if self.image_ids.binary_search(&image).is_ok()
+            && !self.watched.contains_key(&image)
+            && let Some(r) = doc.images.get(&image)
+        {
+            self.watched.insert(image, r.clone());
+        }
+    }
+}
+
 /// Undo and redo stacks for one document.
 #[derive(Clone, Debug)]
 pub struct History {

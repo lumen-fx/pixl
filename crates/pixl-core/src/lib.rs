@@ -9,6 +9,8 @@ pub mod error;
 pub mod geom;
 pub mod history;
 pub mod image;
+pub mod selection;
+pub mod tools;
 
 pub use color::{Color, ColorMode, Palette, Rgba};
 pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame};
@@ -20,3 +22,7 @@ pub use error::Error;
 pub use geom::{Point, Rect};
 pub use history::{History, Scope, Transaction};
 pub use image::{Raster, TILE_SIZE, TiledImage};
+pub use selection::{SelectOp, Selection};
+pub use tools::{
+    Bayer, Brush, BrushShape, Canvas, Ink, Symmetry, SymmetryMode, ToolContext, edit_cel,
+};
