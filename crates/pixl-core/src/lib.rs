@@ -3,12 +3,14 @@
 //! dependency; the editor's UI drives it.
 
 pub mod color;
+pub mod composite;
 pub mod document;
 pub mod error;
 pub mod geom;
 pub mod image;
 
 pub use color::{Color, ColorMode, Palette, Rgba};
+pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame};
 pub use document::{
     Background, BlendMode, Cel, Document, Frame, ImageId, Layer, LayerId, LayerKind, LayerMask,
     LayerProps, Locks, LoopDirection, NewLayer, PixelAspect, Placement, Slice, Tag, Target,
