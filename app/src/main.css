@@ -16,4 +16,21 @@
 .panel.fill { grow: 1; min-height: 0; }
 .panel-header { align: center; padding: 0 var(--space-4); gap: var(--space-2); }
 .panel-body { padding: var(--space-3); gap: var(--space-3); min-height: 36; }
+.panel-body.fill { grow: 1; min-height: 0; }
+.color-pair { align: center; gap: var(--space-3); }
+.channel { align: center; gap: var(--space-3); }
+.channel-slider { grow: 1; min-width: 0; }
+.swatches { flex-wrap: wrap; gap: 2; }
+.layer-props { align: center; gap: var(--space-3); }
+.opacity-slider { grow: 1; min-width: 0; }
+.layer-list { grow: 1; min-height: 0; }
+.layer-row { align: center; gap: var(--space-3); padding: 0 var(--space-3); }
+.layer-row.depth-1 { padding: 0 var(--space-3) 0 16; }
+.layer-row.depth-2 { padding: 0 var(--space-3) 0 28; }
+.layer-row.depth-3 { padding: 0 var(--space-3) 0 40; }
+.layer-row.depth-4 { padding: 0 var(--space-3) 0 52; }
+.layer-name { grow: 1; }
+.layer-actions { align: center; gap: var(--space-1); }
+.history-list { height: 120; }
+.history-row { align: center; padding: 0 var(--space-3); }
 #statusbar { align: center; gap: 16; padding: 0 var(--space-4); }

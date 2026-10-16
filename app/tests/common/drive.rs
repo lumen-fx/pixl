@@ -39,6 +39,14 @@ pub enum Step {
     PenUp(At),
     /// Holds or lets go of shift for the pointer steps that follow.
     Shift(bool),
+    /// A key press with Ctrl held, and shift or not.
+    Ctrl(&'static str, bool),
+    /// A click on the element with this id.
+    Click(&'static str),
+    /// A control writing a number to a signal, as a slider does.
+    Number(&'static str, f64),
+    /// A control writing text to a signal, as a dropdown does.
+    Text(&'static str, &'static str),
     /// Runs a closure on the editor.
     Edit(fn(&mut Editor)),
     /// Waits a tick.
@@ -92,7 +100,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    mut keys_up: MessageWriter<KeyReleased>,
                    mut down: MessageWriter<PointerPressed>,
                    mut moved: MessageWriter<PointerMoved>,
-                   mut up: MessageWriter<PointerReleased>| {
+                   mut up: MessageWriter<PointerReleased>,
+                   mut clicks: MessageWriter<ClickEvent>,
+                   elements: Query<(Entity, &LumenId)>,
+                   mut signals: Signals| {
                 *tick += 1;
                 modifiers.0.shift = *shift;
                 let Some(step) = tick.checked_sub(5).and_then(|i| steps.get(i)) else {
@@ -198,11 +209,50 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         *shift = held;
                         modifiers.0.shift = held;
                     }
+                    Step::Ctrl(name, with_shift) => {
+                        let m = Modifiers {
+                            shift: with_shift,
+                            ctrl: true,
+                            ..Modifiers::default()
+                        };
+                        keys.write(KeyPressed {
+                            key: key(name),
+                            modifiers: m,
+                            repeat: false,
+                        });
+                        keys_up.write(KeyReleased {
+                            key: key(name),
+                            modifiers: m,
+                        });
+                    }
+                    Step::Click(id) => {
+                        let entity = elements
+                            .iter()
+                            .find(|(_, i)| i.0 == id)
+                            .map(|(e, _)| e)
+                            .unwrap_or_else(|| panic!("no element {id}"));
+                        clicks.write(ClickEvent {
+                            entity,
+                            position: Vec2::ZERO,
+                            button: PointerButton::Primary,
+                            local: None,
+                        });
+                        // A real click ends with the button coming up.
+                        up.write(PointerReleased {
+                            position: Vec2::ZERO,
+                            button: PointerButton::Primary,
+                            local: None,
+                            pointer: PointerData::mouse(0),
+                        });
+                    }
+                    Step::Number(name, v) => signals.set(name, v),
+                    Step::Text(name, v) => signals.set(name, v),
                     Step::Edit(f) => f(&mut editor),
                     Step::Wait => {}
                 }
             })
-            .before(pixl::input::navigate),
+            .before(pixl::input::navigate)
+            .before(pixl::panels::panel_clicks),
         )
         .add_systems(
             TickStage::Systems,

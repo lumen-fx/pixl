@@ -3,6 +3,7 @@
 
 pub mod editor;
 pub mod input;
+pub mod panels;
 pub mod progressive;
 pub mod settings;
 pub mod tools;
@@ -44,6 +45,7 @@ pub fn editor(source: Source) -> App {
         .insert_resource(view::Layers::default())
         .insert_resource(input::Navigation::default())
         .insert_resource(tools::Gesture::default())
+        .insert_resource(panels::Panels::default())
         .add_systems(
             TickStage::Systems,
             (
@@ -52,12 +54,17 @@ pub fn editor(source: Source) -> App {
                 view::read_view_colors,
                 view::measure_stage,
                 input::navigate,
+                panels::panel_clicks,
+                panels::history_keys,
+                panels::layer_controls,
+                panels::color_controls,
                 tools::pick_tool,
                 tools::tool_options,
                 tools::use_tools,
                 view::sync_layers,
                 view::draw_stage,
                 tools::track_pointer,
+                panels::show_panels,
                 tools::show_tool,
                 tools::stage_cursor,
             )

@@ -63,19 +63,73 @@
     <column id="panels">
       <column id="panel-color" class="panel">
         <row class="panel-header"><label class="panel-title" text="Color"/></row>
-        <column id="color-body" class="panel-body"/>
+        <column id="color-body" class="panel-body">
+          <row class="color-pair">
+            <tile id="color-fg" class="swatch big"/>
+            <tile id="color-bg" class="swatch big back"/>
+            <button id="color-swap" class="flat small" text="Swap"/>
+            <spacer/>
+            <input id="color-hex" class="hex" bind-text="color_hex" text="#000000"/>
+          </row>
+          <row class="channel"><label class="channel-name" text="R"/><slider id="color-r" class="channel-slider" min="0" max="255" step="1" value="0" bind-value="color_r"/><label class="channel-value" bind-text="color_r_text" text="0"/></row>
+          <row class="channel"><label class="channel-name" text="G"/><slider id="color-g" class="channel-slider" min="0" max="255" step="1" value="0" bind-value="color_g"/><label class="channel-value" bind-text="color_g_text" text="0"/></row>
+          <row class="channel"><label class="channel-name" text="B"/><slider id="color-b" class="channel-slider" min="0" max="255" step="1" value="0" bind-value="color_b"/><label class="channel-value" bind-text="color_b_text" text="0"/></row>
+          <row class="channel"><label class="channel-name" text="A"/><slider id="color-a" class="channel-slider" min="0" max="255" step="1" value="255" bind-value="color_a"/><label class="channel-value" bind-text="color_a_text" text="255"/></row>
+        </column>
       </column>
       <column id="panel-palette" class="panel">
         <row class="panel-header"><label class="panel-title" text="Palette"/></row>
-        <column id="palette-body" class="panel-body"/>
+        <column id="palette-body" class="panel-body">
+          <row id="palette-swatches" class="swatches"/>
+        </column>
       </column>
       <column id="panel-layers" class="panel fill">
         <row class="panel-header"><label class="panel-title" text="Layers"/></row>
-        <column id="layers-body" class="panel-body"/>
+        <column id="layers-body" class="panel-body fill">
+          <row class="layer-props">
+            <dropdown id="layer-blend" class="blend" bind-value="layer_blend">
+              <option value="Normal"/>
+              <option value="Multiply"/>
+              <option value="Screen"/>
+              <option value="Overlay"/>
+              <option value="Darken"/>
+              <option value="Lighten"/>
+              <option value="Color dodge"/>
+              <option value="Color burn"/>
+              <option value="Hard light"/>
+              <option value="Soft light"/>
+              <option value="Difference"/>
+              <option value="Exclusion"/>
+              <option value="Hue"/>
+              <option value="Saturation"/>
+              <option value="Color"/>
+              <option value="Luminosity"/>
+              <option value="Add"/>
+              <option value="Subtract"/>
+            </dropdown>
+            <slider id="layer-opacity" class="opacity-slider" min="0" max="100" step="1" value="100" bind-value="layer_opacity"/>
+            <label class="channel-value" bind-text="layer_opacity_text" text="100%"/>
+          </row>
+          <scroll id="layer-list" class="layer-list"/>
+          <row class="layer-actions">
+            <tooltip text="New layer"><button id="layer-add" class="flat small" text="New"/></tooltip>
+            <tooltip text="Delete layer"><button id="layer-delete" class="flat small" text="Delete"/></tooltip>
+            <spacer/>
+            <tooltip text="Move up"><button id="layer-up" class="flat small" text="Up"/></tooltip>
+            <tooltip text="Move down"><button id="layer-down" class="flat small" text="Down"/></tooltip>
+          </row>
+        </column>
       </column>
       <column id="panel-history" class="panel">
-        <row class="panel-header"><label class="panel-title" text="History"/></row>
-        <column id="history-body" class="panel-body"/>
+        <row class="panel-header">
+          <label class="panel-title" text="History"/>
+          <spacer/>
+          <button id="history-undo" class="flat small" text="Undo"/>
+          <button id="history-redo" class="flat small" text="Redo"/>
+        </row>
+        <column id="history-body" class="panel-body">
+          <scroll id="history-list" class="history-list" bind-scroll="history_scroll"/>
+        </column>
       </column>
     </column>
   </row>

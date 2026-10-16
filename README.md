@@ -38,6 +38,13 @@ background color, and Shift snaps lines to clean pixel steps and shapes to
 squares and circles. Every tool keeps to the selection. With a pen, pressure
 sets the brush size; the pen's eraser end erases.
 
+The panels on the right show the document: the color panel edits the
+foreground color with RGBA sliders and a hex field; the palette sets the
+foreground with a click and the background with a right-click; the layers
+panel adds, deletes, reorders and hides layers and sets the active layer's
+opacity and blend mode; the history panel lists every edit and jumps to any of
+them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
+
 The editor has its own theme, written entirely in CSS over its own tokens: a
 dark set of neutral greys so the colors in the art read true, and a light set
 built from the same tokens. The UI font is Pixelify Sans by Stefie Justprince,
