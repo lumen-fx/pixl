@@ -5,9 +5,9 @@
 //! four layers and links the other layers' cels to the first frame (how an
 //! animation is usually built), and `full`, where every cel of every layer
 //! is its own fully painted image (the worst case). For each it times a step
-//! to the next frame until the renderer shows it, and the frames per second
-//! playback reaches at 12 frames per second and as fast as it can, with the
-//! onion skin off and on.
+//! to the next frame until the renderer first shows it and until all of it
+//! is drawn, with the onion skin off and on, and the frames per second
+//! playback reaches at 12 frames per second and as fast as it can.
 //!
 //! `cargo bench -p pixl --bench playback -- cpu` or `-- gpu` picks the
 //! renderer, `sprite` (the default) or `full` the document, and `side=N`,
@@ -152,8 +152,14 @@ fn app_dir(backend: &str) -> PathBuf {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Phase {
     Opening,
-    Step { n: usize },
-    Play { run: usize },
+    /// Stepping to the next frame, with the onion skin or without it.
+    Step {
+        n: usize,
+        onion: bool,
+    },
+    Play {
+        run: usize,
+    },
     Done,
 }
 
@@ -168,7 +174,10 @@ const RUNS: [(u32, bool, &str); 4] = [
 #[derive(Default)]
 struct Results {
     open: Option<Duration>,
-    steps: Vec<Duration>,
+    /// Per step: the first frame that shows it, and the frame that shows
+    /// all of it.
+    steps: Vec<(Duration, Duration)>,
+    onion_steps: Vec<(Duration, Duration)>,
     plays: Vec<(&'static str, f64, f64)>,
 }
 
@@ -221,8 +230,10 @@ fn run(doc: Document, backend: &str) {
         TickStage::Systems,
         (move |mut phase: Local<Option<Phase>>,
                mut since: Local<Option<(Instant, usize, usize)>>,
+               mut stepped: Local<Option<Instant>>,
                mut editor: ResMut<Editor>,
                mut timeline: ResMut<Timeline>,
+               mut signals: Signals,
                layers: Res<Layers>| {
             let p = phase.get_or_insert(Phase::Opening);
             let mut results = out.lock().unwrap();
@@ -230,25 +241,41 @@ fn run(doc: Document, backend: &str) {
                 Phase::Opening => {
                     if !layers.rewrites.is_empty() && layers.pending() == 0 {
                         results.open = Some(opened.elapsed());
-                        *p = Phase::Step { n: 0 };
+                        *p = Phase::Step { n: 0, onion: false };
                     }
                 }
-                Phase::Step { n } => {
+                Phase::Step { n, onion } => {
                     if watch.started.lock().unwrap().is_some() || layers.pending() > 0 {
                         return;
                     }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        results.steps.push(lap);
+                    if timeline.onion.on != onion {
+                        signals.set("onion_on", onion);
+                        return;
+                    }
+                    if let (Some(lap), Some(t0)) = (watch.lap.lock().unwrap().take(), *stepped) {
+                        let list = if onion {
+                            &mut results.onion_steps
+                        } else {
+                            &mut results.steps
+                        };
+                        list.push((lap, t0.elapsed()));
                     }
                     if n == STEPS {
-                        *p = Phase::Play { run: 0 };
+                        *p = if onion {
+                            signals.set("onion_on", false);
+                            Phase::Play { run: 0 }
+                        } else {
+                            Phase::Step { n: 0, onion: true }
+                        };
+                        *stepped = None;
                         return;
                     }
                     let next = (editor.frame + 1) % editor.doc.frame_count();
                     editor.go_to_frame(next);
+                    *stepped = Some(Instant::now());
                     *watch.started.lock().unwrap() = Some(Instant::now());
                     cap.request();
-                    *p = Phase::Step { n: n + 1 };
+                    *p = Phase::Step { n: n + 1, onion };
                 }
                 Phase::Play { run } => {
                     let Some((ms, onion, label)) = RUNS.get(run).copied() else {
@@ -257,13 +284,17 @@ fn run(doc: Document, backend: &str) {
                     };
                     match *since {
                         None => {
-                            if layers.pending() > 0 {
+                            if layers.pending() > 0 || timeline.onion.on != onion {
+                                if timeline.onion.on != onion {
+                                    signals.set("onion_on", onion);
+                                }
                                 return;
                             }
                             for f in 0..editor.doc.frame_count() {
                                 let _ = editor.doc.set_frame_duration(f, ms);
                             }
-                            timeline.onion.on = onion;
+                            // The timeline's checkbox owns the setting.
+                            signals.set("onion_on", onion);
                             timeline.playback.loop_tag = false;
                             timeline.playback.start(&mut editor, Instant::now());
                             *since = Some((Instant::now(), editor.frame, 0));
@@ -274,7 +305,7 @@ fn run(doc: Document, backend: &str) {
                                 let average = shown as f64 / t0.elapsed().as_secs_f64();
                                 results.plays.push((label, fps, average));
                                 timeline.playback.stop();
-                                timeline.onion.on = false;
+                                signals.set("onion_on", false);
                                 *since = None;
                                 *p = Phase::Play { run: run + 1 };
                             } else if editor.frame != last {
@@ -306,13 +337,23 @@ fn report(r: &Results) {
     if let Some(open) = r.open {
         println!("  open: {}", ms(open));
     }
-    if !r.steps.is_empty() {
+    for (name, steps) in [
+        ("next frame", &r.steps),
+        ("next frame, onion skin", &r.onion_steps),
+    ] {
+        if steps.is_empty() {
+            continue;
+        }
+        let first: Vec<Duration> = steps.iter().map(|s| s.0).collect();
+        let all: Vec<Duration> = steps.iter().map(|s| s.1).collect();
         println!(
-            "  next frame on screen: median {} / p95 {} / max {} over {}",
-            ms(percentile(&r.steps, 0.5)),
-            ms(percentile(&r.steps, 0.95)),
-            ms(*r.steps.iter().max().unwrap()),
-            r.steps.len()
+            "  {name}: first shown median {} / p95 {}, all of it median {} / p95 {} / max {} over {}",
+            ms(percentile(&first, 0.5)),
+            ms(percentile(&first, 0.95)),
+            ms(percentile(&all, 0.5)),
+            ms(percentile(&all, 0.95)),
+            ms(*all.iter().max().unwrap()),
+            steps.len()
         );
     }
     for (label, fps, average) in &r.plays {

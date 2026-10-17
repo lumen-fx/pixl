@@ -216,7 +216,8 @@ repeats, while Loop tag is on. The frame rate playback reaches shows beside
 the controls; a document too heavy to keep up plays slower rather than
 skipping frames. The onion skin shows the frames before and after the
 current one, as many as asked for, fading with distance, tinted by the
-theme, under or over the current frame. The preview panel shows the
+theme, under or over the current frame, and steps aside while the animation
+plays. The preview panel shows the
 document at actual size, or fitted to the panel, and plays along; the Paint
 layout hides it and Animate shows it beside the timeline.
 

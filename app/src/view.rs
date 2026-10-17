@@ -1175,12 +1175,21 @@ impl Layers {
         }
         for gone in old.into_iter().flatten() {
             self.pool.cancel(gone.key);
+            // Its tiles will not arrive; they are not waited for.
+            self.rewrites.retain(|r| r.item != gone.key);
             self.art_dirty = true;
         }
         self.items = items;
 
-        // Rewrite what changed in each buffer.
-        for i in 0..self.items.len() {
+        // Rewrite what changed in each buffer, the onion skin's last so the
+        // workers draw the frame itself first.
+        let ghosts_last: Vec<usize> = (0..self.items.len())
+            .filter(|&i| self.items[i].plan.source != ItemSource::Ghosts)
+            .chain(
+                (0..self.items.len()).filter(|&i| self.items[i].plan.source == ItemSource::Ghosts),
+            )
+            .collect();
+        for i in ghosts_last {
             let now = shown_for(doc, &self.items[i].plan.source, frame, onion.as_ref());
             let item = &self.items[i];
             let mut tiles = BTreeSet::new();

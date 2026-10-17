@@ -119,3 +119,26 @@ fn a_group_is_composited_by_the_workers() {
         .unwrap();
     assert_eq!(px, [200, 10, 20, 128]);
 }
+
+#[test]
+fn turning_the_onion_skin_off_mid_draw_waits_for_nothing() {
+    let side = 1024;
+    let mut doc = painted(side);
+    doc.insert_frame(1, 100).unwrap();
+    let id = doc.layers()[0].id;
+    doc.link_cel(id, 0, 1).unwrap();
+    let editor = Editor::new(doc);
+    let mut layers = Layers::default();
+    layers.sync(&editor, &Touched::All, (0.0, 0.0));
+    settle(&mut layers, side);
+    // The ghosts of a whole frame go to the workers...
+    layers.onion = Some(pixl_core::OnionSkin::default());
+    layers.sync(&editor, &Touched::Layers(Vec::new()), (0.0, 0.0));
+    assert!(layers.buffer(&ItemSource::Ghosts).is_some());
+    assert!(layers.pending() > 0);
+    // ...and are dropped when the skin goes before they arrive.
+    layers.onion = None;
+    layers.sync(&editor, &Touched::Layers(Vec::new()), (0.0, 0.0));
+    assert!(layers.buffer(&ItemSource::Ghosts).is_none());
+    settle(&mut layers, side);
+}

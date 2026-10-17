@@ -1378,7 +1378,10 @@ pub fn playback(
         pb.due = Some(now + frame_time(&editor.doc, editor.frame));
         return;
     };
-    if now >= due && layers.pending() == 0 {
+    // A frame waits for the canvas to finish the last one, but never more
+    // than a moment past its time.
+    let drawn = layers.pending() == 0 || now >= due + Duration::from_secs(2);
+    if now >= due && drawn {
         match pb.next(editor.frame) {
             Some(f) => {
                 editor.go_to_frame(f);
@@ -1673,7 +1676,14 @@ pub fn onion_to_view(
             colors.revision,
         );
     }
-    let skin = timeline.onion.skin((tints.0, tints.1));
+    // The skin steps aside while the animation plays: playback shows the
+    // frames as they are, and the ghosts of a large document would hold
+    // each frame back while they composite.
+    let skin = if timeline.playback.playing {
+        None
+    } else {
+        timeline.onion.skin((tints.0, tints.1))
+    };
     if layers.onion != skin {
         layers.onion = skin;
     }
