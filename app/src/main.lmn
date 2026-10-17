@@ -176,6 +176,7 @@
   <include src="parts/exports.lmn"/>
   <include src="parts/layer-menus.lmn"/>
   <include src="parts/presets.lmn"/>
+  <include src="parts/toolbar-custom.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

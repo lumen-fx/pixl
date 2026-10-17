@@ -24,6 +24,7 @@ pub mod slices;
 pub mod store;
 pub mod themes;
 pub mod timeline;
+pub mod toolbar;
 pub mod toolbox;
 pub mod tools;
 pub mod view;
@@ -64,6 +65,7 @@ pub fn app(file: Option<PathBuf>) -> App {
     .insert_resource(Themes::user())
     .insert_resource(exports::Exports::user())
     .insert_resource(presets::Presets::user())
+    .insert_resource(toolbar::Toolbar::user())
 }
 
 /// `app` (an [`editor`]) starting on the start screen over `recents`, or on
@@ -272,7 +274,8 @@ pub fn editor(source: Source) -> App {
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
         );
     let app = rig::install(app);
-    presets::install(app, presets::Presets::in_memory())
+    let app = presets::install(app, presets::Presets::in_memory());
+    toolbar::install(app, toolbar::Toolbar::in_memory())
 }
 
 /// Asks for another tick soon. A system that edits the DOM or a signal after

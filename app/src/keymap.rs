@@ -262,6 +262,12 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("window-layout-reset", "Reset layout", "Window", Kind::Press),
     ("window-show-all", "Show all panels", "Window", Kind::Press),
     ("window-themes", "Themes", "Window", Kind::Press),
+    (
+        "window-toolbar",
+        "Customize the tool bar",
+        "Window",
+        Kind::Press,
+    ),
     ("play", "Play or pause", "Animation", Kind::Press),
     ("frame-prev", "Previous frame", "Animation", Kind::Press),
     ("frame-next", "Next frame", "Animation", Kind::Press),
@@ -623,6 +629,7 @@ const MODAL_SIGNALS: &[&str] = &[
     "cp_open",
     "ex_open",
     "tp_open",
+    "tb_open",
 ];
 
 /// Turns this tick's key presses into commands, through the keymap the

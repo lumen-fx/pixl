@@ -11,4 +11,5 @@
   <menuitem id="window-show-all" label="Show all panels"/>
   <separator/>
   <menuitem id="window-themes" label="Themes..."/>
+  <menuitem id="window-toolbar" label="Customize the tool bar..."/>
 </menu>

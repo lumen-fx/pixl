@@ -117,6 +117,14 @@ Reset layout puts the current layout back as it was saved. The arrangement in
 use and the saved layouts are kept in `workspace.json` in pixl's data folder,
 so the window reopens as it was left.
 
+Window > Customize the tool bar picks which tools the tool bar shows and in
+what order, one column or two, and groups related tools on one button: the
+button shows the tool used last, and a right-click or a long press on it
+opens a flyout of the others. Full puts every tool on a button of its own;
+Compact groups the brushes, retouching tools, stamps, lines, shapes, fills,
+selections, transforms and guides into one column. The arrangement is kept
+in `toolbar.json` in pixl's data folder.
+
 The Brushes panel is a library of named brushes: each keeps a shape (round,
 square, or a custom mask), a size, opacity and hardness for the soft brush,
 dithering, pixel-perfect, the stroke stabilizer and the pen's pressure

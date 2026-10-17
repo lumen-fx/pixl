@@ -1,0 +1,18 @@
+<column id="tool-flyout" class="tool-flyout"/>
+
+<dialog open="tb_open">
+  <column class="dialog-card tb-card">
+    <label class="dialog-title" text="Customize the tool bar"/>
+    <row class="dialog-row">
+      <tooltip text="Every tool on a button of its own"><button id="tb-full" text="Full"/></tooltip>
+      <tooltip text="Related tools share a button, one column"><button id="tb-compact" text="Compact"/></tooltip>
+      <button id="tb-columns" text="One or two columns"/>
+    </row>
+    <label class="dialog-text" text="A grouped button shows the tool used last; right-click or hold it for the others."/>
+    <scroll id="tb-list" class="tb-list"/>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="tb-close" class="primary" default="true" text="Done"/>
+    </row>
+  </column>
+</dialog>

@@ -1,0 +1,28 @@
+/* The tool bar's arrangement: hidden tools, grouped buttons, one column,
+   the group flyout and the dialog. */
+
+.tool.tool-off { display: none; }
+.tool.grouped { border-bottom: 2px solid var(--text-faint); }
+.tool.grouped.active { border-bottom: 2px solid var(--on-accent); }
+#toolbar.one-column { width: var(--tool-size); flex-direction: column; flex-wrap: nowrap; padding: var(--space-2) var(--space-1); }
+
+.tool-flyout {
+  display: none;
+  position: absolute;
+  flex-direction: row;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  bg: var(--surface-2);
+  border: 1px solid var(--edge);
+  radius: var(--radius);
+  shadow: 0 6 16 #00000073;
+}
+.tool-flyout.open { display: flex; }
+.flyout-tool { opacity: 1; }
+
+.tb-card { min-width: 560; }
+.tb-list { height: 420; bg: var(--surface-1); border: 1px solid var(--edge); }
+.tb-row { align: center; gap: var(--space-3); padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--edge-soft); }
+.tb-icon { width: 18; height: 18; }
+.tb-name { grow: 1; }
+.tb-group { min-width: 96; }

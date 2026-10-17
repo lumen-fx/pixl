@@ -11,6 +11,7 @@
 @import "parts/layers.css";
 @import "parts/presets.css";
 @import "parts/sheets.css";
+@import "parts/toolbar-custom.css";
 
 /* The window's regions and how they share the space. */
 
