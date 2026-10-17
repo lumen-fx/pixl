@@ -13,13 +13,14 @@ pub mod gif;
 pub mod history;
 pub mod image;
 pub mod io;
+pub mod merge;
 pub mod native;
 pub mod selection;
 pub mod tools;
 pub mod transform;
 
 pub use color::{Color, ColorMode, Palette, Rgba};
-pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame};
+pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame, composite_ghosts};
 pub use document::{
     Background, BlendMode, Cel, Document, Frame, ImageId, Layer, LayerId, LayerKind, LayerMask,
     LayerProps, Locks, LoopDirection, NewLayer, PixelAspect, Placement, Slice, Tag, Target,

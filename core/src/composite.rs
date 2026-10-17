@@ -272,6 +272,7 @@ pub fn blend(backdrop: Rgba, source: Rgba, mode: BlendMode, opacity: u8) -> Rgba
     d.to_rgba()
 }
 
+#[derive(Clone, Copy)]
 struct Ctx<'a> {
     doc: &'a Document,
     frame: usize,
@@ -441,22 +442,12 @@ fn background_px(doc: &Document, opts: &CompositeOptions) -> Px {
     }
 }
 
-fn composite_band(doc: &Document, frame: usize, rect: Rect, opts: &CompositeOptions) -> Vec<Px> {
-    let n = rect.area() as usize;
-    let ctx = Ctx {
-        doc,
-        frame,
-        rect,
-        include_reference: opts.include_reference,
-    };
-    let bg = background_px(doc, opts);
-    let Some(onion) = &opts.onion else {
-        let mut buf = vec![bg; n];
-        composite_layers(&ctx, doc.layers(), &mut buf);
-        return buf;
-    };
-    let mut current = vec![Px::CLEAR; n];
-    composite_layers(&ctx, doc.layers(), &mut current);
+/// The ghost frames of the onion skin around `ctx.frame`, without the frame
+/// itself, over transparency.
+fn ghost_band(ctx: &Ctx, onion: &OnionSkin) -> Vec<Px> {
+    let doc = ctx.doc;
+    let frame = ctx.frame;
+    let n = ctx.rect.area() as usize;
     // Ghost frames, farthest first so nearer ones land on top.
     let mut ghosts: Vec<(usize, usize, Option<Rgba>)> = Vec::new();
     for k in (1..=onion.before).rev() {
@@ -472,7 +463,7 @@ fn composite_band(doc: &Document, frame: usize, rect: Rect, opts: &CompositeOpti
     let mut ghost_buf = vec![Px::CLEAR; n];
     for (f, k, tint) in ghosts {
         let mut g = vec![Px::CLEAR; n];
-        let gctx = Ctx { frame: f, ..ctx };
+        let gctx = Ctx { frame: f, ..*ctx };
         composite_layers(&gctx, doc.layers(), &mut g);
         let mut op = onion.opacity as f32 * INV255;
         for _ in 1..k {
@@ -492,6 +483,26 @@ fn composite_band(doc: &Document, frame: usize, rect: Rect, opts: &CompositeOpti
             blend_px(dst, s, BlendMode::Normal);
         }
     }
+    ghost_buf
+}
+
+fn composite_band(doc: &Document, frame: usize, rect: Rect, opts: &CompositeOptions) -> Vec<Px> {
+    let n = rect.area() as usize;
+    let ctx = Ctx {
+        doc,
+        frame,
+        rect,
+        include_reference: opts.include_reference,
+    };
+    let bg = background_px(doc, opts);
+    let Some(onion) = &opts.onion else {
+        let mut buf = vec![bg; n];
+        composite_layers(&ctx, doc.layers(), &mut buf);
+        return buf;
+    };
+    let mut current = vec![Px::CLEAR; n];
+    composite_layers(&ctx, doc.layers(), &mut current);
+    let ghost_buf = ghost_band(&ctx, onion);
     let mut out = vec![bg; n];
     let (first, second) = if onion.above {
         (&current, &ghost_buf)
@@ -520,6 +531,35 @@ pub fn composite_with_threads(
     opts: &CompositeOptions,
     threads: usize,
 ) -> Vec<Rgba> {
+    in_bands(rect, threads, |band| composite_band(doc, frame, band, opts))
+}
+
+/// The onion skin's ghost frames around `frame` alone, without the frame
+/// itself, over transparency: what [`composite`] with `opts.onion` draws
+/// under (or over) the frame. A view that shows the frame by other means
+/// draws these beside it.
+pub fn composite_ghosts(
+    doc: &Document,
+    frame: usize,
+    rect: Rect,
+    onion: &OnionSkin,
+    include_reference: bool,
+    threads: usize,
+) -> Vec<Rgba> {
+    in_bands(rect, threads, |band| {
+        let ctx = Ctx {
+            doc,
+            frame,
+            rect: band,
+            include_reference,
+        };
+        ghost_band(&ctx, onion)
+    })
+}
+
+/// Runs `band` over `rect` split into bands of whole tile rows, one per
+/// thread, and gathers the pixels.
+fn in_bands(rect: Rect, threads: usize, band: impl Fn(Rect) -> Vec<Px> + Sync) -> Vec<Rgba> {
     if rect.is_empty() {
         return Vec::new();
     }
@@ -532,8 +572,8 @@ pub fn composite_with_threads(
     };
     let run = |y0: usize, chunk: &mut [Rgba]| {
         let h = chunk.len() / w;
-        let band = Rect::new(rect.x, rect.y + y0 as i32, rect.w, h as i32);
-        for (dst, px) in chunk.iter_mut().zip(composite_band(doc, frame, band, opts)) {
+        let r = Rect::new(rect.x, rect.y + y0 as i32, rect.w, h as i32);
+        for (dst, px) in chunk.iter_mut().zip(band(r)) {
             *dst = px.to_rgba();
         }
     };
@@ -858,6 +898,12 @@ mod tests {
         assert_eq!(row[1], Rgba::new(255, 255, 255, 200));
         assert_eq!(row[2], Rgba::WHITE, "the current frame");
         assert_eq!(row[3], Rgba::new(0, 0, 255, 200), "tinted later frame");
+        let onion = opts.onion.as_ref().unwrap();
+        let ghosts = composite_ghosts(&d, 2, Rect::new(0, 0, 4, 1), onion, false, 2);
+        assert_eq!(ghosts[0], row[0]);
+        assert_eq!(ghosts[1], row[1]);
+        assert_eq!(ghosts[2], Rgba::TRANSPARENT, "the frame itself is left out");
+        assert_eq!(ghosts[3], row[3]);
     }
 
     #[test]

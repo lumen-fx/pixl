@@ -469,7 +469,7 @@ impl Document {
         self.images.get(&id)
     }
 
-    fn alloc_image(&mut self, raster: Raster) -> ImageId {
+    pub(crate) fn alloc_image(&mut self, raster: Raster) -> ImageId {
         let id = ImageId(self.s.next_image);
         self.s.next_image += 1;
         self.images.insert(id, raster);
@@ -567,7 +567,10 @@ impl Document {
         Ok(locks)
     }
 
-    fn siblings_mut(&mut self, parent: Option<LayerId>) -> Result<&mut Vec<Layer>, Error> {
+    pub(crate) fn siblings_mut(
+        &mut self,
+        parent: Option<LayerId>,
+    ) -> Result<&mut Vec<Layer>, Error> {
         match parent {
             None => Ok(&mut self.s.layers),
             Some(p) => match &mut self.layer_mut(p).ok_or(Error::LayerNotFound(p))?.kind {
@@ -788,6 +791,45 @@ impl Document {
         });
         self.collect_garbage();
         Ok(self.bounds())
+    }
+
+    /// Moves the `count` frames starting at `from` so that they start at
+    /// `to` (counted after the move, so `0..=frame_count - count`). Every
+    /// layer's cels move with their frames, and each tag keeps covering the
+    /// frames it covered, stretched over where they went.
+    pub fn move_frames(&mut self, from: usize, count: usize, to: usize) -> Result<(), Error> {
+        let n = self.s.frames.len();
+        if count == 0 || from + count > n {
+            return Err(Error::FrameOutOfRange(from + count.max(1) - 1));
+        }
+        if to + count > n {
+            return Err(Error::FrameOutOfRange(to + count - 1));
+        }
+        // order[new] = old
+        let moved = from..from + count;
+        let mut order: Vec<usize> = (0..n).filter(|i| !moved.contains(i)).collect();
+        for (k, old) in moved.enumerate() {
+            order.insert(to + k, old);
+        }
+        let mut new_of = vec![0; n];
+        for (new, old) in order.iter().enumerate() {
+            new_of[*old] = new;
+        }
+        let frames = self.s.frames.clone();
+        self.s.frames = order.iter().map(|&o| frames[o]).collect();
+        self.for_each_raster(|cels| {
+            let old = cels.clone();
+            *cels = order.iter().map(|&o| old[o]).collect();
+        });
+        for t in &mut self.s.tags {
+            let spots = (t.from..=t.to.min(n - 1)).map(|f| new_of[f]);
+            let (lo, hi) = spots.fold((usize::MAX, 0), |(lo, hi), f| (lo.min(f), hi.max(f)));
+            if lo <= hi {
+                t.from = lo;
+                t.to = hi;
+            }
+        }
+        Ok(())
     }
 
     pub fn set_frame_duration(&mut self, at: usize, duration_ms: u32) -> Result<(), Error> {
@@ -1211,6 +1253,36 @@ mod tests {
             Rgba::WHITE.to_u32()
         );
         assert_eq!(d.linked_frames(id, 0).unwrap(), vec![0]);
+    }
+
+    #[test]
+    fn moved_frames_take_their_cels_and_tags_along() {
+        let mut d = doc();
+        let id = d.layers()[0].id;
+        for f in 1..5 {
+            d.insert_frame(f, 100 + f as u32).unwrap();
+        }
+        let cels: Vec<_> = (0..5).map(|f| d.target_image(id, f).unwrap()).collect();
+        d.tags_mut().push(Tag {
+            name: "walk".into(),
+            from: 3,
+            to: 4,
+            direction: LoopDirection::Forward,
+            repeat: 0,
+            color: Rgba::WHITE,
+        });
+        // Frames 3 and 4 move to the front.
+        d.move_frames(3, 2, 0).unwrap();
+        let now: Vec<_> = (0..5)
+            .map(|f| d.cel(id, f).unwrap().unwrap().image)
+            .collect();
+        assert_eq!(now, vec![cels[3], cels[4], cels[0], cels[1], cels[2]]);
+        assert_eq!(d.frames()[0].duration_ms, 103);
+        assert_eq!((d.tags()[0].from, d.tags()[0].to), (0, 1));
+        // And one frame back to the end.
+        d.move_frames(0, 1, 4).unwrap();
+        assert_eq!(d.cel(id, 4).unwrap().unwrap().image, cels[3]);
+        assert!(d.move_frames(4, 2, 0).is_err());
     }
 
     #[test]
