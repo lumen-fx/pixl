@@ -1,0 +1,16 @@
+<if signal="perf_open" mode="hide">
+  <column id="perf" class="perf-overlay">
+    <label class="perf-line strong" bind-text="perf_line_0" text=""/>
+    <label class="perf-line" bind-text="perf_line_1" text=""/>
+    <label class="perf-line" bind-text="perf_line_2" text=""/>
+    <canvas id="perf-graph" class="perf-graph"/>
+    <label class="perf-line" bind-text="perf_line_3" text=""/>
+    <label class="perf-line" bind-text="perf_line_4" text=""/>
+    <label class="perf-line" bind-text="perf_line_5" text=""/>
+  </column>
+</if>
+<tile id="perf-probes" class="probe">
+  <tile id="probe-perf-bar"/>
+  <tile id="probe-perf-slow"/>
+  <tile id="probe-perf-rule"/>
+</tile>

@@ -1,11 +1,15 @@
 //! How fast the canvas view answers on a 4096x4096 document of 32 layers,
 //! rendered with no window: the progressive redraw after opening it and
-//! after hiding a layer, stroke-to-screen latency on the top layer (a buffer
-//! of its own) and on the bottom layer (inside the CPU-flattened buffer), and
-//! the frame after a pan.
+//! after hiding a layer, stroke-to-screen latency on the top layer and on
+//! the bottom layer (a buffer of its own, or inside the CPU-flattened buffer
+//! when the layers do not fit the buffer budget), the frame after a pan and
+//! after a zoom step, and exporting the frame as a PNG.
 //!
 //! `cargo bench -p pixl --bench view -- cpu` or `-- gpu` picks the renderer;
-//! `side=N` and `layers=N` change the document from 4096 and 32.
+//! `side=N` and `layers=N` change the document from 4096 and 32, and
+//! `budget=MiB` the layer buffer budget from the performance setting's
+//! default. `log=FILE` writes every frame to a CSV file, as `pixl
+//! --perf-log` does.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -99,6 +103,8 @@ enum Phase {
     Stroke { layer_top: bool, n: usize },
     Hiding,
     Pan { n: usize },
+    Zoom { n: usize },
+    Export,
     Done,
 }
 
@@ -109,6 +115,13 @@ struct Results {
     top: Vec<Duration>,
     bottom: Vec<Duration>,
     pan: Vec<Duration>,
+    zoom: Vec<Duration>,
+    export: Option<(Duration, usize)>,
+    hide_started: Option<Instant>,
+    hide_frame: Option<Duration>,
+    /// The buffers the renderer held, and whether the bottom layers were
+    /// flattened into one.
+    buffers: Option<(usize, bool)>,
 }
 
 /// The time from a request to the renderer's answer, timed by a thread
@@ -163,6 +176,15 @@ fn main() {
             .unwrap_or(default)
     };
     let (side, layers) = (arg("side", 4096) as u32, arg("layers", 32));
+    let mut settings = pixl::Settings::default();
+    settings.performance.buffer_budget_mib =
+        arg("budget", pixl::view::DEFAULT_BUFFER_BUDGET_MIB as usize) as u64;
+    let budget = settings.performance.buffer_budget_mib;
+    let log = args.iter().find_map(|a| a.strip_prefix("log=")).map(|p| {
+        pixl::perf::Perf::logging(
+            pixl::perf::PerfLog::create(Path::new(p)).expect("the log file opens"),
+        )
+    });
     let t = Instant::now();
     let doc = document(side, layers);
     eprintln!("built the document in {:?}", t.elapsed());
@@ -184,6 +206,8 @@ fn main() {
         dir: app_dir(&backend),
     })
     .insert_resource(editor)
+    .insert_resource(settings)
+    .insert_resource(log.unwrap_or_default())
     .add_systems(
         TickStage::Systems,
         (move |mut phase: Local<Option<Phase>>,
@@ -200,6 +224,11 @@ fn main() {
                     if view.stage.1.x > 0.0 && !layers.rewrites.is_empty() && layers.pending() == 0
                     {
                         results.open = timeline(&layers);
+                        let flat = layers
+                            .current_plan()
+                            .iter()
+                            .any(|i| matches!(i.source, pixl::view::ItemSource::Flat(_)));
+                        results.buffers = Some((layers.buffer_stats().0, flat));
                         *p = Phase::Stroke {
                             layer_top: true,
                             n: 0,
@@ -228,6 +257,9 @@ fn main() {
                         } else {
                             let _ = editor.doc.update_layer(middle, |l| l.visible = false);
                             editor.touch();
+                            results.hide_started = Some(Instant::now());
+                            *watch.started.lock().unwrap() = Some(Instant::now());
+                            cap.request();
                             Phase::Hiding
                         };
                         return;
@@ -256,10 +288,20 @@ fn main() {
                     };
                 }
                 Phase::Hiding => {
-                    if layers.pending() == 0 && layers.rewrites.iter().any(|r| r.done == r.tiles) {
-                        results.hide = timeline(&layers);
-                        *p = Phase::Pan { n: 0 };
+                    if watch.started.lock().unwrap().is_some() || layers.pending() > 0 {
+                        return;
                     }
+                    results.hide_frame = watch.lap.lock().unwrap().take();
+                    // A layer of its own hides by drawing one buffer fewer;
+                    // one inside the flattened buffer redraws it.
+                    let since = results.hide_started.expect("set when hiding");
+                    results.hide = layers
+                        .rewrites
+                        .iter()
+                        .any(|r| r.started >= since)
+                        .then(|| timeline(&layers))
+                        .flatten();
+                    *p = Phase::Pan { n: 0 };
                 }
                 Phase::Pan { n } => {
                     if watch.started.lock().unwrap().is_some() {
@@ -269,13 +311,40 @@ fn main() {
                         results.pan.push(lap);
                     }
                     if n == STROKES {
-                        *p = Phase::Done;
+                        *p = Phase::Zoom { n: 0 };
                         return;
                     }
                     view.pan(7.0, 3.0);
                     *watch.started.lock().unwrap() = Some(Instant::now());
                     cap.request();
                     *p = Phase::Pan { n: n + 1 };
+                }
+                Phase::Zoom { n } => {
+                    if watch.started.lock().unwrap().is_some() {
+                        return;
+                    }
+                    if let Some(lap) = watch.lap.lock().unwrap().take() {
+                        results.zoom.push(lap);
+                    }
+                    if n == STROKES {
+                        *p = Phase::Export;
+                        return;
+                    }
+                    // In two steps and out two, around the middle.
+                    let inward = n % 4 < 2;
+                    let z = view.step(inward);
+                    let mid = view.middle();
+                    view.zoom_at(z, mid);
+                    *watch.started.lock().unwrap() = Some(Instant::now());
+                    cap.request();
+                    *p = Phase::Zoom { n: n + 1 };
+                }
+                Phase::Export => {
+                    let t = Instant::now();
+                    let png = pixl_core::io::export_frame_png(&editor.doc, 0, 1)
+                        .expect("the frame exports");
+                    results.export = Some((t.elapsed(), png.len()));
+                    *p = Phase::Done;
                 }
                 Phase::Done => {}
             }
@@ -286,14 +355,24 @@ fn main() {
     .add_plugin(BenchCapture(world_capture))
     .run_headless_rendered(HeadlessOptions {
         dpr: 1.0,
-        ticks: Some(3000),
+        ticks: Some(5000),
     })
     .expect("the editor runs");
     stop.store(true, Ordering::Relaxed);
 
     let r = results.lock().unwrap();
     let ms = |d: Duration| format!("{:.1} ms", d.as_secs_f64() * 1000.0);
-    println!("renderer: {backend}, {side}x{side}, {layers} layers");
+    println!("renderer: {backend}, {side}x{side}, {layers} layers, buffer budget {budget} MiB");
+    if let Some((buffers, flat)) = r.buffers {
+        println!(
+            "buffers: {buffers}{}",
+            if flat {
+                ", the bottom layers flattened into one"
+            } else {
+                ", one per layer"
+            }
+        );
+    }
     if let Some((first, half, last, tiles)) = r.open {
         println!(
             "open: {tiles} tiles, first {} / half {} / all {}",
@@ -306,6 +385,7 @@ fn main() {
         ("stroke, top layer", &r.top),
         ("stroke, bottom layer", &r.bottom),
         ("pan", &r.pan),
+        ("zoom step", &r.zoom),
     ] {
         if !v.is_empty() {
             println!(
@@ -317,13 +397,20 @@ fn main() {
             );
         }
     }
-    if let Some((first, half, last, tiles)) = r.hide {
-        println!(
-            "hide a layer: {tiles} tiles, first {} / half {} / all {}",
+    if let Some(frame) = r.hide_frame {
+        println!("hide a layer: first frame {}", ms(frame));
+    }
+    match r.hide {
+        Some((first, half, last, tiles)) => println!(
+            "hide a layer, redraw: {tiles} tiles, first {} / half {} / all {}",
             ms(first),
             ms(half),
             ms(last)
-        );
+        ),
+        None => println!("hide a layer, redraw: none, the layer has a buffer of its own"),
+    }
+    if let Some((t, bytes)) = r.export {
+        println!("export PNG: {} ({} KiB)", ms(t), bytes / 1024);
     }
 }
 

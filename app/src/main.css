@@ -5,6 +5,7 @@
 @import "parts/palette.css";
 @import "parts/timeline.css";
 @import "parts/tools.css";
+@import "parts/perf.css";
 
 /* The window's regions and how they share the space. */
 

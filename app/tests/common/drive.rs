@@ -95,6 +95,11 @@ pub struct Outcome {
     pub settings_open: bool,
     /// The frame and the layer the editor ended on.
     pub at: (usize, LayerId),
+    /// Frames the performance tracking recorded, the last stroke's time to
+    /// the screen, and the overlay's lines.
+    pub perf_frames: u64,
+    pub last_stroke: Option<std::time::Duration>,
+    pub perf_lines: Vec<String>,
 }
 
 /// The editor's state at the end of a tick.
@@ -114,6 +119,9 @@ struct Snapshot {
     settings: Settings,
     settings_open: bool,
     at: (usize, LayerId),
+    perf_frames: u64,
+    last_stroke: Option<std::time::Duration>,
+    perf_lines: Vec<String>,
 }
 
 fn key(name: &str) -> Key {
@@ -361,6 +369,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    home: Res<Home>,
                    mut recents: ResMut<Recents>,
                    settings: Res<Settings>,
+                   perf: Res<pixl::perf::Perf>,
                    signals: Signals,
                    mut tick: Local<usize>| {
                 *tick += 1;
@@ -390,6 +399,11 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     settings: settings.clone(),
                     settings_open: signals.get::<bool>("settings_open").unwrap_or(false),
                     at: (editor.frame, editor.layer),
+                    perf_frames: perf.count,
+                    last_stroke: perf.last_stroke,
+                    perf_lines: (0..6)
+                        .filter_map(|i| signals.get::<String>(&format!("perf_line_{i}")))
+                        .collect(),
                 });
             })
             .after(pixl::view::draw_stage)
@@ -420,6 +434,9 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         settings: end.settings,
         settings_open: end.settings_open,
         at: end.at,
+        perf_frames: end.perf_frames,
+        last_stroke: end.last_stroke,
+        perf_lines: end.perf_lines,
     }
 }
 

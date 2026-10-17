@@ -1,0 +1,31 @@
+/* The performance overlay over the canvas (F3). */
+
+.perf-overlay {
+  position: absolute;
+  inset: 8 auto auto 8;
+  gap: 2;
+  padding: var(--space-3) var(--space-4);
+  bg: var(--perf-bg);
+  border: 1px solid var(--edge);
+  radius: var(--radius);
+}
+.perf-line { text-color: var(--text-dim); font-size: var(--font-size-small); }
+.perf-line.strong { text-color: var(--text); }
+/* Past the stage's rule that lays its canvases over each other. */
+#perf .perf-graph {
+  position: relative;
+  inset: auto;
+  width: 240;
+  height: 48;
+  bg: var(--surface-0);
+  margin: 2 0;
+}
+
+.pixl { --perf-bg: #000000b3; --perf-slow: #e0605a; }
+.pixl.light { --perf-bg: #ffffffd9; --perf-slow: #c8322c; }
+
+/* The colors the frame-time graph draws with: a frame within 60 frames a
+   second, a slower one, and the 60 frames a second rule. */
+#probe-perf-bar { bg: var(--accent); }
+#probe-perf-slow { bg: var(--perf-slow); }
+#probe-perf-rule { bg: var(--text-faint); }

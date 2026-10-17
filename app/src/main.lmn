@@ -75,6 +75,7 @@
       <canvas id="checker"/>
       <canvas id="art"/>
       <canvas id="overlay"/>
+      <include src="parts/perf.lmn"/>
     </column>
     <column id="dock-bottom" class="dock">
       <include src="parts/timeline.lmn"/>

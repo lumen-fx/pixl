@@ -437,11 +437,14 @@ fn classify(roots: &[pixl_core::Layer], i: usize) -> Class {
 }
 
 /// The layer buffer memory the view hands Lumen's renderer unless the
-/// performance settings say otherwise, in MiB: sixteen buffers of
-/// 4096x4096. Past it the bottom layers are flattened by pixl-core into one
-/// buffer, which costs a CPU composite of that buffer on every stroke
-/// below the top layers.
-pub const DEFAULT_BUFFER_BUDGET_MIB: u64 = 1024;
+/// performance settings say otherwise, in MiB: eight buffers of 4096x4096.
+/// Past it the bottom layers are flattened by pixl-core into one buffer,
+/// which costs a CPU composite of that buffer on every stroke below the top
+/// layers. Each buffer the renderer draws makes every frame dearer
+/// (lumen-fx/lumen#535), so more is not better: on the view bench's 32
+/// layers, eight buffers halve a bottom-layer stroke against two and keep a
+/// pan frame within a 60 Hz frame on the GPU.
+pub const DEFAULT_BUFFER_BUDGET_MIB: u64 = 512;
 
 /// The buffer pixels `mib` of RGBA8 buffer memory holds.
 pub fn budget_pixels(mib: u64) -> u64 {
@@ -841,6 +844,9 @@ pub struct Layers {
     /// The onion skin to show around the current frame, if any.
     pub onion: Option<OnionSkin>,
     seen_onion: Option<OnionSkin>,
+    /// Tiles written into buffers since the view started, for the
+    /// performance overlay to count per frame.
+    pub tiles_written: u64,
 }
 
 impl Default for Layers {
@@ -862,6 +868,7 @@ impl Default for Layers {
             workers_asked: 0,
             onion: None,
             seen_onion: None,
+            tiles_written: 0,
         }
     }
 }
@@ -1170,6 +1177,7 @@ impl Layers {
             for (r, rgba) in rects.iter().zip(rendered) {
                 write_tile(&item.buffer, &mut item.applied, cols, *r, stamp, &rgba);
             }
+            self.tiles_written += rects.len() as u64;
         } else {
             let mut rects = rects;
             let (fx, fy) = focus;
@@ -1216,6 +1224,7 @@ impl Layers {
                 &d.rgba,
             ) {
                 wrote = true;
+                self.tiles_written += 1;
             }
             if let Some(r) = self.rewrites.iter_mut().find(|r| r.item == d.item) {
                 r.done += 1;

@@ -40,8 +40,19 @@ composites with the layer's blend mode and opacity, on the GPU when the app
 renders there; what the renderer cannot composite the way `pixl-core` does
 (add and subtract, clipping, masks, groups) is composited by `pixl-core` on the
 CPU instead, and so are the bottom layers of a document whose layers would
-not fit the renderer's image budget. Large redraws run on worker threads and
-show tile by tile as they finish.
+not fit the layer buffer memory set under Performance in the settings. More
+buffers make strokes on lower layers cheaper and every frame of the renderer
+dearer, so the default holds eight buffers of 4096x4096. Large redraws run on
+worker threads and show tile by tile as they finish.
+
+F3 shows the performance overlay over the canvas: frames per second, the
+frame time (average, 95th percentile and longest over the last three
+seconds) with a graph of it, the time from the last stroke to the screen,
+the editor's own work and the compositing in the last frame, the tiles it
+wrote, the layer buffers and their memory, the document's tiles and the
+undo history in memory, an estimate of the GPU memory, the worker threads
+and their queue, and the renderer. Lumen does not tell an app when a frame
+reached the screen, so frame times run from one frame's tick to the next.
 
 The tools run on `pixl-core`, and the tool bar shows each as a pixel icon
 whose tooltip names the tool and its key:
@@ -206,9 +217,26 @@ cargo test
 `cargo bench -p pixl-core --bench rig` times posing and rendering a
 20-bone character.
 
-`cargo bench -p pixl --bench view -- gpu` (or `cpu`) measures the canvas
-view on a 4096x4096 document of 32 layers: the progressive redraws, the time
-from a stroke to the frame that shows it, and the frame after a pan.
+`pixl --perf-log frames.csv` writes one row per frame to a CSV file: the
+frame's start, its time, the editor's work and compositing, the tiles
+written, the layer buffers and their memory, the worker queue and the time
+to the screen of the last stroke.
+
+### Performance bench
+
+```sh
+cargo bench -p pixl --bench view -- gpu      # or cpu
+cargo bench -p pixl --bench view -- gpu budget=2048 log=frames.csv
+```
+
+The view bench opens a 4096x4096 document of 32 layers with no window and
+measures what a user waits for: the progressive redraw after opening it,
+the time from a stroke to the frame that shows it on the top layer and on
+the bottom one, the frame after a pan and after a zoom step, hiding a
+layer, and exporting the frame as a PNG. `side=N` and `layers=N` change the
+document, `budget=MiB` the layer buffer memory, and `log=FILE` writes the
+per-frame CSV the `--perf-log` flag writes. Numbers move with the load on
+the machine, so compare runs taken under the same load.
 
 On Linux the build links GTK 3, X11, xkbcommon and Wayland, so their
 development packages must be installed.

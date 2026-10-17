@@ -9,6 +9,7 @@ pub mod input;
 pub mod keymap;
 pub mod palette;
 pub mod panels;
+pub mod perf;
 pub mod preview;
 pub mod progressive;
 pub mod recents;
@@ -85,6 +86,8 @@ pub fn editor(source: Source) -> App {
         .insert_resource(keymap::Keymap::default())
         .insert_resource(keymap::KeyCommands::default())
         .insert_resource(settings_ui::SettingsDialog::default())
+        .insert_resource(perf::Perf::default())
+        .insert_signal("perf_open", false)
         .insert_signal("settings_open", false)
         .insert_resource(Editor::blank())
         .insert_resource(view::View::default())
@@ -129,6 +132,7 @@ pub fn editor(source: Source) -> App {
                 // the keys, settings and windows first,
                 (
                     (
+                        perf::tick_begin,
                         keymap::read_keys,
                         palette::palette_input,
                         settings_ui::settings_commands,
@@ -158,6 +162,7 @@ pub fn editor(source: Source) -> App {
                         tools::use_tools,
                         toolbox::toolbox_options,
                         toolbox::use_toolbox,
+                        perf::note_stroke,
                     )
                         .chain(),
                 )
@@ -166,8 +171,10 @@ pub fn editor(source: Source) -> App {
                 (
                     timeline::playback,
                     timeline::onion_to_view,
+                    perf::composite_begin,
                     view::sync_layers,
                     view::draw_stage,
+                    perf::composite_end,
                     timeline::show_timeline,
                     preview::draw_preview,
                     tools::track_pointer,
@@ -184,9 +191,13 @@ pub fn editor(source: Source) -> App {
                     tools::show_tool,
                     toolbox::show_toolbox,
                     tools::stage_cursor,
-                    settings::save_settings,
-                    settings_ui::pressure_preview,
-                    settings_ui::menu_labels,
+                    (
+                        settings::save_settings,
+                        settings_ui::pressure_preview,
+                        settings_ui::menu_labels,
+                        perf::show_perf,
+                    )
+                        .chain(),
                 )
                     .chain(),
             )
@@ -199,6 +210,10 @@ pub fn editor(source: Source) -> App {
                 .before(signals::apply_checked_bindings)
                 .before(signals::apply_value_bindings)
                 .before(CanvasSet::Encode),
+        )
+        .add_systems(
+            TickStage::A11ySync,
+            perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
         )
 }
 
