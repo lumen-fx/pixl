@@ -18,7 +18,9 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, CanvasSet, Context2d, PixelBuffer};
 use pixl_core::history::Transaction;
-use pixl_core::rig::{Bend, Binding, BoneId, BonePose, Easing, NamedPose, Parts, Pose, PoseKey};
+use pixl_core::rig::{
+    Bend, Binding, BoneId, BonePose, Easing, NamedPose, Parts, Pose, PoseKey, PosedLayer,
+};
 use pixl_core::rig::{Region, RenderOptions, Rig, Vec2, mirror_name, normalize_angle};
 use pixl_core::{ColorMode, Document, LayerId, LayerKind, NewLayer, Rgba, Scope};
 
@@ -118,6 +120,8 @@ enum Drag {
         /// The parts cut out of the rest frame, when the pose renders into
         /// the frame as it changes.
         parts: Option<Parts>,
+        /// What the drag last wrote into the frame.
+        written: Option<Vec<PosedLayer>>,
         tx: Option<Transaction>,
     },
 }
@@ -291,7 +295,17 @@ fn edit_rig<R>(
 
 /// Shows `pose` on the editor's frame: rendered into it when it is not the
 /// rest frame. Returns whether pixels were written.
-fn show_pose(editor: &mut Editor, skeleton: LayerId, parts: &Parts, pose: &Pose) -> bool {
+///
+/// `last` holds what the previous call wrote during the same drag; only the
+/// layers whose posed pixels differ from it are written again, so turning a
+/// hand rewrites the hand alone.
+fn show_pose(
+    editor: &mut Editor,
+    skeleton: LayerId,
+    parts: &Parts,
+    pose: &Pose,
+    last: &mut Option<Vec<PosedLayer>>,
+) -> bool {
     let frame = editor.frame;
     let Ok(rig) = editor.doc.rig(skeleton) else {
         return false;
@@ -299,7 +313,19 @@ fn show_pose(editor: &mut Editor, skeleton: LayerId, parts: &Parts, pose: &Pose)
     if frame == rig.source_frame() {
         return false;
     }
-    let posed = parts.render(rig, pose);
+    let all = parts.render(rig, pose);
+    let posed: Vec<PosedLayer> = match last.as_ref() {
+        Some(before) => all
+            .iter()
+            .filter(|p| !before.contains(p))
+            .cloned()
+            .collect(),
+        None => all.clone(),
+    };
+    if posed.is_empty() {
+        return true;
+    }
+    let changed: Vec<LayerId> = posed.iter().map(|p| p.layer).collect();
     // Which layers show a cel on the frame: a render that only rewrites the
     // bound layers' cels lets the view look at those layers alone.
     let cels = |doc: &Document| -> Vec<bool> {
@@ -315,10 +341,11 @@ fn show_pose(editor: &mut Editor, skeleton: LayerId, parts: &Parts, pose: &Pose)
     {
         Ok(_) => {
             if cels(&editor.doc) == before {
-                editor.touch_layers(parts.layers());
+                editor.touch_layers(&changed);
             } else {
                 editor.touch();
             }
+            *last = Some(all);
             true
         }
         Err(e) => {
@@ -352,7 +379,7 @@ fn keep_pose(editor: &mut Editor, skeleton: LayerId, pose: &Pose) {
 fn apply_pose(editor: &mut Editor, ui: &mut RigUi, skeleton: LayerId, pose: Pose, label: &str) {
     let tx = editor.history.begin(&editor.doc, label, Scope::All);
     if let Ok(parts) = Parts::new(&editor.doc, skeleton) {
-        show_pose(editor, skeleton, &parts, &pose);
+        show_pose(editor, skeleton, &parts, &pose, &mut None);
     }
     keep_pose(editor, skeleton, &pose);
     editor.history.commit(&editor.doc, tx);
@@ -910,6 +937,7 @@ fn press_pose(
         start: p,
         before: ui.pose.get(bone),
         parts,
+        written: None,
         tx: Some(editor.history.begin(&editor.doc, label, scope)),
     })
 }
@@ -947,6 +975,7 @@ fn move_drag(editor: &mut Editor, ui: &mut RigUi, skeleton: LayerId, p: Vec2, sh
             start,
             before,
             parts,
+            written,
             ..
         } => {
             let Ok(rig) = editor.doc.rig(skeleton) else {
@@ -987,7 +1016,7 @@ fn move_drag(editor: &mut Editor, ui: &mut RigUi, skeleton: LayerId, p: Vec2, sh
             }
             *shown_pose = pose;
             if let Some(parts) = parts.as_ref() {
-                show_pose(editor, skeleton, parts, shown_pose);
+                show_pose(editor, skeleton, parts, shown_pose, written);
             } else {
                 // The bones moved; the canvas shows them.
                 shown.canvas = None;
