@@ -9,6 +9,7 @@ pub mod files;
 pub mod home;
 pub mod image_menu;
 pub mod input;
+pub mod jobs;
 pub mod keymap;
 pub mod layers;
 pub mod menus;
@@ -129,6 +130,8 @@ pub fn editor(source: Source) -> App {
         .insert_signal("si_ms", "100")
         .insert_signal("si_skip", false)
         .insert_signal("perf_open", false)
+        .insert_signal("img_busy", false)
+        .insert_signal("img_progress", "")
         .insert_signal("settings_open", false)
         .insert_resource(Editor::blank())
         .insert_resource(view::View::default())

@@ -5,7 +5,7 @@
 use std::sync::{Arc, OnceLock};
 
 use crate::color::Color;
-use crate::geom::Point;
+use crate::geom::{Point, Rect};
 use crate::tools::{Bayer, Canvas, Ink};
 
 /// The shape a gradient runs in.
@@ -228,10 +228,19 @@ impl Gradient {
 /// Paints `gradient` over every selected pixel of the canvas (with the
 /// canvas's symmetry, lock and selection, as every tool).
 pub fn gradient(canvas: &mut Canvas, gradient: &Gradient) {
+    let all = canvas.bounds();
+    gradient_in(canvas, gradient, all);
+}
+
+/// [`gradient`] within `rect` alone. Each pixel takes its color from where
+/// it lies, so the parts of a canvas can be painted apart, on several
+/// threads, and come out as one gradient.
+pub fn gradient_in(canvas: &mut Canvas, gradient: &Gradient, rect: Rect) {
     let area = match canvas.selection() {
         Some(s) => s.bounds(),
         None => canvas.bounds(),
-    };
+    }
+    .intersect(&rect);
     for p in area.points() {
         if let Some(c) = gradient.color_at(p.x, p.y) {
             let ink = Ink::Paint(c);
@@ -246,7 +255,6 @@ pub fn gradient(canvas: &mut Canvas, gradient: &Gradient) {
 mod tests {
     use super::*;
     use crate::color::Rgba;
-    use crate::geom::Rect;
 
     fn two(dither: DitherPattern, shape: GradientShape) -> Gradient {
         Gradient {
@@ -333,5 +341,41 @@ mod tests {
             ..two(DitherPattern::None, GradientShape::Linear)
         };
         assert!(rep.position(14, 0) < 0.6 && rep.position(14, 0) > 0.4);
+    }
+
+    #[test]
+    fn a_gradient_painted_in_parts_matches_one_painted_whole() {
+        use crate::color::Palette;
+        use crate::document::Target;
+        use crate::image::Raster;
+        use crate::tools::ToolContext;
+        let g = Gradient {
+            to: Point::new(90, 40),
+            ..two(DitherPattern::BlueNoise, GradientShape::Radial)
+        };
+        let palette = Palette::default();
+        let ctx = ToolContext::default();
+        let paint = |rects: &[Rect]| {
+            let mut raster =
+                Raster::Rgba(crate::image::TiledImage::new(100, 60, Rgba::TRANSPARENT));
+            for r in rects {
+                let target = Target {
+                    raster: &mut raster,
+                    palette: &palette,
+                    transparent_index: 0,
+                    alpha_locked: false,
+                };
+                gradient_in(&mut Canvas::new(target, &ctx), &g, *r);
+            }
+            crate::filters::read_values(&raster, Rect::new(0, 0, 100, 60))
+        };
+        let whole = paint(&[Rect::new(0, 0, 100, 60)]);
+        let parts = paint(&[
+            Rect::new(0, 0, 64, 64),
+            Rect::new(64, 0, 64, 64),
+            Rect::new(0, 64, 128, 64),
+        ]);
+        assert_eq!(whole, parts);
+        assert!(whole.iter().any(|&v| v != whole[0]));
     }
 }

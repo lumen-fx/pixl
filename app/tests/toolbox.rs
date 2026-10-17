@@ -379,8 +379,13 @@ fn a_gradient_steps_between_the_colors() {
             }),
         ],
         drag((0, 0), (31, 0), L),
+        // The gradient paints on worker threads and lands as one step.
+        vec![Step::Until(|e| {
+            e.history.undo_labels().any(|l| l == "Gradient")
+        })],
     ]);
     let out = drive(editor_over(doc()), steps);
+    assert_eq!(out.undo, vec!["Gradient".to_string()]);
     assert_eq!(px(&out.doc, 0, 10), Rgba::BLACK);
     assert_eq!(px(&out.doc, 31, 10), Rgba::WHITE);
     for y in 0..32 {

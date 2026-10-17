@@ -9,10 +9,11 @@
 use std::collections::HashMap;
 
 use crate::color::{Hsl, Palette, Rgba};
-use crate::document::Document;
+use crate::document::{Document, ImageId};
 use crate::error::Error;
 use crate::geom::Rect;
 use crate::image::{Raster, TiledImage};
+use crate::progress::Progress;
 use crate::tools::Bayer;
 
 /// A palette file format.
@@ -615,6 +616,21 @@ pub fn index_image(
 /// palette's first fully transparent entry, or a new transparent entry at
 /// the end when there is none and room for one.
 pub fn reduce(doc: &mut Document, palette: Palette, dither: Dither) -> Result<Rect, Error> {
+    let never = Progress::default();
+    reduce_with(doc, palette, dither, 1, &never).map(|r| r.unwrap_or_else(|| doc.bounds()))
+}
+
+/// [`reduce`], indexing the document's images on up to `threads` threads
+/// side by side and counting each one done in `progress`. Once `progress`
+/// is stopped it ends at the next image and returns `Ok(None)` with the
+/// document untouched.
+pub fn reduce_with(
+    doc: &mut Document,
+    palette: Palette,
+    dither: Dither,
+    threads: usize,
+    progress: &Progress,
+) -> Result<Option<Rect>, Error> {
     let mut palette = palette;
     let ti = match palette.colors().iter().position(|c| c.a == 0) {
         Some(i) => i as u8,
@@ -623,27 +639,64 @@ pub fn reduce(doc: &mut Document, palette: Palette, dither: Dither) -> Result<Re
     let old = doc.palette().clone();
     let old_ti = doc.transparent_index();
     let refs = doc.reference_images();
-    for (id, raster) in doc.images.iter_mut() {
-        if refs.contains(id) {
-            continue;
+    let work: Vec<(ImageId, TiledImage<Rgba>)> = doc
+        .images
+        .iter()
+        .filter(|(id, _)| !refs.contains(id))
+        .filter_map(|(id, raster)| {
+            let rgba = match raster {
+                Raster::Rgba(img) => img.clone(),
+                Raster::Indexed(img) => img.map(Rgba::TRANSPARENT, |i| {
+                    if i == old_ti {
+                        Rgba::TRANSPARENT
+                    } else {
+                        old.get(i)
+                    }
+                }),
+                Raster::Mask(_) => return None,
+            };
+            Some((*id, rgba))
+        })
+        .collect();
+    progress.set_total(work.len());
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let done = std::sync::Mutex::new(Vec::with_capacity(work.len()));
+    let index = || {
+        while !progress.stopped() {
+            let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let Some((id, rgba)) = work.get(i) else {
+                return;
+            };
+            let indexed = index_image(rgba, &palette, ti, dither);
+            done.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push((*id, indexed));
+            progress.step();
         }
-        let rgba = match &*raster {
-            Raster::Rgba(img) => img.clone(),
-            Raster::Indexed(img) => img.map(Rgba::TRANSPARENT, |i| {
-                if i == old_ti {
-                    Rgba::TRANSPARENT
-                } else {
-                    old.get(i)
-                }
-            }),
-            Raster::Mask(_) => continue,
-        };
-        *raster = Raster::Indexed(index_image(&rgba, &palette, ti, dither));
+    };
+    let threads = threads.clamp(1, work.len().max(1));
+    if threads == 1 {
+        index();
+    } else {
+        std::thread::scope(|s| {
+            for _ in 0..threads {
+                s.spawn(index);
+            }
+        });
+    }
+    if progress.stopped() {
+        return Ok(None);
+    }
+    let done = done
+        .into_inner()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for (id, indexed) in done {
+        doc.images.insert(id, Raster::Indexed(indexed));
     }
     doc.s.palette = palette;
     doc.s.transparent_index = ti;
     doc.s.mode = crate::color::ColorMode::Indexed;
-    Ok(doc.bounds())
+    Ok(Some(doc.bounds()))
 }
 
 /// Replaces `from` with `to` (within `tolerance`) in every cel of every
@@ -896,5 +949,53 @@ mod tests {
         let mut fs = gradient_doc();
         reduce(&mut fs, two, Dither::FloydSteinberg).unwrap();
         assert!(mixed(&fs) > 4);
+    }
+
+    #[test]
+    fn reducing_on_several_threads_matches_one_and_a_stopped_one_changes_nothing() {
+        use crate::document::{NewLayer, Placement};
+        let mut doc = Document::new(64, 64, crate::color::ColorMode::Rgba).unwrap();
+        for i in 0..6 {
+            let id = if i == 0 {
+                doc.layers()[0].id
+            } else {
+                doc.add_layer(NewLayer::Raster, format!("l{i}"), Placement::default())
+                    .unwrap()
+            };
+            let t = doc.target(id, 0).unwrap();
+            for y in 0..64 {
+                for x in 0..64 {
+                    let c = Rgba::opaque((x * 4) as u8, (y * 4) as u8, (i * 40) as u8);
+                    t.raster.set_raw(x, y, c.to_u32());
+                }
+            }
+        }
+        let palette =
+            Palette::new(vec![Rgba::BLACK, Rgba::WHITE, Rgba::opaque(200, 0, 0)]).unwrap();
+        let mut one = doc.clone();
+        reduce(&mut one, palette.clone(), Dither::FloydSteinberg).unwrap();
+        let mut many = doc.clone();
+        let progress = Progress::default();
+        let done = reduce_with(
+            &mut many,
+            palette.clone(),
+            Dither::FloydSteinberg,
+            4,
+            &progress,
+        );
+        assert!(done.unwrap().is_some());
+        assert_eq!(progress.get(), (6, 6));
+        for (_, l) in one.walk() {
+            assert_eq!(
+                one.cel_raster(l.id, 0).unwrap(),
+                many.cel_raster(l.id, 0).unwrap()
+            );
+        }
+        let mut stopped = doc.clone();
+        let progress = Progress::default();
+        progress.stop();
+        let done = reduce_with(&mut stopped, palette, Dither::None, 4, &progress);
+        assert!(done.unwrap().is_none());
+        assert_eq!(stopped.mode(), crate::color::ColorMode::Rgba);
     }
 }

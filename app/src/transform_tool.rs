@@ -7,8 +7,13 @@
 //! The pixels are resampled by nearest neighbor, RotSprite or clean edge,
 //! so no new colors appear.
 
+use std::sync::Arc;
+use std::time::Instant;
+
 use lumenui::lumen_core::input::PointerButton;
+use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
+use pixl_core::filters::write_values;
 use pixl_core::history::Transaction;
 use pixl_core::transform::draw_transformed;
 use pixl_core::{Affine, ColorMode, Pixels, Point, Raster, Rect, Resample, Scope};
@@ -16,6 +21,7 @@ use pixl_core::{Affine, ColorMode, Pixels, Point, Raster, Rect, Resample, Scope}
 use crate::aids::Aids;
 use crate::editor::{Editor, Tool};
 use crate::input::{Pointer, PointerInput};
+use crate::jobs::{TileJob, WRITE_BUDGET, finishes_at_once, tiles_of};
 use crate::menus::Chosen;
 use crate::tools::{Place, refuse};
 use crate::view::View;
@@ -69,13 +75,19 @@ struct Session {
     tx: Option<Transaction>,
     /// The cel as it was.
     original: Raster,
+    /// The cel with the lifted pixels taken out: what the preview draws on.
+    base: Arc<Raster>,
     /// The lifted pixels and where their top-left was.
-    lifted: Pixels,
+    lifted: Arc<Pixels>,
     rect: Rect,
     /// The selection the pixels came from, to move with them.
     shape: Shape,
     grab: Option<Grab>,
     clear: u32,
+    /// The preview of a large box, filling in on worker threads.
+    job: Option<TileJob>,
+    /// Apply was chosen: keep the result once the preview is all in.
+    applying: bool,
 }
 
 impl Session {
@@ -134,6 +146,7 @@ fn local_of(rect: Rect, shape: Shape, p: (f64, f64)) -> Option<(f64, f64)> {
 pub struct XfInput<'w> {
     chosen: Res<'w, Chosen>,
     keys: Res<'w, crate::keymap::KeyCommands>,
+    wake: Option<Res<'w, WakeDeadline>>,
 }
 
 /// The free transform in progress, if any, and its resampling.
@@ -195,6 +208,20 @@ fn start(editor: &mut Editor) -> Option<Session> {
         return None;
     }
     let lifted = Pixels::from_raster_masked(&original, rect, selection.as_ref(), clear);
+    // The cel with the lifted pixels taken out.
+    let mut base = original.clone();
+    match &selection {
+        None => {
+            base.fill_rect_raw(&rect, clear);
+        }
+        Some(_) => {
+            for (i, p) in rect.points().enumerate() {
+                if lifted.data[i] != clear {
+                    base.set_raw(p.x, p.y, clear);
+                }
+            }
+        }
+    }
     let mut tx = editor
         .history
         .begin(&editor.doc, "Free transform", Scope::Images(vec![image]));
@@ -205,44 +232,104 @@ fn start(editor: &mut Editor) -> Option<Session> {
         frame,
         tx: Some(tx),
         original,
-        lifted,
+        base: Arc::new(base),
+        lifted: Arc::new(lifted),
         rect,
         shape: Shape::default(),
         grab: None,
         clear,
+        job: None,
+        applying: false,
     })
 }
 
-/// Shows the session's current shape on the cel.
-fn preview(editor: &mut Editor, s: &Session, resample: Resample) {
+/// Shows the session's current shape on the cel: at once for a small box,
+/// tile by tile from worker threads for a large one, the middle first.
+fn preview(editor: &mut Editor, s: &mut Session, resample: Resample) {
+    s.job = None;
     let Ok(t) = editor.doc.target(s.layer, s.frame) else {
         return;
     };
-    *t.raster = s.original.clone();
-    // Take the lifted pixels out, then draw them transformed.
-    for (i, p) in s.rect.points().enumerate() {
-        if s.lifted.data[i] != s.clear {
-            t.raster.set_raw(p.x, p.y, s.clear);
-        }
-    }
-    draw_transformed(
-        t.raster,
-        &s.lifted,
-        Point::new(s.rect.x, s.rect.y),
-        &s.matrix(),
-        resample,
-        s.clear,
+    *t.raster = (*s.base).clone();
+    let local = Affine::translate(f64::from(s.rect.x), f64::from(s.rect.y)).then(&s.matrix());
+    let src = Rect::new(0, 0, s.lifted.width as i32, s.lifted.height as i32);
+    let out = local.bounds_of(src).intersect(&t.raster.bounds());
+    let tiles = tiles_of(
+        out,
+        (
+            f64::from(out.x) + f64::from(out.w) / 2.0,
+            f64::from(out.y) + f64::from(out.h) / 2.0,
+        ),
     );
+    if finishes_at_once(tiles.len()) {
+        draw_transformed(
+            t.raster,
+            &s.lifted,
+            Point::new(s.rect.x, s.rect.y),
+            &s.matrix(),
+            resample,
+            s.clear,
+        );
+    } else {
+        let (base, lifted, clear) = (Arc::clone(&s.base), Arc::clone(&s.lifted), s.clear);
+        s.job = Some(TileJob::start(tiles, move || {
+            let (base, lifted) = (Arc::clone(&base), Arc::clone(&lifted));
+            move |tile: Rect| {
+                // The transformed pixels over what the lift left behind.
+                let px = lifted.affine(&local, tile, clear, resample);
+                tile.points()
+                    .zip(px.data)
+                    .map(|(p, v)| {
+                        if v == clear {
+                            base.get_raw(p.x, p.y)
+                        } else {
+                            v
+                        }
+                    })
+                    .collect()
+            }
+        }));
+    }
     editor.touch_pixels();
+}
+
+/// Writes the preview tiles finished by `until` (all of them with `None`)
+/// into the cel. Returns whether the preview is all in.
+fn pump(editor: &mut Editor, s: &mut Session, until: Option<Instant>) -> bool {
+    let Some(job) = s.job.as_mut() else {
+        return true;
+    };
+    let (layer, frame) = (s.layer, s.frame);
+    let write = |rect: Rect, values: &[u32]| {
+        if let Ok(t) = editor.doc.target(layer, frame) {
+            write_values(t.raster, rect, values);
+        }
+    };
+    let wrote = match until {
+        Some(_) => job.drain(until, write),
+        None => {
+            job.finish(write);
+            true
+        }
+    };
+    if wrote {
+        editor.touch_pixels();
+    }
+    job.complete()
 }
 
 fn finish(editor: &mut Editor, mut s: Session, keep: bool) {
     if keep {
+        // What the preview has still to draw is the result.
+        pump(editor, &mut s, None);
         if let Some(tx) = s.tx.take() {
             editor.history.commit(&editor.doc, tx);
         }
-    } else if let Ok(t) = editor.doc.target(s.layer, s.frame) {
-        *t.raster = s.original.clone();
+    } else {
+        s.job = None;
+        if let Ok(t) = editor.doc.target(s.layer, s.frame) {
+            *t.raster = s.original.clone();
+        }
     }
     editor.touch_pixels();
 }
@@ -288,7 +375,7 @@ pub fn use_transform(
     mut pointer: PointerInput,
     mut signals: Signals,
 ) {
-    let XfInput { chosen, keys } = input;
+    let XfInput { chosen, keys, wake } = input;
     let editor = &mut *editor;
     let ft = &mut *ft;
     let resample = match signals.get::<String>("opt_resample").as_deref() {
@@ -359,6 +446,10 @@ pub fn use_transform(
     let alt = place.modifiers.0.alt;
     let over = place.over_stage();
     for event in pointer.events() {
+        // Once applied, the box no longer moves.
+        if s.applying {
+            break;
+        }
         match event {
             Pointer::Down {
                 at,
@@ -488,18 +579,35 @@ pub fn use_transform(
             _ => {}
         }
     }
-    if let Some(k) = keep {
-        finish(editor, s, k);
+    match keep {
+        // Apply waits for the preview's last tiles, which keep coming in
+        // over the next ticks.
+        Some(true) if s.job.as_ref().is_some_and(|j| !j.complete()) => s.applying = true,
+        Some(k) => {
+            finish(editor, s, k);
+            aids.transform_box = None;
+            aids.revision += 1;
+            // The tool's job is done: back to moving.
+            editor.tool = Tool::Move;
+            return;
+        }
+        None => {}
+    }
+    if dirty && !s.applying {
+        preview(editor, &mut s, ft.resample);
+        aids.transform_box = Some(s.corners());
+        aids.revision += 1;
+    }
+    let drawn = pump(editor, &mut s, Some(Instant::now() + WRITE_BUDGET));
+    if s.applying && drawn {
+        finish(editor, s, true);
         aids.transform_box = None;
         aids.revision += 1;
-        // The tool's job is done: back to moving.
         editor.tool = Tool::Move;
         return;
     }
-    if dirty {
-        preview(editor, &s, ft.resample);
-        aids.transform_box = Some(s.corners());
-        aids.revision += 1;
+    if !drawn {
+        crate::repaint_soon(&wake);
     }
     ft.session = Some(s);
 }

@@ -511,6 +511,12 @@ pub fn apply_filter(
     write_values(raster, rect, &values)
 }
 
+/// The raw values of `rect` of `raster`, row by row: what
+/// [`write_values`] writes back.
+pub fn read_values(raster: &Raster, rect: Rect) -> Vec<u32> {
+    rect.points().map(|p| raster.get_raw(p.x, p.y)).collect()
+}
+
 /// Writes rendered values back into `raster`; returns the changed area.
 pub fn write_values(raster: &mut Raster, rect: Rect, values: &[u32]) -> Rect {
     let mut dirty = Rect::EMPTY;

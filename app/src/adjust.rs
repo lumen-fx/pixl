@@ -7,9 +7,7 @@
 //! editor stays responsive on a large document, and a change of a setting
 //! (or Cancel) stops the work at the next tile.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, channel};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -17,14 +15,12 @@ use lumenui::prelude::*;
 use pixl_core::filters::{Filter, FilterInput, write_values};
 use pixl_core::history::Transaction;
 use pixl_core::tools::fill::Connectivity;
-use pixl_core::{ImageId, LayerId, Point, Raster, Rect, Rgba, Scope, TILE_SIZE};
+use pixl_core::{ImageId, LayerId, Point, Raster, Rect, Rgba, Scope};
 
 use crate::editor::Editor;
+use crate::jobs::{TileJob, WRITE_BUDGET, tiles_of};
 use crate::menus::Chosen;
 use crate::view::View;
-
-/// Time a tick spends writing finished tiles into the cel.
-const WRITE_BUDGET: Duration = Duration::from_millis(6);
 
 /// The Filter menu's items: command id, dialog title, and whether the
 /// filter has settings to show (the others apply at once).
@@ -44,78 +40,6 @@ pub const FILTERS: [(&str, &str, bool); 13] = [
     ("filter-pixelate", "Pixelate", true),
 ];
 
-/// One run of a filter over a set of tiles.
-struct Job {
-    filter: Filter,
-    cancel: Arc<AtomicBool>,
-    /// Behind a lock only so the resource can be shared; one system reads it.
-    results: Mutex<Receiver<(Rect, Vec<u32>)>>,
-    total: usize,
-    done: usize,
-    started: Instant,
-    finished: Option<Duration>,
-}
-
-impl Job {
-    /// Starts rendering `filter` over `tiles` (already in the order to
-    /// show them) on worker threads.
-    fn start(filter: Filter, input: FilterInput, tiles: Vec<Rect>) -> Job {
-        let cancel = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = channel();
-        let total = tiles.len();
-        let tiles = Arc::new(tiles);
-        let next = Arc::new(AtomicUsize::new(0));
-        let prepared = Arc::new(filter.prepare());
-        let input = Arc::new(input);
-        let workers = std::thread::available_parallelism()
-            .map_or(1, |n| n.get().saturating_sub(1))
-            .clamp(1, total.max(1));
-        let tx = Arc::new(Mutex::new(tx));
-        for _ in 0..workers {
-            let (tiles, next, cancel, prepared, input, tx) = (
-                Arc::clone(&tiles),
-                Arc::clone(&next),
-                Arc::clone(&cancel),
-                Arc::clone(&prepared),
-                Arc::clone(&input),
-                Arc::clone(&tx),
-            );
-            std::thread::spawn(move || {
-                loop {
-                    if cancel.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    let i = next.fetch_add(1, Ordering::Relaxed);
-                    let Some(rect) = tiles.get(i) else {
-                        return;
-                    };
-                    let values = prepared.render(&input, *rect);
-                    let sent = tx
-                        .lock()
-                        .map(|t| t.send((*rect, values)).is_ok())
-                        .unwrap_or(false);
-                    if !sent {
-                        return;
-                    }
-                }
-            });
-        }
-        Job {
-            filter,
-            cancel,
-            results: Mutex::new(rx),
-            total,
-            done: 0,
-            started: Instant::now(),
-            finished: None,
-        }
-    }
-
-    fn stop(&self) {
-        self.cancel.store(true, Ordering::Relaxed);
-    }
-}
-
 /// A filter dialog in progress, or a filter finishing after Apply.
 struct Session {
     id: &'static str,
@@ -125,7 +49,8 @@ struct Session {
     tx: Option<Transaction>,
     /// The cel as it was before the filter.
     original: Raster,
-    job: Option<Job>,
+    /// The filter the job renders, and the job.
+    job: Option<(Filter, TileJob)>,
     /// Apply was chosen: commit once the job is done.
     applying: bool,
 }
@@ -147,7 +72,7 @@ impl Adjust {
         self.session
             .as_ref()
             .and_then(|s| s.job.as_ref())
-            .map_or(0, |j| j.total - j.done)
+            .map_or(0, |(_, j)| j.total - j.done)
     }
 }
 
@@ -269,35 +194,6 @@ fn area(editor: &Editor, original: &Raster, filter: &Filter) -> Rect {
     content.inflate(reach).intersect(&doc)
 }
 
-/// The tiles of `area`, nearest `focus` first.
-fn tiles_of(area: Rect, focus: (f64, f64)) -> Vec<Rect> {
-    let mut out = Vec::new();
-    if area.is_empty() {
-        return out;
-    }
-    let t = TILE_SIZE;
-    let (x0, y0) = (area.x.div_euclid(t) * t, area.y.div_euclid(t) * t);
-    let mut y = y0;
-    while y < area.bottom() {
-        let mut x = x0;
-        while x < area.right() {
-            let r = Rect::new(x, y, t, t).intersect(&area);
-            if !r.is_empty() {
-                out.push(r);
-            }
-            x += t;
-        }
-        y += t;
-    }
-    let d = |r: &Rect| {
-        let cx = f64::from(r.x) + f64::from(r.w) / 2.0 - focus.0;
-        let cy = f64::from(r.y) + f64::from(r.h) / 2.0 - focus.1;
-        cx * cx + cy * cy
-    };
-    out.sort_by(|a, b| d(a).total_cmp(&d(b)));
-    out
-}
-
 /// Puts the cel back as it was before the filter.
 fn restore(editor: &mut Editor, s: &Session) {
     if let Ok(t) = editor.doc.target(s.layer, s.frame) {
@@ -308,9 +204,7 @@ fn restore(editor: &mut Editor, s: &Session) {
 
 /// Starts (or restarts) the session's job for `filter`.
 fn run(editor: &mut Editor, s: &mut Session, filter: Filter, focus: (f64, f64)) {
-    if let Some(job) = s.job.take() {
-        job.stop();
-    }
+    s.job = None;
     restore(editor, s);
     let input = FilterInput {
         raster: s.original.clone(),
@@ -319,7 +213,13 @@ fn run(editor: &mut Editor, s: &mut Session, filter: Filter, focus: (f64, f64)) 
         selection: editor.selection.clone(),
     };
     let tiles = tiles_of(area(editor, &s.original, &filter), focus);
-    s.job = Some(Job::start(filter, input, tiles));
+    let prepared = Arc::new(filter.prepare());
+    let input = Arc::new(input);
+    let job = TileJob::start(tiles, move || {
+        let (prepared, input) = (Arc::clone(&prepared), Arc::clone(&input));
+        move |rect: Rect| prepared.render(&input, rect)
+    });
+    s.job = Some((filter, job));
 }
 
 /// Opens a filter: its dialog for one with settings, straight to work for
@@ -411,7 +311,7 @@ pub fn filter_commands(
                     // Apply what the settings say even when the preview was
                     // off.
                     if let Some(f) = filter_of(s.id, editor, &signals)
-                        && s.job.as_ref().is_none_or(|j| j.filter != f)
+                        && s.job.as_ref().is_none_or(|(g, _)| *g != f)
                     {
                         run(editor, s, f, focus);
                     }
@@ -420,7 +320,7 @@ pub fn filter_commands(
             "flt-cancel" => {
                 signals.set("filter_open", false);
                 if let Some(s) = adjust.session.take() {
-                    if let Some(job) = &s.job {
+                    if let Some((_, job)) = &s.job {
                         job.stop();
                     }
                     restore(editor, &s);
@@ -437,46 +337,32 @@ pub fn filter_commands(
         let preview = signals.get::<bool>("flt_preview").unwrap_or(true);
         let want = filter_of(s.id, editor, &signals);
         match (preview, want) {
-            (true, Some(f)) if s.job.as_ref().is_none_or(|j| j.filter != f) => {
+            (true, Some(f)) if s.job.as_ref().is_none_or(|(g, _)| *g != f) => {
                 run(editor, &mut s, f, focus);
             }
             (false, _) if s.job.is_some() => {
-                if let Some(job) = s.job.take() {
-                    job.stop();
-                }
+                s.job = None;
                 restore(editor, &s);
             }
             _ => {}
         }
     }
     // Write what the workers finished.
-    let deadline = Instant::now() + WRITE_BUDGET;
     let mut wrote = false;
-    if let Some(job) = s.job.as_mut() {
-        while Instant::now() < deadline || s.applying {
-            let next = job.results.lock().ok().and_then(|r| r.try_recv().ok());
-            let Some((rect, values)) = next else {
-                break;
-            };
-            if let Ok(t) = editor.doc.target(s.layer, s.frame) {
-                write_values(t.raster, rect, &values);
-                wrote = true;
+    if let Some((_, job)) = s.job.as_mut() {
+        let until = (!s.applying).then(|| Instant::now() + WRITE_BUDGET);
+        let (layer, frame) = (s.layer, s.frame);
+        wrote = job.drain(until, |rect, values| {
+            if let Ok(t) = editor.doc.target(layer, frame) {
+                write_values(t.raster, rect, values);
             }
-            job.done += 1;
-        }
-        if job.done >= job.total && job.finished.is_none() {
-            job.finished = Some(job.started.elapsed());
-        }
-        let progress = match job.finished {
-            Some(t) => format!("{} tiles in {} ms", job.total, t.as_millis()),
-            None => format!("{} of {} tiles", job.done, job.total),
-        };
-        crate::tools::set_if_changed(&mut signals, "flt_progress", progress);
+        });
+        crate::tools::set_if_changed(&mut signals, "flt_progress", job.progress());
     }
     if wrote {
         editor.touch_pixels();
     }
-    let finished = s.job.as_ref().is_none_or(|j| j.done >= j.total);
+    let finished = s.job.as_ref().is_none_or(|(_, j)| j.complete());
     if s.applying && finished {
         if let Some(tx) = s.tx.take() {
             editor.history.commit(&editor.doc, tx);
@@ -499,13 +385,5 @@ mod tests {
     fn curve_points_read() {
         assert_eq!(parse_points("64:48 192:208"), vec![(64, 48), (192, 208)]);
         assert_eq!(parse_points("0:0, 300:1 x"), vec![(0, 0)]);
-    }
-
-    #[test]
-    fn tiles_cover_the_area_nearest_first() {
-        let t = tiles_of(Rect::new(10, 10, 200, 100), (180.0, 90.0));
-        let covered: i64 = t.iter().map(|r| r.area()).sum();
-        assert_eq!(covered, 200 * 100);
-        assert!(t[0].contains(180, 90));
     }
 }

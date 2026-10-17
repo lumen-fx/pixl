@@ -18,6 +18,7 @@ pub mod io;
 pub mod merge;
 pub mod native;
 pub mod palettes;
+pub mod progress;
 pub mod rig;
 pub mod selection;
 pub mod sheet;
@@ -34,6 +35,7 @@ pub use error::Error;
 pub use geom::{Point, Rect};
 pub use history::{History, Scope, Transaction};
 pub use image::{Raster, TILE_SIZE, TiledImage};
+pub use progress::Progress;
 pub use rig::{
     Bend, Binding, Bone, BoneId, BonePose, Easing, NamedPose, Parts, Pose, PoseKey, PosedLayer,
     Region, RenderOptions, Rig, RigFrame, Rigid, Vec2,

@@ -4,10 +4,11 @@
     <row class="dialog-row"><label class="field-label" text="Width"/><input id="resize-w" class="size-field" type="number" min="1" max="32768" value="64" bind-text="resize_w"/></row>
     <row class="dialog-row"><label class="field-label" text="Height"/><input id="resize-h" class="size-field" type="number" min="1" max="32768" value="64" bind-text="resize_h"/></row>
     <row class="dialog-row"><label class="field-label" text="Resampling"/><dropdown id="resize-resample" class="dialog-choice" bind-value="resize_resample"><option value="Nearest"/><option value="RotSprite"/><option value="Clean edge"/></dropdown></row>
+    <label class="dialog-text" bind-text="img_progress" text=""/>
     <row class="dialog-actions">
       <spacer/>
       <button id="resize-cancel" text="Cancel"/>
-      <button id="resize-ok" class="primary" default="true" text="OK"/>
+      <button id="resize-ok" class="primary" default="true" bind-disabled="img_busy" text="OK"/>
     </row>
   </column>
 </dialog>

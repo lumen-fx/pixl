@@ -70,7 +70,9 @@ whose tooltip names the tool and its key:
   are pixel-perfect when asked.
 - Fill: the bucket, and gradients (linear, radial or conic) that step
   between two colors or along the palette, broken up by a Bayer matrix, blue
-  noise or a pattern instead of blending.
+  noise or a pattern instead of blending. A gradient over a large canvas
+  fills in tile by tile on worker threads, nearest where the drag ended
+  first; Escape stops it and puts the layer back.
 - Select: rectangle, ellipse, lasso, polygon lasso and magic wand
   (tolerance, contiguous or not, one layer or all, diagonals or not). Shift
   adds, Alt subtracts, both intersect.
@@ -80,7 +82,9 @@ whose tooltip names the tool and its key:
   middle, Ctrl on an edge skews), outside to turn (Shift steps 15 degrees),
   or type an angle; Flip H and Flip V mirror it. The preview resamples with
   RotSprite, clean edge or nearest neighbor, and Enter applies it as one
-  undo step while Escape puts the pixels back.
+  undo step while Escape puts the pixels back. The preview of a large box
+  fills in tile by tile on worker threads, from its middle out; Enter
+  waits for its last tiles.
 - Other: eyedropper, move, crop, text in bitmap fonts (pixl's own 5x7 font,
   or any BDF font), measure, and slices.
 
@@ -108,7 +112,10 @@ another in this frame or every frame. It also loads and saves palettes as
 `.gpl`, `.pal`, `.hex` and `.ase`, sorts the palette by hue, saturation,
 lightness or brightness, builds a ramp around the foreground color with its
 hue turning from shadow to highlight, makes a palette from the image, and
-locks the painting colors to the palette.
+locks the painting colors to the palette. Indexed color, a palette from the
+image and the image size work on threads of their own: the dialog stays
+open, saying how far the work is, until the result lands as one undo step,
+and Cancel or Escape stops it.
 
 The Filter menu has hue and saturation, brightness and contrast, levels,
 curves, color balance, posterize, invert, desaturate, gradient map, outline
@@ -117,7 +124,7 @@ pixelate. Each previews on the canvas while its settings change and applies
 as one undo step; Cancel puts the layer back. A filter works through the
 image tile by tile on worker threads, nearest the middle of the view first,
 so a large layer fills in as it goes and a change of setting stops the work
-at once. Indexed layers stay on their palette.
+at once. An empty frame of the layer has nothing to filter. Indexed layers stay on their palette.
 
 The View menu shows rulers, which guides drag out of and back into; snaps to
 the grid, the guides and the slices; draws a grid of any cell size and
@@ -380,6 +387,14 @@ frames per second and as fast as it goes. It plays two 4096x4096 documents
 of 32 layers: `sprite` (the default), where a few layers redraw a figure
 each frame and the rest are linked, and `full`, where every cel is its own
 full image; `frames=N`, `side=N` and `layers=N` change them.
+
+`cargo bench -p pixl --bench heavy -- gpu` (or `cpu`) runs the edits too
+large for one frame on the same document (a gradient over the top layer, a
+free transform turning the whole top cel with RotSprite, a palette made from
+the image, and indexed color with Floyd-Steinberg) and gives, for each, the
+time until it lands as an undo step and the longest tick while it runs,
+with the editor's systems that cost the most in it: how long the editor
+stops answering.
 
 `cargo bench -p pixl --bench customize -- gpu` (or `cpu`) times, on the
 same document, what the workspace, themes, command palette and export

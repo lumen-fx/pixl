@@ -430,9 +430,11 @@ pub fn history_keys(
     mut panels: ResMut<Panels>,
     keys: Res<KeyCommands>,
     home: Res<Home>,
+    toolbox: Res<crate::toolbox::Toolbox>,
 ) {
-    // The start screen keeps the editor's keys until a document shows.
-    if home.open {
+    // The start screen keeps the editor's keys until a document shows, and
+    // a paint still being drawn on worker threads finishes first.
+    if home.open || toolbox.painting() {
         return;
     }
     let editor = &mut *editor;

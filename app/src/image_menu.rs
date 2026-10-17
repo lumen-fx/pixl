@@ -15,11 +15,12 @@ use pixl_core::palettes::{
     replace_color_everywhere, write_palette,
 };
 use pixl_core::{
-    Bayer, CanvasTransform, ColorMode, CompositeOptions, Palette, Point, Rect, Resample, Rgba,
-    Scope, composite_frame, crop, resize_canvas, transform_canvas,
+    Bayer, CanvasTransform, ColorMode, CompositeOptions, Document, Palette, Point, Rect, Resample,
+    Rgba, Scope, composite_frame, crop, resize_canvas, transform_canvas,
 };
 
 use crate::editor::Editor;
+use crate::jobs::Task;
 use crate::menus::Chosen;
 use crate::tools::hex;
 
@@ -106,12 +107,6 @@ pub fn parse_color(text: &str) -> Option<Rgba> {
     Some(Rgba::new(b(v[0]), b(v[1]), b(v[2]), b(a)))
 }
 
-/// The pixels of the current frame, flattened, for a palette made from the
-/// image.
-fn frame_pixels(editor: &Editor) -> Vec<Rgba> {
-    composite_frame(&editor.doc, editor.frame, &CompositeOptions::EXPORT)
-}
-
 /// Puts the document on `palette`: an RGBA document takes it as its
 /// palette; an indexed one has its pixels remapped to it by color.
 pub fn use_palette(editor: &mut Editor, label: &str, palette: Palette) {
@@ -145,6 +140,58 @@ pub struct ImageMenu {
     /// Painting colors snap to the nearest palette color.
     pub lock: bool,
     ramp_shown: Option<Vec<Rgba>>,
+    /// An edit of the whole document running on a thread of its own, its
+    /// dialog open (and the document out of reach) until it lands.
+    task: Option<Running>,
+}
+
+/// A whole-document edit off the UI thread: its undo label, the signal that
+/// opens its dialog, and the document it makes (`None` once stopped).
+struct Running {
+    label: &'static str,
+    dialog: &'static str,
+    /// The edit changes the canvas size.
+    resizes: bool,
+    task: Task<Option<std::result::Result<Document, pixl_core::Error>>>,
+}
+
+impl ImageMenu {
+    /// Whether a whole-document edit is still running.
+    pub fn busy(&self) -> bool {
+        self.task.is_some()
+    }
+}
+
+/// Puts `doc` on a palette in a [`Task`]: `palette` gives it (from the
+/// document as it is), and an indexed document, or `index` with a dither,
+/// has its images indexed to it.
+fn start_palette_task(
+    editor: &Editor,
+    palette: impl FnOnce(&Document) -> Palette + Send + 'static,
+    index: Option<Dither>,
+) -> Task<Option<std::result::Result<Document, pixl_core::Error>>> {
+    let doc = editor.doc.clone();
+    let threads = crate::jobs::worker_threads();
+    Task::spawn(move |progress| {
+        let mut d = doc;
+        let p = palette(&d);
+        if progress.stopped() {
+            return None;
+        }
+        let dither = match (index, d.mode()) {
+            (Some(dither), _) => dither,
+            (None, ColorMode::Indexed) => Dither::None,
+            (None, ColorMode::Rgba) => {
+                d.set_palette(p);
+                return Some(Ok(d));
+            }
+        };
+        match palettes::reduce_with(&mut d, p, dither, threads, progress) {
+            Ok(Some(_)) => Some(Ok(d)),
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
+        }
+    })
 }
 
 /// The ramp the ramp builder's fields describe, around the foreground.
@@ -213,8 +260,7 @@ pub fn image_commands(
                 signals.set("resize_h", size.1.to_string());
                 signals.set("resize_open", true);
             }
-            "resize-ok" => {
-                signals.set("resize_open", false);
+            "resize-ok" if state.task.is_none() => {
                 let w = number(&signals, "resize_w", size.0 as i64).clamp(1, 32768) as u32;
                 let h = number(&signals, "resize_h", size.1 as i64).clamp(1, 32768) as u32;
                 let resample = match signals.get::<String>("resize_resample").as_deref() {
@@ -222,15 +268,30 @@ pub fn image_commands(
                     Some("Clean edge") => Resample::CleanEdge,
                     _ => Resample::Nearest,
                 };
-                transform(editor, "Image size", CanvasTransform::Scale(w, h, resample));
+                // Every cel is resampled, on a thread of its own.
+                let doc = editor.doc.clone();
+                let task = Task::spawn(move |_| {
+                    let mut d = doc;
+                    Some(
+                        transform_canvas(&mut d, CanvasTransform::Scale(w, h, resample)).map(|_| d),
+                    )
+                });
+                state.task = Some(Running {
+                    label: "Image size",
+                    dialog: "resize_open",
+                    resizes: true,
+                    task,
+                });
             }
-            "resize-cancel" => signals.set("resize_open", false),
+            "resize-cancel" => {
+                state.task = None;
+                signals.set("resize_open", false);
+            }
             "image-indexed" => {
                 signals.set("indexed_title", "Indexed color");
                 signals.set("indexed_open", true);
             }
-            "indexed-ok" => {
-                signals.set("indexed_open", false);
+            "indexed-ok" if state.task.is_none() => {
                 let dither = match signals.get::<String>("indexed_dither").as_deref() {
                     Some("Bayer 2x2") => Dither::Ordered(Bayer::B2),
                     Some("Bayer 4x4") => Dither::Ordered(Bayer::B4),
@@ -238,26 +299,36 @@ pub fn image_commands(
                     Some("Floyd-Steinberg") => Dither::FloydSteinberg,
                     _ => Dither::None,
                 };
-                let palette = if signals.get::<String>("indexed_palette").as_deref()
-                    == Some("New palette from the image")
-                {
-                    let n = number(&signals, "indexed_colors", 16).clamp(2, 256) as usize;
-                    palette_from_pixels(frame_pixels(editor), n, true)
-                } else {
-                    editor.doc.palette().clone()
-                };
-                let done =
-                    editor
-                        .history
-                        .transact(&mut editor.doc, "Indexed color", Scope::All, |d| {
-                            palettes::reduce(d, palette, dither)
-                        });
-                match done {
-                    Ok(_) => editor.touch(),
-                    Err(e) => editor.message = Some(e.to_string()),
-                }
+                let n = number(&signals, "indexed_colors", 16).clamp(2, 256) as usize;
+                let new = signals.get::<String>("indexed_palette").as_deref()
+                    == Some("New palette from the image");
+                let frame = editor.frame;
+                let task = start_palette_task(
+                    editor,
+                    move |d| {
+                        if new {
+                            palette_from_pixels(
+                                composite_frame(d, frame, &CompositeOptions::EXPORT),
+                                n,
+                                true,
+                            )
+                        } else {
+                            d.palette().clone()
+                        }
+                    },
+                    Some(dither),
+                );
+                state.task = Some(Running {
+                    label: "Indexed color",
+                    dialog: "indexed_open",
+                    resizes: false,
+                    task,
+                });
             }
-            "indexed-cancel" => signals.set("indexed_open", false),
+            "indexed-cancel" => {
+                state.task = None;
+                signals.set("indexed_open", false);
+            }
             "image-rgba" => {
                 editor
                     .history
@@ -342,14 +413,32 @@ pub fn image_commands(
                 signals.set("quantize_title", "A palette from the image");
                 signals.set("quantize_open", true);
             }
-            "quantize-ok" => {
-                signals.set("quantize_open", false);
+            "quantize-ok" if state.task.is_none() => {
                 let n = number(&signals, "quantize_colors", 16).clamp(2, 256) as usize;
                 let indexed = editor.doc.mode() == ColorMode::Indexed;
-                let p = palette_from_pixels(frame_pixels(editor), n, indexed);
-                use_palette(editor, "Palette from image", p);
+                let frame = editor.frame;
+                let task = start_palette_task(
+                    editor,
+                    move |d| {
+                        palette_from_pixels(
+                            composite_frame(d, frame, &CompositeOptions::EXPORT),
+                            n,
+                            indexed,
+                        )
+                    },
+                    None,
+                );
+                state.task = Some(Running {
+                    label: "Palette from image",
+                    dialog: "quantize_open",
+                    resizes: false,
+                    task,
+                });
             }
-            "quantize-cancel" => signals.set("quantize_open", false),
+            "quantize-cancel" => {
+                state.task = None;
+                signals.set("quantize_open", false);
+            }
             "palette-lock" => {
                 state.lock = !state.lock;
                 editor.message = Some(if state.lock {
@@ -376,6 +465,48 @@ pub fn image_commands(
         if (fg, bg) != (editor.fg, editor.bg) {
             editor.fg = fg;
             editor.bg = bg;
+        }
+    }
+    // A whole-document edit: how far it is, and the document it made.
+    if let Some(run) = state.task.as_mut() {
+        if signals.get::<bool>(run.dialog) != Some(true) {
+            // Its dialog closed some other way (Escape): it stops.
+            state.task = None;
+        } else if let Some(result) = run.task.poll() {
+            let (label, dialog, resizes) = (run.label, run.dialog, run.resizes);
+            state.task = None;
+            signals.set(dialog, false);
+            match result {
+                Some(Ok(doc)) => {
+                    editor
+                        .history
+                        .transact(&mut editor.doc, label, Scope::All, |d| *d = doc);
+                    if resizes {
+                        after_resize(editor);
+                    } else {
+                        editor.touch();
+                    }
+                }
+                Some(Err(e)) => editor.message = Some(e.to_string()),
+                None => {}
+            }
+        } else {
+            let text = match run.task.progress.get() {
+                _ if run.resizes => "Resampling every cel...".to_string(),
+                (_, 0) => "Reading the image...".to_string(),
+                (done, total) => format!("Indexing images: {done} of {total}"),
+            };
+            crate::tools::set_if_changed(&mut signals, "img_progress", text);
+            if let Some(wake) = &wake {
+                wake.request(std::time::Instant::now() + std::time::Duration::from_millis(16));
+            }
+        }
+    }
+    let busy = state.task.is_some();
+    if signals.get::<bool>("img_busy") != Some(busy) {
+        signals.set("img_busy", busy);
+        if !busy {
+            signals.set("img_progress", String::new());
         }
     }
     // The ramp builder shows its ramp as it changes.

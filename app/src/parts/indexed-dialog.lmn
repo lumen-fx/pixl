@@ -4,10 +4,11 @@
     <row class="dialog-row"><label class="field-label" text="Palette"/><dropdown id="indexed-palette" class="dialog-choice" bind-value="indexed_palette"><option value="Current palette"/><option value="New palette from the image"/></dropdown></row>
     <row class="dialog-row"><label class="field-label" text="Colors"/><input id="indexed-colors" class="size-field" type="number" min="2" max="256" value="16" bind-text="indexed_colors"/></row>
     <row class="dialog-row"><label class="field-label" text="Dithering"/><dropdown id="indexed-dither" class="dialog-choice" bind-value="indexed_dither"><option value="None"/><option value="Bayer 2x2"/><option value="Bayer 4x4"/><option value="Bayer 8x8"/><option value="Floyd-Steinberg"/></dropdown></row>
+    <label class="dialog-text" bind-text="img_progress" text=""/>
     <row class="dialog-actions">
       <spacer/>
       <button id="indexed-cancel" text="Cancel"/>
-      <button id="indexed-ok" class="primary" default="true" text="OK"/>
+      <button id="indexed-ok" class="primary" default="true" bind-disabled="img_busy" text="OK"/>
     </row>
   </column>
 </dialog>

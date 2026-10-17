@@ -14,6 +14,7 @@ use lumenui::ecs::system::SystemParam;
 use lumenui::lumen_core::input::PointerButton;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
+use pixl_core::filters::read_values;
 use pixl_core::history::Transaction;
 use pixl_core::tools::brushes::{Rng, SmudgeStroke, SoftBrush, SoftInk, SoftStroke, Stabilizer};
 use pixl_core::tools::fill::{self, Connectivity, FillOptions, Sampler};
@@ -24,11 +25,12 @@ use pixl_core::tools::text::BitmapFont;
 use pixl_core::transform::Pixels;
 use pixl_core::{
     Bayer, Brush, Canvas, Color, CompositeOptions, Ink, Point, Raster, Rect, Rgba, SelectOp,
-    Selection, SymmetryMode, ToolContext, composite_frame,
+    Selection, SymmetryMode, Target, ToolContext, composite_frame,
 };
 
 use crate::editor::{BrushShape, Editor, Tool};
 use crate::input::{Pointer, PointerInput};
+use crate::jobs::{PaintJob, WRITE_BUDGET, tiles_of};
 use crate::tools::{Place, context, paint_color, refuse};
 use crate::view::Preview;
 
@@ -218,6 +220,8 @@ pub struct Toolbox {
     /// The theme's color for outlines that are not paint: selections being
     /// drawn, crops, slices and measures.
     accent: Rgba,
+    /// A gradient still being painted on worker threads.
+    fill: Option<PaintJob>,
 }
 
 impl Default for Toolbox {
@@ -233,14 +237,21 @@ impl Default for Toolbox {
             last_spray: None,
             edit_slice: None,
             accent: Rgba::opaque(0x31, 0xa2, 0xf2),
+            fill: None,
         }
     }
 }
 
 impl Toolbox {
-    /// Whether a gesture of the toolbox is in progress.
+    /// Whether a gesture of the toolbox is in progress, or the paint it
+    /// left is still being drawn.
     pub fn active(&self) -> bool {
-        self.session.is_some()
+        self.session.is_some() || self.fill.is_some()
+    }
+
+    /// Whether a gradient is still being painted on worker threads.
+    pub fn painting(&self) -> bool {
+        self.fill.is_some()
     }
 
     /// The font the text tool sets.
@@ -877,6 +888,44 @@ fn begin(editor: &mut Editor, toolbox: &mut Toolbox, preview: &mut Preview, pres
 }
 
 /// Ends a polygon or polygon lasso.
+/// Paints `g` over the canvas on worker threads, the tiles nearest `focus`
+/// first: a gradient reaches every pixel of a large canvas.
+fn start_gradient(
+    editor: &mut Editor,
+    g: Gradient,
+    focus: Point,
+) -> std::result::Result<PaintJob, pixl_core::Error> {
+    let ctx = Arc::new(context(editor));
+    let area = match &ctx.selection {
+        Some(s) => s.bounds(),
+        None => editor.doc.bounds(),
+    };
+    let tiles = tiles_of(area, (f64::from(focus.x), f64::from(focus.y)));
+    let palette = Arc::new(editor.doc.palette().clone());
+    let transparent_index = editor.doc.transparent_index();
+    let alpha_locked = !editor.mask_edit && editor.doc.effective_locks(editor.layer)?.alpha;
+    let g = Arc::new(g);
+    PaintJob::start(editor, "Gradient", tiles, move |original| {
+        let original = Arc::new(original);
+        move || {
+            // Each worker paints a copy of its own; untouched tiles stay
+            // shared with the cel.
+            let mut scratch = (*original).clone();
+            let (palette, ctx, g) = (Arc::clone(&palette), Arc::clone(&ctx), Arc::clone(&g));
+            move |rect: Rect| {
+                let target = Target {
+                    raster: &mut scratch,
+                    palette: &palette,
+                    transparent_index,
+                    alpha_locked,
+                };
+                gradient::gradient_in(&mut Canvas::new(target, &ctx), &g, rect);
+                read_values(&scratch, rect)
+            }
+        }
+    })
+}
+
 fn finish_corners(
     editor: &mut Editor,
     preview: &mut Preview,
@@ -996,12 +1045,12 @@ fn finish(editor: &mut Editor, toolbox: &mut Toolbox, preview: &mut Preview, p: 
             match tool {
                 Tool::Gradient => {
                     let g = gradient_of(editor, toolbox, button, from, to);
-                    let ctx = context(editor);
-                    let done =
-                        editor.edit("Gradient", &ctx, |canvas| gradient::gradient(canvas, &g));
-                    match done {
-                        Ok(((), dirty)) if !dirty.is_empty() => editor.touch_pixels(),
-                        Ok(_) => {}
+                    match start_gradient(editor, g, to) {
+                        // A small canvas is painted within this tick.
+                        Ok(mut job) if crate::jobs::finishes_at_once(job.job.total) => {
+                            job.pump(editor, None);
+                        }
+                        Ok(job) => toolbox.fill = Some(job),
                         Err(e) => refuse(editor, e),
                     }
                 }
@@ -1154,6 +1203,17 @@ pub fn use_toolbox(
     if let Some(c) = keys.colors.preview {
         toolbox.accent = c;
     }
+    // A gradient being painted: its finished tiles, or Cancel.
+    if let Some(mut fill) = toolbox.fill.take() {
+        if keys.commands.ran("cancel", false) {
+            fill.cancel(editor);
+        } else if !fill.pump(editor, Some(Instant::now() + WRITE_BUDGET)) {
+            toolbox.fill = Some(fill);
+            if let Some(wake) = &wake {
+                wake.request(Instant::now() + Duration::from_millis(4));
+            }
+        }
+    }
     // A tool change ends what the last tool was doing.
     if toolbox.session.is_some() && !session_fits(toolbox.session.as_ref(), editor.tool) {
         cancel(editor, toolbox, &mut preview);
@@ -1212,6 +1272,7 @@ pub fn use_toolbox(
                     Some(Session::Curve { .. }) | Some(Session::Corners { .. })
                 );
                 if (held_session && !multi)
+                    || toolbox.fill.is_some()
                     || place.nav.space_held
                     || place.nav.panning.is_some()
                     || !view.contains(at)

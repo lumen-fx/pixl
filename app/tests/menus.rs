@@ -125,7 +125,7 @@ fn canvas_size_image_size_and_turns_are_undoable_steps() {
             Step::Text("resize_w", "80"),
             Step::Text("resize_h", "72"),
             Step::Click("resize-ok"),
-            Step::Wait,
+            Step::Until(|e| e.history.undo_labels().any(|l| l == "Image size")),
             Step::Menu("image-rotate-cw"),
             Step::Wait,
         ],
@@ -158,7 +158,8 @@ fn indexed_color_with_a_dither_and_back() {
             Step::Text("indexed_colors", "4"),
             Step::Text("indexed_dither", "Floyd-Steinberg"),
             Step::Click("indexed-ok"),
-            Step::Wait,
+            // The conversion runs on a thread of its own.
+            Step::Until(|e| e.history.undo_labels().any(|l| l == "Indexed color")),
         ],
     );
     assert_eq!(out.doc.mode(), ColorMode::Indexed);
@@ -181,7 +182,7 @@ fn replacing_a_color_and_a_palette_from_the_image() {
             Step::Wait,
             Step::Text("quantize_colors", "8"),
             Step::Click("quantize-ok"),
-            Step::Wait,
+            Step::Until(|e| e.history.undo_labels().any(|l| l == "Palette from image")),
         ],
     );
     assert_eq!(px(&out.doc, 5, 5), Rgba::opaque(0, 0, 255));

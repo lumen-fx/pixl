@@ -146,3 +146,61 @@ fn dragging_inside_moves_and_an_edge_handle_scales() {
     // Twice as wide, the left end staying where it was.
     assert_eq!(painted(&scaled.doc), Rect::new(4, 6, 16, 2));
 }
+
+#[test]
+fn a_large_box_previews_tile_by_tile_and_applies_the_same_pixels() {
+    use pixl_core::transform::draw_transformed;
+    use pixl_core::{Affine, Pixels, Point, Resample};
+    // Large enough that the preview goes to the workers.
+    let side = 640;
+    let mut d = Document::new(side, side, ColorMode::Rgba).unwrap();
+    let l = d.layers()[0].id;
+    let t = d.target(l, 0).unwrap();
+    for y in 0..side as i32 {
+        for x in 0..side as i32 {
+            if (x / 7 + y / 5) % 3 == 0 {
+                t.raster.set_raw(x, y, RED.to_u32());
+            }
+        }
+    }
+    let mut expected = d.clone();
+    let out = drive(
+        editor_over(d),
+        vec![
+            Step::Ctrl("t", false),
+            Step::Wait,
+            Step::Text("opt_angle", "30"),
+            Step::Wait,
+            Step::KeyDown(NamedKey::Enter),
+            Step::KeyUp(NamedKey::Enter),
+            Step::Until(|e| e.history.undo_labels().any(|l| l == "Free transform")),
+        ],
+    );
+    // The same transform drawn at once by pixl-core.
+    let t = expected.target(l, 0).unwrap();
+    let rect = t.raster.content_bounds();
+    let lifted = Pixels::from_raster(t.raster, rect);
+    t.raster.fill_rect_raw(&rect, 0);
+    let pivot = (
+        f64::from(rect.x) + f64::from(rect.w) / 2.0,
+        f64::from(rect.y) + f64::from(rect.h) / 2.0,
+    );
+    let m = Affine::about(pivot, (1.0, 1.0), (0.0, 0.0), 30.0, (0.0, 0.0));
+    draw_transformed(
+        t.raster,
+        &lifted,
+        Point::new(rect.x, rect.y),
+        &m,
+        Resample::RotSprite,
+        0,
+    );
+    let want = expected.cel_raster(l, 0).unwrap().unwrap();
+    let got = out.doc.cel_raster(l, 0).unwrap().unwrap();
+    let all = Rect::new(0, 0, side as i32, side as i32);
+    let differ = all
+        .points()
+        .filter(|p| want.get_raw(p.x, p.y) != got.get_raw(p.x, p.y))
+        .count();
+    assert_eq!(differ, 0);
+    assert_eq!(out.undo, vec!["Free transform".to_string()]);
+}

@@ -222,6 +222,18 @@ impl History {
         true
     }
 
+    /// Drops an edit without recording it: the document's structure and
+    /// the images the transaction watched go back to how they were at
+    /// [`History::begin`], and images made since then (a new cel's) go.
+    pub fn rollback(&mut self, doc: &mut Document, tx: Transaction) {
+        doc.s = tx.structure;
+        doc.images
+            .retain(|id, _| tx.image_ids.binary_search(id).is_ok());
+        for (id, raster) in tx.watched {
+            doc.images.insert(id, raster);
+        }
+    }
+
     /// Runs `edit` as one undoable step. Structural edits that may delete
     /// images should use [`Scope::All`] so the deleted pixels can come back.
     pub fn transact<R>(
@@ -427,5 +439,22 @@ mod tests {
         assert_eq!(pixel(&d, 1, 1), 4);
         assert_eq!(h.undo(&mut d), Some(d.bounds()));
         assert_eq!(d, before);
+    }
+
+    #[test]
+    fn a_rolled_back_edit_leaves_the_document_as_it_was() {
+        let mut d = Document::new(64, 64, ColorMode::Rgba).unwrap();
+        let layer = d.layers()[0].id;
+        let mut h = History::default();
+        let tx = h.begin(&d, "paint", Scope::Images(Vec::new()));
+        let image = d.target_image(layer, 0).unwrap();
+        d.target(layer, 0)
+            .unwrap()
+            .raster
+            .set_raw(1, 1, Rgba::BLACK.to_u32());
+        h.rollback(&mut d, tx);
+        assert_eq!(d.cel(layer, 0).unwrap(), None);
+        assert!(d.image(image).is_none());
+        assert!(!h.can_undo());
     }
 }

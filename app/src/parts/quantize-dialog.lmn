@@ -2,10 +2,11 @@
   <column class="dialog-card">
     <label class="dialog-title" bind-text="quantize_title" text=""/>
     <row class="dialog-row"><label class="field-label" text="Colors"/><input id="quantize-colors" class="size-field" type="number" min="2" max="256" value="16" bind-text="quantize_colors"/></row>
+    <label class="dialog-text" bind-text="img_progress" text=""/>
     <row class="dialog-actions">
       <spacer/>
       <button id="quantize-cancel" text="Cancel"/>
-      <button id="quantize-ok" class="primary" default="true" text="OK"/>
+      <button id="quantize-ok" class="primary" default="true" bind-disabled="img_busy" text="OK"/>
     </row>
   </column>
 </dialog>

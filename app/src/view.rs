@@ -1534,6 +1534,7 @@ pub fn sync_layers(
     wake: Option<Res<WakeDeadline>>,
 ) {
     layers.apply(&settings.performance);
+    crate::jobs::configure(&settings.performance);
     let mid = view.to_doc(view.middle());
     let touched = if editor.revision == layers.seen_revision {
         Touched::Layers(Vec::new())
