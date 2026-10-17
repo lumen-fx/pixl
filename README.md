@@ -60,6 +60,16 @@ panel adds, deletes, reorders and hides layers and sets the active layer's
 opacity and blend mode; the history panel lists every edit and jumps to any of
 them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
 
+Panels sit in docks left, right and below the canvas. Drag the gutter beside
+a dock to resize it. Each panel's header collapses it to its title or hides
+it, and a right-click on the header moves it to another dock or up and down
+its dock. Window > Panels and layouts lists every panel with its dock, its
+order and whether it shows, and switches between layouts: the built-in Paint,
+Animate and Rig, and any the user saves under a name of their own. Window >
+Reset layout puts the current layout back as it was saved. The arrangement in
+use and the saved layouts are kept in `workspace.json` in pixl's data folder,
+so the window reopens as it was left.
+
 The File menu makes a new project (Ctrl+N), opens and saves `.pixl`
 documents (Ctrl+O, Ctrl+S, Ctrl+Shift+S), and exports the current frame as a
 PNG (Ctrl+E) or the animation as a GIF. Open also reads Aseprite, PNG and GIF

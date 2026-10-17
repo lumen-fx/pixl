@@ -18,6 +18,8 @@
     <button id="menu-edit" class="menu-title" text="Edit"/>
     <button id="menu-view" class="menu-title" text="View"/>
     <button id="menu-layer" class="menu-title" text="Layer"/>
+    <button id="menu-window" class="menu-title" text="Window"/>
+    <include src="parts/window-menu.lmn"/>
     <spacer/>
     <label id="doc-title" class="doc-title" bind-text="doc_title" text="untitled"/>
     <spacer/>
@@ -67,13 +69,18 @@
       <tooltip text="Move (V)"><button id="tool-move" class="tool" text=""><tile class="tool-icon icon-move"/></button></tooltip>
     </column>
 
+    <split id="docks" class="docks">
+    <column id="dock-left" class="dock side empty"/>
+    <split id="center">
     <column id="stage">
       <canvas id="checker"/>
       <canvas id="art"/>
       <canvas id="overlay"/>
     </column>
+    <column id="dock-bottom" class="dock empty"/>
+    </split>
 
-    <column id="panels">
+    <column id="dock-right" class="dock side">
       <column id="panel-color" class="panel">
         <row class="panel-header"><label class="panel-title" text="Color"/></row>
         <column id="color-body" class="panel-body">
@@ -145,7 +152,10 @@
         </column>
       </column>
     </column>
+    </split>
   </row>
+
+  <include src="parts/workspace.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

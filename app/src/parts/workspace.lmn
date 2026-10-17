@@ -1,0 +1,40 @@
+<menu id="panel-menu">
+  <menuitem id="panel-menu-left" label="Move to the left dock"/>
+  <menuitem id="panel-menu-right" label="Move to the right dock"/>
+  <menuitem id="panel-menu-bottom" label="Move to the bottom dock"/>
+  <separator/>
+  <menuitem id="panel-menu-up" label="Move up"/>
+  <menuitem id="panel-menu-down" label="Move down"/>
+  <separator/>
+  <menuitem id="panel-menu-collapse" label="Collapse or expand"/>
+  <menuitem id="panel-menu-hide" label="Hide"/>
+</menu>
+
+<dialog open="ws_open">
+  <column class="dialog-card ws-card">
+    <label class="dialog-title" text="Panels and layouts"/>
+    <row class="ws-main">
+      <column class="ws-panels">
+        <label class="ws-section" text="Panels"/>
+        <scroll id="ws-panel-list" class="ws-list"/>
+      </column>
+      <column class="ws-layouts">
+        <label class="ws-section" text="Layouts"/>
+        <scroll id="ws-layout-list" class="ws-list"/>
+        <row class="dialog-row">
+          <input id="ws-name" class="ws-name-field" placeholder="Layout name" bind-text="ws_name" text=""/>
+          <button id="ws-save" text="Save"/>
+        </row>
+        <row class="dialog-row">
+          <button id="ws-reset" text="Reset"/>
+          <button id="ws-delete" text="Delete"/>
+        </row>
+        <label class="dialog-text" bind-text="ws_message" text=""/>
+      </column>
+    </row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="ws-close" class="primary" default="true" text="Done"/>
+    </row>
+  </column>
+</dialog>

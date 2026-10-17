@@ -1,10 +1,12 @@
 @import "theme.css";
+@import "parts/workspace.css";
 
 /* The window's regions and how they share the space. */
 
 #menubar { align: center; gap: var(--space-1); padding: 0 var(--space-2); }
 #tool-options { align: center; gap: var(--space-4); padding: 0 var(--space-4); }
 #workspace { grow: 1; min-height: 0; }
+#docks { grow: 1; min-width: 0; }
 #toolbar { padding: var(--space-2); gap: var(--space-1); align: center; }
 #stage { grow: 1; min-width: 0; overflow: hidden; cursor: crosshair; }
 #stage.panning { cursor: grab; }
@@ -12,7 +14,6 @@
 .option-slider { width: 120; }
 .option-value { min-width: 40; }
 #stage canvas { position: absolute; inset: 0; }
-#panels { gap: 1; }
 .panel.fill { grow: 1; min-height: 0; }
 .panel-header { align: center; padding: 0 var(--space-4); gap: var(--space-2); }
 .panel-body { padding: var(--space-3); gap: var(--space-3); min-height: 36; }

@@ -1,0 +1,52 @@
+/* The docks around the canvas and the panels in them. */
+
+#center { flex-direction: column; grow: 1; min-width: 0; min-height: 0; }
+.dock { gap: 1; min-width: 0; min-height: 0; }
+.dock.side { min-width: 160; }
+#dock-bottom { min-height: 80; flex-direction: row; }
+#dock-bottom .panel { grow: 1; min-width: 0; }
+.dock.empty { display: none; }
+.split-gutter { flex-basis: var(--gutter); bg: var(--edge); }
+.split-gutter:hover { bg: var(--accent-soft); }
+.split-gutter:focus { bg: var(--accent); }
+
+/* An empty side dock takes its gutter with it: the docks split's children
+   are the left dock, a gutter, the center, a gutter and the right dock. */
+#docks.no-left > .split-gutter:nth-child(2) { display: none; }
+#docks.no-right > .split-gutter:nth-child(4) { display: none; }
+#center.no-bottom > .split-gutter { display: none; }
+
+.panel.closed { display: none; }
+.panel.collapsed { grow: 0; }
+.panel.collapsed > .panel-body { display: none; }
+.panel-title { grow: 1; }
+.panel-tools { align: center; gap: 1; }
+.panel-btn {
+  width: 16;
+  height: 16;
+  min-height: 16;
+  padding: 0;
+  bg: #00000000;
+  border: none;
+  text-color: var(--text-faint);
+  font-size: var(--font-size-small);
+}
+.panel-btn:hover { bg: var(--surface-4); text-color: var(--text); }
+
+/* The Panels and layouts dialog. */
+.ws-card { min-width: 720; }
+.ws-main { gap: 16; }
+.ws-panels { grow: 1; gap: var(--space-3); min-width: 0; }
+.ws-layouts { width: 240; gap: var(--space-3); }
+.ws-section { text-color: var(--text-dim); font-size: var(--font-size-small); }
+.ws-list { height: 260; bg: var(--surface-1); border: 1px solid var(--edge); }
+.ws-row { align: center; gap: var(--space-2); padding: var(--space-1) var(--space-3); min-height: 26; border-bottom: 1px solid var(--edge-soft); }
+.ws-panel-name { grow: 1; }
+.ws-chip { height: 20; min-height: 20; padding: 0 var(--space-3); font-size: var(--font-size-small); }
+.ws-chip.active { bg: var(--accent); text-color: var(--on-accent); border: 1px solid var(--accent-press); }
+.ws-chip.off { text-color: var(--text-faint); }
+.ws-layout { align: center; padding: 0 var(--space-3); min-height: 24; border-bottom: 1px solid var(--edge-soft); }
+.ws-layout:hover { bg: var(--surface-3); }
+.ws-layout.current { bg: var(--accent-soft); }
+.ws-layout-kind { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.ws-name-field { grow: 1; min-width: 0; }
