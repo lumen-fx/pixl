@@ -14,8 +14,9 @@
 //! runs.
 //!
 //! `systems` prints what each of the editor's systems cost in each phase,
-//! and `gate` checks the run against the limits in `benches/gate.json` and
-//! fails when one is passed, naming the systems that cost the most.
+//! and `gate` checks the medians of the run against the limits for the
+//! renderer in `benches/gate.json`, exiting with an error when one is
+//! passed and naming the systems that cost the most in that phase.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -527,6 +528,78 @@ fn main() {
             bytes / 1024
         );
     }
+    if args.iter().any(|a| a == "gate") {
+        let passed = gate(&r, &backend, side, layers);
+        drop(r);
+        if !passed {
+            std::process::exit(1);
+        }
+    }
+}
+
+/// The phase each gated number is measured in, for naming its systems.
+const GATED: [(&str, &str); 5] = [
+    ("idle_systems_ms", "idle"),
+    ("idle_tick_ms", "idle"),
+    ("stroke_top_ms", "stroke, top layer"),
+    ("stroke_bottom_ms", "stroke, bottom layer"),
+    ("pan_ms", "pan"),
+];
+
+/// Checks the medians of the run against `benches/gate.json` for the
+/// renderer, and prints each. A number past its limit fails the gate,
+/// naming the editor's systems that cost the most in its phase. The limits
+/// hold for the 4096x4096 document of 32 layers only.
+fn gate(r: &Results, backend: &str, side: u32, layers: usize) -> bool {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("benches/gate.json");
+    let text = std::fs::read_to_string(&path).expect("benches/gate.json reads");
+    let limits: serde_json::Value = serde_json::from_str(&text).expect("gate.json is JSON");
+    let Some(limits) = limits.get(backend) else {
+        println!("gate: no limits for the {backend} renderer");
+        return false;
+    };
+    if (side, layers) != (4096, 32) {
+        println!("gate: the limits are for 4096x4096 and 32 layers");
+        return false;
+    }
+    let median = |v: &[Duration]| (!v.is_empty()).then(|| percentile(v, 0.5));
+    let measured = |key: &str| match key {
+        "idle_systems_ms" => median(&r.idle_systems),
+        "idle_tick_ms" => median(&r.idle_ticks),
+        "stroke_top_ms" => median(&r.top),
+        "stroke_bottom_ms" => median(&r.bottom),
+        "pan_ms" => median(&r.pan),
+        _ => None,
+    };
+    let mut passed = true;
+    for (key, phase) in GATED {
+        let Some(limit) = limits.get(key).and_then(serde_json::Value::as_f64) else {
+            continue;
+        };
+        let Some(value) = measured(key).map(|d| d.as_secs_f64() * 1000.0) else {
+            println!("gate {key}: not measured");
+            passed = false;
+            continue;
+        };
+        let ok = value <= limit;
+        println!(
+            "gate {key}: {value:.2} ms, limit {limit:.2} ms, {}",
+            if ok { "ok" } else { "OVER" }
+        );
+        if !ok {
+            passed = false;
+            if let Some(systems) = r.systems.get(phase) {
+                let ticks = r.ticks.get(phase).copied().unwrap_or(1).max(1);
+                for (name, t) in heaviest(systems, 5) {
+                    println!(
+                        "  {name}: {:.2} ms a tick",
+                        t.as_secs_f64() * 1000.0 / ticks as f64
+                    );
+                }
+            }
+        }
+    }
+    passed
 }
 
 /// Puts the bench's capture handle in both worlds, where the renderer

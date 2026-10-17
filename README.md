@@ -380,6 +380,15 @@ per-frame CSV the `--perf-log` flag writes, and `systems` lists what each of
 the editor's systems cost a tick in each part of the run. Numbers move with
 the load on the machine, so compare runs taken under the same load.
 
+`cargo bench -p pixl --bench view -- cpu gate` (or `gpu gate`) also checks
+the run against `app/benches/gate.json`: the editor's work on an idle tick,
+the whole idle tick, a stroke on the top and on the bottom layer, and a pan,
+each a median against a limit for the renderer. A number past its limit
+fails the run and names the editor's systems that cost the most where it was
+measured. The limits leave room above what a desktop measures, to catch
+regressions rather than to grade the machine; CI runs the gate on the CPU
+renderer.
+
 `cargo bench -p pixl --bench playback -- gpu` (or `cpu`) times stepping to
 the next frame, with the onion skin and without, until the frame first shows
 and until all of it is drawn, and the frame rate playback reaches at 12

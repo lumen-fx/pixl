@@ -1,0 +1,16 @@
+{
+  "gpu": {
+    "idle_systems_ms": 1.0,
+    "idle_tick_ms": 8.0,
+    "stroke_top_ms": 15.0,
+    "stroke_bottom_ms": 40.0,
+    "pan_ms": 18.0
+  },
+  "cpu": {
+    "idle_systems_ms": 1.0,
+    "idle_tick_ms": 8.0,
+    "stroke_top_ms": 50.0,
+    "stroke_bottom_ms": 80.0,
+    "pan_ms": 50.0
+  }
+}
