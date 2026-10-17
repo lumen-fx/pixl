@@ -22,8 +22,12 @@ fn export_all_writes_the_marked_presets_beside_the_document() {
     let _ = std::fs::remove_dir_all(folder());
     let mut doc = Document::new(8, 8, ColorMode::Rgba).unwrap();
     doc.insert_frame(0, 100).unwrap();
-    let mut steps = vec![Step::Edit(saved_as_hero), Step::Menu("file-export-all")];
-    steps.extend(std::iter::repeat_n(Step::Wait, 6));
+    // Export all writes on a worker thread and says what it wrote.
+    let steps = vec![
+        Step::Edit(saved_as_hero),
+        Step::Menu("file-export-all"),
+        Step::Until(|e| e.message.as_deref().is_some_and(|m| !m.ends_with("..."))),
+    ];
     let out = drive(editor_over(doc), steps);
     // The starters: PNG frames and the sprite sheet run; the GIF does not.
     let made = |name: &str| folder().join(name).is_file();

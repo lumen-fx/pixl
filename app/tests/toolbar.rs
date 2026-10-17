@@ -11,6 +11,12 @@ use pixl::Tool;
 use pixl_core::io::decode_png;
 use pixl_core::{ColorMode, Document};
 
+/// The icons decode on worker threads from the first tick, and nothing an
+/// app can see says when they are done (lumen-fx/lumen#541); this pause is
+/// many times what decoding them takes, and the ticks after it bring them
+/// to the frame.
+const DECODED: u64 = 250;
+
 /// The positions of `ink` in the tool bar column, relative to the first.
 fn ink_in_toolbar(frame: &lumenui::Frame, ink: [u8; 4]) -> BTreeSet<(u32, u32)> {
     let mut found = BTreeSet::new();
@@ -57,7 +63,12 @@ fn icon_ink(name: &str, scale: u32) -> BTreeSet<(u32, u32)> {
 fn the_active_tool_shows_its_icon_in_the_accent_ink_at_twice_its_size() {
     let out = drive(
         editor_over(Document::new(32, 32, ColorMode::Rgba).unwrap()),
-        vec![Step::Key("e", false), Step::Wait, Step::Wait],
+        vec![
+            Step::Key("e", false),
+            Step::Sleep(DECODED),
+            Step::Wait,
+            Step::Wait,
+        ],
     );
     common::save(&out.frame, "toolbar");
     assert_eq!(out.tool, Tool::Eraser);
@@ -71,7 +82,7 @@ fn the_active_tool_shows_its_icon_in_the_accent_ink_at_twice_its_size() {
 fn the_resting_icons_are_drawn_in_the_text_ink() {
     let out = drive(
         editor_over(Document::new(32, 32, ColorMode::Rgba).unwrap()),
-        vec![Step::Wait],
+        vec![Step::Sleep(DECODED), Step::Wait, Step::Wait],
     );
     // --text at the resting opacity over the tool bar's --surface-2.
     let resting = ink_in_toolbar(&out.frame, [0x90, 0x90, 0x90, 0xff]);

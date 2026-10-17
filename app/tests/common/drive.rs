@@ -69,9 +69,18 @@ pub enum Step {
     Sleep(u64),
     /// Runs a closure on the editor.
     Edit(fn(&mut Editor)),
+    /// Waits a tick at a time, up to [`UNTIL_TICKS`] ticks of
+    /// [`UNTIL_PAUSE`] each, until the editor shows what a background job
+    /// finishes with.
+    Until(fn(&Editor) -> bool),
     /// Waits a tick.
     Wait,
 }
+
+/// The most ticks one [`Step::Until`] waits, and the pause each waiting
+/// tick gives the worker threads.
+pub const UNTIL_TICKS: u64 = 200;
+pub const UNTIL_PAUSE: std::time::Duration = std::time::Duration::from_millis(10);
 
 /// What the editor ended with.
 pub struct Outcome {
@@ -129,9 +138,11 @@ fn key(name: &str) -> Key {
 }
 
 /// Runs `editor` (the app, possibly with a document inserted) through
-/// `steps`, one per tick from the fifth on.
+/// `steps`, one per tick from the fifth on; a [`Step::Until`] holds its
+/// turn until it is met.
 pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
     let _turn = super::turn();
+    let waits = steps.iter().filter(|s| matches!(s, Step::Until(_))).count() as u64;
     let views: Arc<Mutex<Vec<View>>> = Arc::default();
     let end: Arc<Mutex<Option<Snapshot>>> = Arc::default();
     let (views_out, end_out) = (Arc::clone(&views), Arc::clone(&end));
@@ -139,7 +150,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
     let frame = app
         .add_systems(
             TickStage::Systems,
-            (move |mut tick: Local<usize>,
+            (move |mut state: Local<(usize, (usize, u64))>,
                    mut held: Local<(bool, bool)>,
                    mut editor: ResMut<Editor>,
                    view: Res<View>,
@@ -158,13 +169,29 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    elements: Query<(Entity, &LumenId)>,
                    children: Query<&Children>,
                    mut signals: Signals| {
+                let (tick, cursor) = &mut *state;
                 *tick += 1;
                 let (shift, alt) = &mut *held;
                 modifiers.0.shift = *shift;
                 modifiers.0.alt = *alt;
-                let Some(step) = tick.checked_sub(5).and_then(|i| steps.get(i)) else {
+                if *tick < 5 {
+                    return;
+                }
+                // The step in turn, and the ticks it has waited.
+                let (index, waited) = cursor;
+                let Some(step) = steps.get(*index) else {
                     return;
                 };
+                if let Step::Until(ready) = step
+                    && !ready(&editor)
+                    && *waited < UNTIL_TICKS
+                {
+                    *waited += 1;
+                    std::thread::sleep(UNTIL_PAUSE);
+                    return;
+                }
+                *index += 1;
+                *waited = 0;
                 let place = |at: At| match at {
                     At::Doc(x, y) => pixl::tools::screen_of(&view, Point::new(x, y)),
                     At::Window(w) => w,
@@ -354,9 +381,13 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     Step::Flag(name, v) => signals.set(name, v),
                     Step::Sleep(ms) => std::thread::sleep(std::time::Duration::from_millis(ms)),
                     Step::Edit(f) => f(&mut editor),
-                    Step::Wait => {}
+                    Step::Until(_) | Step::Wait => {}
                 }
             })
+            // After the tick's introspection snapshot, which an element's
+            // place is read from: before it, an element laid out on the
+            // last tick has no place yet.
+            .after(lumenui::lumen_script::runtime::ScriptSet::Dispatch)
             .before(pixl::keymap::read_keys)
             .before(pixl::input::navigate)
             .before(pixl::panels::panel_clicks)
@@ -411,7 +442,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         )
         .screenshot(HeadlessOptions {
             dpr: 1.0,
-            ticks: Some(8 + n),
+            ticks: Some(8 + n + waits * UNTIL_TICKS),
         })
         .expect("the editor runs");
     let end = end.lock().unwrap().take().expect("the editor ran");
