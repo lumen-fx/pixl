@@ -51,6 +51,59 @@ impl Rgba {
     pub fn luma(self) -> u8 {
         ((self.r as u32 * 299 + self.g as u32 * 587 + self.b as u32 * 114 + 500) / 1000) as u8
     }
+
+    /// The color as hue, saturation and lightness.
+    pub fn to_hsl(self) -> Hsl {
+        let (r, g, b) = (
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+        );
+        let max = r.max(g).max(b);
+        let min = r.min(g).min(b);
+        let l = (max + min) / 2.0;
+        let d = max - min;
+        if d <= f32::EPSILON {
+            return Hsl { h: 0.0, s: 0.0, l };
+        }
+        let s = d / (1.0 - (2.0 * l - 1.0).abs());
+        let h = if max == r {
+            60.0 * ((g - b) / d).rem_euclid(6.0)
+        } else if max == g {
+            60.0 * ((b - r) / d + 2.0)
+        } else {
+            60.0 * ((r - g) / d + 4.0)
+        };
+        Hsl { h, s, l }
+    }
+
+    /// The color of `hsl` with alpha `a`.
+    pub fn from_hsl(hsl: Hsl, a: u8) -> Rgba {
+        let h = hsl.h.rem_euclid(360.0);
+        let s = hsl.s.clamp(0.0, 1.0);
+        let l = hsl.l.clamp(0.0, 1.0);
+        let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+        let x = c * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
+        let m = l - c / 2.0;
+        let (r, g, b) = match (h / 60.0) as u32 {
+            0 => (c, x, 0.0),
+            1 => (x, c, 0.0),
+            2 => (0.0, c, x),
+            3 => (0.0, x, c),
+            4 => (x, 0.0, c),
+            _ => (c, 0.0, x),
+        };
+        let byte = |v: f32| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+        Rgba::new(byte(r), byte(g), byte(b), a)
+    }
+}
+
+/// A color as hue (degrees, 0 to 360), saturation and lightness (0 to 1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Hsl {
+    pub h: f32,
+    pub s: f32,
+    pub l: f32,
 }
 
 /// A color as a tool or a fill names it: either a direct color or a palette
@@ -185,6 +238,22 @@ mod tests {
         assert_eq!(p.nearest(Rgba::opaque(200, 10, 0), None), 2);
         assert_eq!(p.nearest(Rgba::new(0, 0, 0, 10), Some(0)), 1);
         assert_eq!(p.nearest(Rgba::new(0, 0, 0, 10), None), 0);
+    }
+
+    #[test]
+    fn hsl_round_trips() {
+        for c in [
+            Rgba::opaque(255, 0, 0),
+            Rgba::opaque(12, 200, 99),
+            Rgba::opaque(40, 40, 40),
+            Rgba::opaque(250, 240, 3),
+            Rgba::opaque(8, 17, 230),
+        ] {
+            assert_eq!(Rgba::from_hsl(c.to_hsl(), 255), c);
+        }
+        let red = Rgba::opaque(255, 0, 0).to_hsl();
+        assert_eq!((red.h, red.s, red.l), (0.0, 1.0, 0.5));
+        assert_eq!(Rgba::opaque(0, 0, 255).to_hsl().h, 240.0);
     }
 
     #[test]

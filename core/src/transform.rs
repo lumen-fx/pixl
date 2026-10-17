@@ -186,23 +186,356 @@ impl Pixels {
                 }
             });
         }
-        let big = self.upscale8();
-        let (s, c) = degrees.to_radians().sin_cos();
         let (scx, scy) = (self.width as f64 / 2.0, self.height as f64 / 2.0);
         let (dcx, dcy) = (width as f64 / 2.0, height as f64 / 2.0);
-        Self::from_fn(width, height, |x, y| {
-            let (px, py) = (x as f64 + 0.5 - dcx, y as f64 + 0.5 - dcy);
-            // Inverse rotation maps the output center back into the source.
-            let sx = px * c + py * s + scx;
-            let sy = -px * s + py * c + scy;
-            let (bx, by) = ((sx * 8.0).floor(), (sy * 8.0).floor());
-            if bx < 0.0 || by < 0.0 || bx >= big.width as f64 || by >= big.height as f64 {
-                fill
-            } else {
-                big.get(bx as i32, by as i32)
-            }
+        let m = Affine::translate(-scx, -scy)
+            .then(&Affine::rotate(degrees))
+            .then(&Affine::translate(dcx, dcy));
+        self.affine(
+            &m,
+            Rect::new(0, 0, width as i32, height as i32),
+            fill,
+            Resample::RotSprite,
+        )
+    }
+}
+
+/// How a transform picks each output pixel. None of them blends pixels:
+/// every output pixel is one of the source's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Resample {
+    /// The source pixel under the output pixel's center.
+    #[default]
+    Nearest,
+    /// RotSprite: sample an 8x Scale2x enlargement, which rounds diagonal
+    /// steps first (see [`Pixels::rotsprite`]).
+    RotSprite,
+    /// Cuts the corners of diagonal steps at the sample point, in the
+    /// manner of torcado's cleanEdge: where two neighbors that agree with
+    /// each other (and not with the pixel) meet at a corner, the part of
+    /// the pixel beyond the line between the midpoints of its two edges
+    /// takes their color. It is Scale2x's rule evaluated at any resolution,
+    /// so it rounds 45 degree steps without the 8x enlargement.
+    CleanEdge,
+}
+
+/// An affine map of the plane: `(x, y)` goes to `(a x + c y + e,
+/// b x + d y + f)`. Pixel coordinates run right and down, so a positive
+/// rotation turns clockwise on screen.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Affine {
+    pub a: f64,
+    pub b: f64,
+    pub c: f64,
+    pub d: f64,
+    pub e: f64,
+    pub f: f64,
+}
+
+impl Affine {
+    pub const IDENTITY: Affine = Affine {
+        a: 1.0,
+        b: 0.0,
+        c: 0.0,
+        d: 1.0,
+        e: 0.0,
+        f: 0.0,
+    };
+
+    pub fn translate(x: f64, y: f64) -> Self {
+        Self {
+            e: x,
+            f: y,
+            ..Self::IDENTITY
+        }
+    }
+
+    /// A scale; a negative factor flips that axis.
+    pub fn scale(x: f64, y: f64) -> Self {
+        Self {
+            a: x,
+            d: y,
+            ..Self::IDENTITY
+        }
+    }
+
+    /// A clockwise rotation by `degrees`.
+    pub fn rotate(degrees: f64) -> Self {
+        let (s, c) = degrees.to_radians().sin_cos();
+        Self {
+            a: c,
+            b: s,
+            c: -s,
+            d: c,
+            ..Self::IDENTITY
+        }
+    }
+
+    /// A shear: `x` moves by `tan(x_degrees) * y` and `y` by
+    /// `tan(y_degrees) * x`.
+    pub fn skew(x_degrees: f64, y_degrees: f64) -> Self {
+        Self {
+            c: x_degrees.to_radians().tan(),
+            b: y_degrees.to_radians().tan(),
+            ..Self::IDENTITY
+        }
+    }
+
+    /// This map, then `next`.
+    pub fn then(&self, next: &Affine) -> Affine {
+        Affine {
+            a: next.a * self.a + next.c * self.b,
+            b: next.b * self.a + next.d * self.b,
+            c: next.a * self.c + next.c * self.d,
+            d: next.b * self.c + next.d * self.d,
+            e: next.a * self.e + next.c * self.f + next.e,
+            f: next.b * self.e + next.d * self.f + next.f,
+        }
+    }
+
+    pub fn apply(&self, x: f64, y: f64) -> (f64, f64) {
+        (
+            self.a * x + self.c * y + self.e,
+            self.b * x + self.d * y + self.f,
+        )
+    }
+
+    pub fn inverse(&self) -> Option<Affine> {
+        let det = self.a * self.d - self.b * self.c;
+        if det.abs() < 1e-12 {
+            return None;
+        }
+        let (a, b, c, d) = (self.d / det, -self.b / det, -self.c / det, self.a / det);
+        Some(Affine {
+            a,
+            b,
+            c,
+            d,
+            e: -(a * self.e + c * self.f),
+            f: -(b * self.e + d * self.f),
         })
     }
+
+    /// A free transform about `pivot`: scale (negative flips), then skew,
+    /// then rotate, all about the pivot, then move by `offset`.
+    pub fn about(
+        pivot: (f64, f64),
+        scale: (f64, f64),
+        skew_degrees: (f64, f64),
+        rotate_degrees: f64,
+        offset: (f64, f64),
+    ) -> Affine {
+        Affine::translate(-pivot.0, -pivot.1)
+            .then(&Affine::scale(scale.0, scale.1))
+            .then(&Affine::skew(skew_degrees.0, skew_degrees.1))
+            .then(&Affine::rotate(rotate_degrees))
+            .then(&Affine::translate(pivot.0 + offset.0, pivot.1 + offset.1))
+    }
+
+    /// The pixels that hold the image of `rect` under this map.
+    pub fn bounds_of(&self, rect: Rect) -> Rect {
+        let corners = [
+            (rect.x as f64, rect.y as f64),
+            (rect.right() as f64, rect.y as f64),
+            (rect.x as f64, rect.bottom() as f64),
+            (rect.right() as f64, rect.bottom() as f64),
+        ]
+        .map(|(x, y)| self.apply(x, y));
+        let x0 = corners.iter().map(|c| c.0).fold(f64::INFINITY, f64::min);
+        let y0 = corners.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
+        let x1 = corners
+            .iter()
+            .map(|c| c.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let y1 = corners
+            .iter()
+            .map(|c| c.1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let (x0, y0) = ((x0 + 1e-6).floor() as i32, (y0 + 1e-6).floor() as i32);
+        let (x1, y1) = ((x1 - 1e-6).ceil() as i32, (y1 - 1e-6).ceil() as i32);
+        Rect::new(x0, y0, (x1 - x0).max(0), (y1 - y0).max(0))
+    }
+}
+
+/// Output tile edge for [`Pixels::affine`].
+const AFFINE_TILE: i32 = 64;
+
+impl Pixels {
+    /// The image of these pixels under `m` (from source pixel coordinates,
+    /// the top-left corner at 0, 0, to output coordinates), over the output
+    /// rectangle `out`. Output pixels whose source falls outside get
+    /// `fill`. The output is cut into tiles rendered side by side.
+    pub fn affine(&self, m: &Affine, out: Rect, fill: u32, resample: Resample) -> Pixels {
+        let mut result = Pixels::new(out.w.max(0) as u32, out.h.max(0) as u32, fill);
+        let Some(inv) = m.inverse() else {
+            return result;
+        };
+        if self.width == 0 || self.height == 0 || out.is_empty() {
+            return result;
+        }
+        let mut tiles = Vec::new();
+        let mut y = out.y;
+        while y < out.bottom() {
+            let mut x = out.x;
+            while x < out.right() {
+                tiles.push(Rect::new(x, y, AFFINE_TILE, AFFINE_TILE).intersect(&out));
+                x += AFFINE_TILE;
+            }
+            y += AFFINE_TILE;
+        }
+        let threads = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .min(tiles.len());
+        let rendered: Vec<(Rect, Vec<u32>)> = if threads <= 1 {
+            tiles
+                .iter()
+                .map(|t| (*t, self.affine_tile(&inv, *t, fill, resample)))
+                .collect()
+        } else {
+            let per = tiles.len().div_ceil(threads);
+            std::thread::scope(|s| {
+                let jobs: Vec<_> = tiles
+                    .chunks(per)
+                    .map(|chunk| {
+                        s.spawn(move || {
+                            chunk
+                                .iter()
+                                .map(|t| (*t, self.affine_tile(&inv, *t, fill, resample)))
+                                .collect::<Vec<_>>()
+                        })
+                    })
+                    .collect();
+                jobs.into_iter()
+                    .flat_map(|j| j.join().expect("a transform tile renders"))
+                    .collect()
+            })
+        };
+        let w = result.width as usize;
+        for (t, values) in rendered {
+            for (i, v) in values.into_iter().enumerate() {
+                let (tx, ty) = (i as i32 % t.w, i as i32 / t.w);
+                let (ox, oy) = ((t.x - out.x + tx) as usize, (t.y - out.y + ty) as usize);
+                result.data[oy * w + ox] = v;
+            }
+        }
+        result
+    }
+
+    /// One output tile of [`Pixels::affine`]; `inv` maps output to source.
+    fn affine_tile(&self, inv: &Affine, tile: Rect, fill: u32, resample: Resample) -> Vec<u32> {
+        let (sw, sh) = (self.width as f64, self.height as f64);
+        let mut out = Vec::with_capacity(tile.area() as usize);
+        match resample {
+            Resample::Nearest | Resample::CleanEdge => {
+                for p in tile.points() {
+                    let (sx, sy) = inv.apply(p.x as f64 + 0.5, p.y as f64 + 0.5);
+                    if sx < 0.0 || sy < 0.0 || sx >= sw || sy >= sh {
+                        out.push(fill);
+                    } else if resample == Resample::Nearest {
+                        out.push(self.get(sx as i32, sy as i32));
+                    } else {
+                        out.push(self.clean_edge(sx, sy));
+                    }
+                }
+            }
+            Resample::RotSprite => {
+                // Enlarge only the source this tile reads, with a margin for
+                // Scale2x's neighbors, so a large image never needs a whole
+                // 8x copy.
+                let src = inv.bounds_of(tile).inflate(3).intersect(&Rect::new(
+                    0,
+                    0,
+                    self.width as i32,
+                    self.height as i32,
+                ));
+                if src.is_empty() {
+                    return vec![fill; tile.area() as usize];
+                }
+                let mut part = Pixels::new(src.w as u32, src.h as u32, 0);
+                for (i, q) in src.points().enumerate() {
+                    part.data[i] = self.get(q.x, q.y);
+                }
+                let big = part.upscale8();
+                for p in tile.points() {
+                    let (sx, sy) = inv.apply(p.x as f64 + 0.5, p.y as f64 + 0.5);
+                    if sx < 0.0 || sy < 0.0 || sx >= sw || sy >= sh {
+                        out.push(fill);
+                        continue;
+                    }
+                    let bx = ((sx - src.x as f64) * 8.0).floor() as i32;
+                    let by = ((sy - src.y as f64) * 8.0).floor() as i32;
+                    if bx < 0 || by < 0 || bx >= big.width as i32 || by >= big.height as i32 {
+                        out.push(fill);
+                    } else {
+                        out.push(big.get(bx, by));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The [`Resample::CleanEdge`] sample at a source position.
+    fn clean_edge(&self, sx: f64, sy: f64) -> u32 {
+        let (x, y) = (sx.floor() as i32, sy.floor() as i32);
+        let (fx, fy) = (sx - x as f64, sy - y as f64);
+        let p = self.get(x, y);
+        let hx = if fx < 0.5 { -1 } else { 1 };
+        let hy = if fy < 0.5 { -1 } else { 1 };
+        let h = self.get_clamped(x + hx, y);
+        let v = self.get_clamped(x, y + hy);
+        let h_far = self.get_clamped(x - hx, y);
+        let v_far = self.get_clamped(x, y - hy);
+        // Scale2x's corner rule: the two neighbors at this corner agree, and
+        // neither agrees with the neighbor across from the other.
+        if h == v && h != p && h != v_far && v != h_far {
+            let u = if hx < 0 { fx } else { 1.0 - fx };
+            let w = if hy < 0 { fy } else { 1.0 - fy };
+            if u + w < 0.5 {
+                return h;
+            }
+        }
+        p
+    }
+
+    /// The pixels of `rect` that `selection` holds; the rest read `clear`.
+    pub fn from_raster_masked(
+        raster: &Raster,
+        rect: Rect,
+        selection: Option<&crate::selection::Selection>,
+        clear: u32,
+    ) -> Self {
+        let mut out = Self::from_raster(raster, rect);
+        if let Some(s) = selection {
+            for (i, p) in rect.points().enumerate() {
+                if !s.contains(p.x, p.y) {
+                    out.data[i] = clear;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Writes `lifted` (pixels whose top-left sat at `at` on the canvas)
+/// through `m` (canvas to canvas) into `raster`, skipping `clear` pixels so
+/// what is under stays. Returns the changed area.
+pub fn draw_transformed(
+    raster: &mut Raster,
+    lifted: &Pixels,
+    at: Point,
+    m: &Affine,
+    resample: Resample,
+    clear: u32,
+) -> Rect {
+    let local = Affine::translate(at.x as f64, at.y as f64).then(m);
+    let src = Rect::new(0, 0, lifted.width as i32, lifted.height as i32);
+    let out = local.bounds_of(src).intersect(&raster.bounds());
+    if out.is_empty() {
+        return Rect::EMPTY;
+    }
+    let px = lifted.affine(&local, out, clear, resample);
+    px.write_to(raster, Point::new(out.x, out.y), Some(clear))
 }
 
 /// A transform of the pixels in a rectangle of one cel.
@@ -216,6 +549,8 @@ pub enum CelTransform {
     Rotate(f64),
     /// Nearest-neighbor resize to this size.
     Scale(u32, u32),
+    /// Any affine map (canvas to canvas), as free transform makes.
+    Affine(Affine, Resample),
 }
 
 /// Lifts the pixels of `rect` from a cel, transforms them and puts them back
@@ -244,6 +579,12 @@ pub fn transform_cel(
         return Ok(Rect::EMPTY);
     }
     let src = Pixels::from_raster(raster, rect);
+    if let CelTransform::Affine(m, resample) = op {
+        let mut dirty = raster.fill_rect_raw(&rect, clear);
+        let at = Point::new(rect.x, rect.y);
+        dirty = dirty.union(&draw_transformed(raster, &src, at, &m, resample, clear));
+        return Ok(dirty);
+    }
     let out = match op {
         CelTransform::FlipH => src.flip_h(),
         CelTransform::FlipV => src.flip_v(),
@@ -253,6 +594,7 @@ pub fn transform_cel(
             src.rotsprite(deg, w, h, clear)
         }
         CelTransform::Scale(w, h) => src.scale_nearest(w, h),
+        CelTransform::Affine(..) => unreachable!("handled above"),
     };
     let mut dirty = raster.fill_rect_raw(&rect, clear);
     let at = Point::new(
@@ -270,8 +612,8 @@ pub enum CanvasTransform {
     FlipV,
     /// Quarter turns clockwise; odd turns swap width and height.
     Rotate90(i32),
-    /// Nearest-neighbor resize of every image.
-    Scale(u32, u32),
+    /// Resizes every image to this size, picking pixels by the resampling.
+    Scale(u32, u32, Resample),
 }
 
 /// Applies a transform to every image of the document and moves slices to
@@ -283,7 +625,7 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
         CanvasTransform::FlipH | CanvasTransform::FlipV => (w, h),
         CanvasTransform::Rotate90(q) if q.rem_euclid(2) == 1 => (h, w),
         CanvasTransform::Rotate90(_) => (w, h),
-        CanvasTransform::Scale(sw, sh) => (sw, sh),
+        CanvasTransform::Scale(sw, sh, _) => (sw, sh),
     };
     if nw == 0 || nh == 0 || nw > crate::document::MAX_SIZE || nh > crate::document::MAX_SIZE {
         return Err(Error::InvalidSize {
@@ -302,7 +644,7 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
                 2 => Rect::new(w - r.right(), h - r.bottom(), r.w, r.h),
                 _ => Rect::new(r.y, w - r.right(), r.h, r.w),
             },
-            CanvasTransform::Scale(sw, sh) => {
+            CanvasTransform::Scale(sw, sh, _) => {
                 let sx = |v: i32| (v as i64 * sw as i64 / w as i64) as i32;
                 let sy = |v: i32| (v as i64 * sh as i64 / h as i64) as i32;
                 Rect::new(
@@ -320,7 +662,12 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
             CanvasTransform::FlipH => px.flip_h(),
             CanvasTransform::FlipV => px.flip_v(),
             CanvasTransform::Rotate90(q) => px.rotate_quarters(q),
-            CanvasTransform::Scale(sw, sh) => px.scale_nearest(sw, sh),
+            CanvasTransform::Scale(sw, sh, Resample::Nearest) => px.scale_nearest(sw, sh),
+            CanvasTransform::Scale(sw, sh, resample) => {
+                let fill = raster.fill_raw();
+                let m = Affine::scale(sw as f64 / w as f64, sh as f64 / h as f64);
+                px.affine(&m, Rect::new(0, 0, sw as i32, sh as i32), fill, resample)
+            }
         };
         let mut fresh = match raster {
             Raster::Rgba(i) => Raster::Rgba(crate::image::TiledImage::new(nw, nh, i.fill())),
@@ -361,7 +708,9 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
                 2 => Vec2::new(fw - p.x, fh - p.y),
                 _ => Vec2::new(p.y, fw - p.x),
             },
-            CanvasTransform::Scale(sw, sh) => Vec2::new(p.x * sw as f64 / fw, p.y * sh as f64 / fh),
+            CanvasTransform::Scale(sw, sh, _) => {
+                Vec2::new(p.x * sw as f64 / fw, p.y * sh as f64 / fh)
+            }
         }
     };
     let region = |r: &Region| -> Region {
@@ -394,6 +743,70 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
     doc.s.width = nw;
     doc.s.height = nh;
     Ok(doc.bounds())
+}
+
+/// Gives the canvas a new size, with what was at the top-left corner now at
+/// `offset` (negative cuts off the left or top). Images, masks and
+/// references all move; what falls outside is cut off, new area is empty.
+/// Slices move too. Run it in a [`crate::History`] transaction with
+/// [`crate::Scope::All`] to make it undoable.
+pub fn resize_canvas(
+    doc: &mut Document,
+    width: u32,
+    height: u32,
+    offset: Point,
+) -> Result<Rect, Error> {
+    if width == 0
+        || height == 0
+        || width > crate::document::MAX_SIZE
+        || height > crate::document::MAX_SIZE
+    {
+        return Err(Error::InvalidSize { width, height });
+    }
+    for raster in doc.images.values_mut() {
+        let px = Pixels::from_raster(raster, raster.bounds());
+        let mut fresh = match raster {
+            Raster::Rgba(i) => Raster::Rgba(crate::image::TiledImage::new(width, height, i.fill())),
+            Raster::Indexed(i) => {
+                Raster::Indexed(crate::image::TiledImage::new(width, height, i.fill()))
+            }
+            Raster::Mask(i) => Raster::Mask(crate::image::TiledImage::new(width, height, i.fill())),
+        };
+        let fill = fresh.fill_raw();
+        px.write_to(&mut fresh, offset, Some(fill));
+        *raster = fresh;
+    }
+    for slice in doc.s.slices.iter_mut() {
+        slice.bounds.x += offset.x;
+        slice.bounds.y += offset.y;
+    }
+    let (dx, dy) = (offset.x as f64, offset.y as f64);
+    for rig in doc.rigs_mut() {
+        rig.map(
+            |p| Vec2::new(p.x + dx, p.y + dy),
+            false,
+            0.0,
+            |r| {
+                let b = r.bounds();
+                let moved = Rect::new(b.x + offset.x, b.y + offset.y, b.w, b.h);
+                Region::from_bits(moved, r.bits().to_vec())
+                    .unwrap_or_else(|| Region::rect(Rect::EMPTY))
+            },
+        );
+    }
+    doc.s.width = width;
+    doc.s.height = height;
+    Ok(doc.bounds())
+}
+
+/// Crops the canvas to `rect`.
+pub fn crop(doc: &mut Document, rect: Rect) -> Result<Rect, Error> {
+    resize_canvas(
+        doc,
+        rect.w.max(0) as u32,
+        rect.h.max(0) as u32,
+        Point::new(-rect.x, -rect.y),
+    )
 }
 
 #[cfg(test)]
@@ -504,6 +917,123 @@ mod tests {
     }
 
     #[test]
+    fn affine_maps_compose_and_invert() {
+        let m = Affine::about((4.0, 4.0), (2.0, -1.0), (10.0, 0.0), 30.0, (1.0, 2.0));
+        let inv = m.inverse().unwrap();
+        let (x, y) = m.apply(3.0, 7.0);
+        let (bx, by) = inv.apply(x, y);
+        assert!((bx - 3.0).abs() < 1e-9 && (by - 7.0).abs() < 1e-9);
+        let r = Affine::rotate(90.0);
+        let (x, y) = r.apply(1.0, 0.0);
+        assert!(
+            x.abs() < 1e-9 && (y - 1.0).abs() < 1e-9,
+            "clockwise on screen"
+        );
+        assert_eq!(
+            Affine::scale(2.0, 3.0).bounds_of(Rect::new(1, 1, 2, 2)),
+            Rect::new(2, 3, 4, 6)
+        );
+    }
+
+    #[test]
+    fn affine_resampling_keeps_colors_and_flips_exactly() {
+        let p = grid(5, 4);
+        let flip = Affine::scale(-1.0, 1.0).then(&Affine::translate(5.0, 0.0));
+        for r in [Resample::Nearest, Resample::RotSprite, Resample::CleanEdge] {
+            assert_eq!(
+                p.affine(&flip, Rect::new(0, 0, 5, 4), 0, r),
+                p.flip_h(),
+                "{r:?}"
+            );
+            let twice = p.affine(&Affine::scale(2.0, 2.0), Rect::new(0, 0, 10, 8), 0, r);
+            assert!(twice.data.iter().all(|v| p.data.contains(v)), "{r:?}");
+        }
+        // A 45-degree step: clean edge cuts the corner, nearest does not.
+        let step = Pixels {
+            width: 2,
+            height: 2,
+            data: vec![1, 0, 1, 1],
+        };
+        let up = Affine::scale(8.0, 8.0);
+        let nearest = step.affine(&up, Rect::new(0, 0, 16, 16), 9, Resample::Nearest);
+        let clean = step.affine(&up, Rect::new(0, 0, 16, 16), 9, Resample::CleanEdge);
+        let ones = |q: &Pixels| q.data.iter().filter(|v| **v == 1).count();
+        assert_eq!(ones(&nearest), 3 * 64);
+        assert!(
+            ones(&clean) > ones(&nearest),
+            "the empty pixel's inner corner fills"
+        );
+        assert_eq!(clean.get(15, 0), 0, "the far corner stays");
+    }
+
+    #[test]
+    fn rotsprite_through_tiles_matches_a_whole_enlargement() {
+        let mut p = Pixels::new(150, 90, 0);
+        for i in 0..p.data.len() {
+            p.data[i] = ((i * 7919) % 5) as u32;
+        }
+        let (w, h) = p.rotated_size(33.0);
+        let r = p.rotsprite(33.0, w, h, 0);
+        // The same rotation sampled from one full 8x enlargement.
+        let big = p.scale2x().scale2x().scale2x();
+        let m = Affine::translate(-75.0, -45.0)
+            .then(&Affine::rotate(33.0))
+            .then(&Affine::translate(w as f64 / 2.0, h as f64 / 2.0));
+        let inv = m.inverse().unwrap();
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let (sx, sy) = inv.apply(x as f64 + 0.5, y as f64 + 0.5);
+                let want = if sx < 0.0 || sy < 0.0 || sx >= 150.0 || sy >= 90.0 {
+                    0
+                } else {
+                    big.get((sx * 8.0).floor() as i32, (sy * 8.0).floor() as i32)
+                };
+                assert_eq!(r.get(x, y), want, "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn canvas_size_crop_and_resampled_resize() {
+        let mut d = Document::new(8, 8, ColorMode::Rgba).unwrap();
+        let l = d.layers()[0].id;
+        let red = Rgba::opaque(255, 0, 0).to_u32();
+        d.target(l, 0).unwrap().raster.set_raw(1, 1, red);
+        resize_canvas(&mut d, 12, 10, Point::new(2, 3)).unwrap();
+        assert_eq!((d.width(), d.height()), (12, 10));
+        assert_eq!(d.cel_raster(l, 0).unwrap().unwrap().get_raw(3, 4), red);
+        crop(&mut d, Rect::new(3, 4, 2, 2)).unwrap();
+        assert_eq!((d.width(), d.height()), (2, 2));
+        assert_eq!(d.cel_raster(l, 0).unwrap().unwrap().get_raw(0, 0), red);
+        transform_canvas(&mut d, CanvasTransform::Scale(6, 6, Resample::CleanEdge)).unwrap();
+        let r = d.cel_raster(l, 0).unwrap().unwrap();
+        assert_eq!(r.get_raw(0, 0), red);
+        assert_eq!(r.get_raw(5, 5), 0);
+        assert!(resize_canvas(&mut d, 0, 4, Point::new(0, 0)).is_err());
+    }
+
+    #[test]
+    fn a_cel_takes_a_free_transform() {
+        let mut d = Document::new(16, 16, ColorMode::Rgba).unwrap();
+        let l = d.layers()[0].id;
+        let red = Rgba::opaque(255, 0, 0).to_u32();
+        for x in 2..6 {
+            d.target(l, 0).unwrap().raster.set_raw(x, 2, red);
+        }
+        let m = Affine::about((4.0, 2.5), (2.0, 1.0), (0.0, 0.0), 0.0, (4.0, 6.0));
+        transform_cel(
+            &mut d,
+            l,
+            0,
+            Rect::new(2, 2, 4, 1),
+            CelTransform::Affine(m, Resample::Nearest),
+        )
+        .unwrap();
+        let r = d.cel_raster(l, 0).unwrap().unwrap();
+        assert_eq!(r.content_bounds(), Rect::new(4, 8, 8, 1));
+    }
+
+    #[test]
     fn cel_transforms() {
         let mut d = Document::new(8, 8, ColorMode::Rgba).unwrap();
         let l = d.layers()[0].id;
@@ -553,9 +1083,9 @@ mod tests {
         assert_eq!(d.slices()[0].pivot, Some(Point::new(0, 1)));
         h.undo(&mut d);
         assert_eq!(d, before);
-        transform_canvas(&mut d, CanvasTransform::Scale(12, 8)).unwrap();
+        transform_canvas(&mut d, CanvasTransform::Scale(12, 8, Resample::Nearest)).unwrap();
         let r = d.cel_raster(l, 0).unwrap().unwrap();
         assert_eq!(r.content_bounds(), Rect::new(0, 0, 2, 2));
-        assert!(transform_canvas(&mut d, CanvasTransform::Scale(0, 8)).is_err());
+        assert!(transform_canvas(&mut d, CanvasTransform::Scale(0, 8, Resample::Nearest)).is_err());
     }
 }

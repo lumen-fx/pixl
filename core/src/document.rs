@@ -1113,17 +1113,16 @@ impl Document {
         }
         let palette = self.s.palette.clone();
         let ti = self.s.transparent_index;
-        for raster in self.images.values_mut() {
+        // Reference layers stay RGBA: they never take part in indexed editing.
+        let refs = self.reference_images();
+        for (id, raster) in self.images.iter_mut() {
+            if refs.contains(id) {
+                continue;
+            }
             let converted = match (&*raster, mode) {
-                (Raster::Rgba(img), ColorMode::Indexed) => {
-                    Some(Raster::Indexed(img.map(ti, |c| {
-                        if c.a == 0 {
-                            ti
-                        } else {
-                            palette.nearest(c, Some(ti))
-                        }
-                    })))
-                }
+                (Raster::Rgba(img), ColorMode::Indexed) => Some(Raster::Indexed(
+                    crate::palettes::index_image(img, &palette, ti, crate::palettes::Dither::None),
+                )),
                 (Raster::Indexed(img), ColorMode::Rgba) => {
                     Some(Raster::Rgba(img.map(Rgba::TRANSPARENT, |i| {
                         if i == ti {
@@ -1139,29 +1138,19 @@ impl Document {
                 *raster = c;
             }
         }
-        // Reference layers stay RGBA: they never take part in indexed editing.
-        let refs: Vec<ImageId> = self
-            .walk()
+        self.s.mode = mode;
+        self.bounds()
+    }
+
+    /// The images of reference layers.
+    pub(crate) fn reference_images(&self) -> Vec<ImageId> {
+        self.walk()
             .into_iter()
             .filter_map(|(_, l)| match l.kind {
                 LayerKind::Reference { image } => Some(image),
                 _ => None,
             })
-            .collect();
-        for id in refs {
-            if let Some(Raster::Indexed(img)) = self.images.get(&id) {
-                let back = img.map(Rgba::TRANSPARENT, |i| {
-                    if i == ti {
-                        Rgba::TRANSPARENT
-                    } else {
-                        palette.get(i)
-                    }
-                });
-                self.images.insert(id, Raster::Rgba(back));
-            }
-        }
-        self.s.mode = mode;
-        self.bounds()
+            .collect()
     }
 }
 

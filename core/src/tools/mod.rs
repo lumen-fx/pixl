@@ -5,9 +5,12 @@
 //! that order. Every tool goes through [`Canvas::stamp`] or
 //! [`Canvas::plot`], so every tool honors all of them.
 
+pub mod brushes;
 pub mod fill;
+pub mod gradient;
 pub mod paint;
 pub mod shapes;
+pub mod text;
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -19,6 +22,7 @@ use crate::geom::{Point, Rect};
 use crate::history::{History, Scope};
 use crate::image::Raster;
 use crate::selection::Selection;
+use crate::transform::Pixels;
 
 /// An ordered dither matrix.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -93,6 +97,28 @@ pub enum Ink {
         from: Color,
         to: Color,
         tolerance: u8,
+    },
+    /// Copies pixels from `source` (the image as the stroke started) at
+    /// `offset` from the pixel painted: the clone stamp. Pixels whose source
+    /// is off the image stay.
+    Clone { source: Arc<Raster>, offset: Point },
+    /// Tiles `pattern` (raw pixel values in the image's format) over the
+    /// canvas from `origin`; values equal to `skip` leave the pixel.
+    Pattern {
+        pattern: Arc<Pixels>,
+        origin: Point,
+        skip: Option<u32>,
+    },
+    /// Softens (or with `sharpen`, hardens) each pixel against its eight
+    /// neighbors in `source`, by `amount` (255 is the full effect). With
+    /// `keep_colors` the result takes the nearest color already in that
+    /// neighborhood, so no new color appears; indexed images always take a
+    /// palette color. Each pixel changes once per stroke.
+    Blur {
+        source: Arc<Raster>,
+        sharpen: bool,
+        amount: u8,
+        keep_colors: bool,
     },
 }
 
@@ -471,7 +497,119 @@ impl<'a> Canvas<'a> {
                 self.matches(current, from, *tolerance)
                     .then(|| self.resolve(*to))
             }
+            Ink::Clone { source, offset } => {
+                let (sx, sy) = (x + offset.x, y + offset.y);
+                source
+                    .bounds()
+                    .contains(sx, sy)
+                    .then(|| source.get_raw(sx, sy))
+            }
+            Ink::Pattern {
+                pattern,
+                origin,
+                skip,
+            } => {
+                if pattern.width == 0 || pattern.height == 0 {
+                    return None;
+                }
+                let px = (x - origin.x).rem_euclid(pattern.width as i32);
+                let py = (y - origin.y).rem_euclid(pattern.height as i32);
+                let v = pattern.get(px, py);
+                (Some(v) != *skip).then_some(v)
+            }
+            Ink::Blur {
+                source,
+                sharpen,
+                amount,
+                keep_colors,
+            } => {
+                if !self.shaded.insert(Point::new(x, y)) {
+                    return None;
+                }
+                self.blurred(source, x, y, *sharpen, *amount, *keep_colors)
+            }
         }
+    }
+
+    /// The blur ink's value at `(x, y)`.
+    fn blurred(
+        &self,
+        source: &Raster,
+        x: i32,
+        y: i32,
+        sharpen: bool,
+        amount: u8,
+        keep_colors: bool,
+    ) -> Option<u32> {
+        let b = source.bounds();
+        if !b.contains(x, y) {
+            return None;
+        }
+        let here_raw = source.get_raw(x, y);
+        let here = self.raw_to_rgba(here_raw);
+        // The alpha-weighted mean of the 3x3 neighborhood.
+        let (mut r, mut g, mut bl, mut a, mut n) = (0u32, 0u32, 0u32, 0u32, 0u32);
+        let mut near: Vec<u32> = Vec::with_capacity(9);
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let (nx, ny) = (x + dx, y + dy);
+                if !b.contains(nx, ny) {
+                    continue;
+                }
+                let raw = source.get_raw(nx, ny);
+                if !near.contains(&raw) {
+                    near.push(raw);
+                }
+                let c = self.raw_to_rgba(raw);
+                let w = c.a as u32;
+                r += c.r as u32 * w;
+                g += c.g as u32 * w;
+                bl += c.b as u32 * w;
+                a += w;
+                n += 1;
+            }
+        }
+        let mean = match (r + a / 2).checked_div(a) {
+            None => Rgba::TRANSPARENT,
+            Some(mr) => Rgba::new(
+                mr as u8,
+                ((g + a / 2) / a) as u8,
+                ((bl + a / 2) / a) as u8,
+                ((a + n / 2) / n) as u8,
+            ),
+        };
+        let k = amount as f32 / 255.0;
+        let mix = |p: u8, m: u8| {
+            let (p, m) = (p as f32, m as f32);
+            let v = if sharpen {
+                p + (p - m) * k
+            } else {
+                p + (m - p) * k
+            };
+            v.round().clamp(0.0, 255.0) as u8
+        };
+        let want = Rgba::new(
+            mix(here.r, mean.r),
+            mix(here.g, mean.g),
+            mix(here.b, mean.b),
+            mix(here.a, mean.a),
+        );
+        if want == here {
+            return None;
+        }
+        let value = match &*self.raster {
+            Raster::Indexed(_) => self.resolve(Color::Rgba(want)),
+            _ if keep_colors => *near
+                .iter()
+                .min_by_key(|v| {
+                    let c = self.raw_to_rgba(**v);
+                    let d = |p: u8, q: u8| (p as i32 - q as i32).pow(2);
+                    d(c.r, want.r) + d(c.g, want.g) + d(c.b, want.b) + d(c.a, want.a)
+                })
+                .expect("the pixel itself is near"),
+            _ => self.resolve(Color::Rgba(want)),
+        };
+        (value != here_raw).then_some(value)
     }
 
     /// Applies `ink` at one pixel and at its mirror images.

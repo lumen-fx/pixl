@@ -89,71 +89,7 @@ pub struct GifExport {
     pub warnings: Vec<GifWarning>,
 }
 
-type Rgb = [u8; 3];
-
-/// Median cut: splits the color histogram into at most `max` boxes and
-/// returns each box's weighted mean. The box split next is the one with the
-/// widest range on any channel; it is cut at the weighted median of that
-/// channel.
-fn median_cut(histogram: &[(Rgb, u32)], max: usize) -> Vec<Rgb> {
-    if histogram.len() <= max {
-        return histogram.iter().map(|(c, _)| *c).collect();
-    }
-    let widest = |b: &[(Rgb, u32)]| {
-        (0..3)
-            .map(|axis| {
-                let lo = b.iter().map(|(c, _)| c[axis]).min().unwrap_or(0);
-                let hi = b.iter().map(|(c, _)| c[axis]).max().unwrap_or(0);
-                (hi - lo, axis)
-            })
-            .max()
-            .unwrap_or((0, 0))
-    };
-    let mut boxes: Vec<Vec<(Rgb, u32)>> = vec![histogram.to_vec()];
-    while boxes.len() < max {
-        let Some((index, axis)) = boxes
-            .iter()
-            .enumerate()
-            .filter(|(_, b)| b.len() > 1)
-            .map(|(i, b)| {
-                let (range, axis) = widest(b);
-                let weight: u64 = b.iter().map(|(_, w)| *w as u64).sum();
-                ((range, weight, std::cmp::Reverse(i)), (i, axis))
-            })
-            .max()
-            .map(|(_, pick)| pick)
-        else {
-            break;
-        };
-        let mut b = std::mem::take(&mut boxes[index]);
-        b.sort_unstable_by_key(|(c, _)| (c[axis], *c));
-        let total: u64 = b.iter().map(|(_, w)| *w as u64).sum();
-        let mut acc = 0u64;
-        let mut cut = b.len() / 2;
-        for (i, (_, w)) in b.iter().enumerate() {
-            acc += *w as u64;
-            if acc * 2 >= total {
-                cut = i + 1;
-                break;
-            }
-        }
-        let cut = cut.clamp(1, b.len() - 1);
-        let right = b.split_off(cut);
-        boxes[index] = b;
-        boxes.push(right);
-    }
-    boxes
-        .iter()
-        .map(|b| {
-            let total: u64 = b.iter().map(|(_, w)| *w as u64).sum::<u64>().max(1);
-            let mean = |axis: usize| {
-                let sum: u64 = b.iter().map(|(c, w)| c[axis] as u64 * *w as u64).sum();
-                ((sum + total / 2) / total) as u8
-            };
-            [mean(0), mean(1), mean(2)]
-        })
-        .collect()
-}
+use crate::palettes::{Rgb, median_cut};
 
 fn nearest(palette: &[Rgb], c: Rgb) -> u8 {
     let d = |p: &Rgb| -> u32 {

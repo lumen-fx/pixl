@@ -159,6 +159,28 @@ impl Selection {
         self.morph(n as i32, false);
     }
 
+    /// Keeps a band `n` pixels wide each side of the selection's edge: the
+    /// grown selection less the shrunk one.
+    pub fn border(&mut self, n: u32) {
+        let mut inner = self.clone();
+        inner.shrink(n);
+        self.grow(n);
+        self.combine(&inner, SelectOp::Subtract);
+    }
+
+    /// The selection as coverage (255 selected, 0 not), for saving it as a
+    /// mask image.
+    pub fn to_mask(&self) -> TiledImage<u8> {
+        self.mask.map(0, |s| if s { 255 } else { 0 })
+    }
+
+    /// A selection of the pixels where `mask` is at least half covered.
+    pub fn from_mask(mask: &TiledImage<u8>) -> Self {
+        Self {
+            mask: mask.map(false, |v| v >= 128),
+        }
+    }
+
     fn morph(&mut self, n: i32, grow: bool) {
         if n == 0 {
             return;
@@ -288,6 +310,16 @@ mod tests {
         assert!(!s.contains(12, 12) && s.contains(0, 0));
         s.invert();
         assert_eq!(s, Selection::rect(100, 100, Rect::new(10, 10, 5, 5)));
+    }
+
+    #[test]
+    fn border_and_masks() {
+        let mut s = Selection::rect(30, 30, Rect::new(10, 10, 6, 6));
+        let saved = Selection::from_mask(&s.to_mask());
+        assert_eq!(saved, s);
+        s.border(1);
+        assert!(s.contains(9, 9) && s.contains(10, 10) && !s.contains(12, 12));
+        assert_eq!(s.count(), 8 * 8 - 4 * 4);
     }
 
     #[test]

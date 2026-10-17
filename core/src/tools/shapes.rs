@@ -232,6 +232,46 @@ pub fn rect_outline(a: Point, b: Point) -> Vec<Point> {
     out
 }
 
+/// The outline of a closed polygon through `points`.
+pub fn polygon_outline(points: &[Point]) -> Vec<Point> {
+    let mut out = polyline(points);
+    if points.len() > 2 {
+        let close = line(*points.last().expect("not empty"), points[0]);
+        out.extend(close.into_iter().skip(1));
+        if out.len() > 1 && out.first() == out.last() {
+            out.pop();
+        }
+    }
+    out
+}
+
+/// A cubic Bezier curve from `p0` to `p3` with control points `p1` and
+/// `p2`, as one-pixel steps with no L-shaped corners: the curve is cut into
+/// short straight pieces (none longer than about two pixels, so the pieces
+/// follow the curve), each rasterized with [`line`], and the corners the
+/// joins leave are taken out with [`pixel_perfect`].
+pub fn bezier(p0: Point, p1: Point, p2: Point, p3: Point) -> Vec<Point> {
+    let f = |p: Point| (p.x as f64, p.y as f64);
+    let (a, b, c, d) = (f(p0), f(p1), f(p2), f(p3));
+    let hull = [a, b, c, d]
+        .windows(2)
+        .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
+        .sum::<f64>();
+    let n = (hull / 2.0).ceil().max(1.0) as usize;
+    let mut pts: Vec<Point> = Vec::with_capacity(n + 1);
+    for i in 0..=n {
+        let t = i as f64 / n as f64;
+        let u = 1.0 - t;
+        let x = u * u * u * a.0 + 3.0 * u * u * t * b.0 + 3.0 * u * t * t * c.0 + t * t * t * d.0;
+        let y = u * u * u * a.1 + 3.0 * u * u * t * b.1 + 3.0 * u * t * t * c.1 + t * t * t * d.1;
+        let p = Point::new(x.round() as i32, y.round() as i32);
+        if pts.last() != Some(&p) {
+            pts.push(p);
+        }
+    }
+    pixel_perfect(&polyline(&pts))
+}
+
 /// Pixels inside a closed polygon (even-odd rule at pixel centers) plus its
 /// outline, the lasso and contour shape.
 pub fn polygon_filled(points: &[Point]) -> Vec<Point> {
@@ -271,6 +311,46 @@ pub fn polygon_filled(points: &[Point]) -> Vec<Point> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bezier_curves_are_connected_and_pixel_perfect() {
+        let c = bezier(
+            Point::new(0, 20),
+            Point::new(5, 0),
+            Point::new(25, 0),
+            Point::new(30, 20),
+        );
+        assert_eq!(c.first(), Some(&Point::new(0, 20)));
+        assert_eq!(c.last(), Some(&Point::new(30, 20)));
+        for w in c.windows(2) {
+            assert!((w[0].x - w[1].x).abs() <= 1 && (w[0].y - w[1].y).abs() <= 1);
+        }
+        for w in c.windows(3) {
+            let corner = (w[0].x == w[1].x || w[0].y == w[1].y)
+                && (w[1].x == w[2].x || w[1].y == w[2].y)
+                && w[0].x != w[2].x
+                && w[0].y != w[2].y;
+            assert!(!corner, "an L at {:?}", w[1]);
+        }
+        let straight = bezier(
+            Point::new(0, 0),
+            Point::new(3, 0),
+            Point::new(6, 0),
+            Point::new(9, 0),
+        );
+        assert_eq!(straight, line(Point::new(0, 0), Point::new(9, 0)));
+    }
+
+    #[test]
+    fn polygon_outlines_close() {
+        let tri = [Point::new(0, 0), Point::new(6, 0), Point::new(0, 6)];
+        let o = polygon_outline(&tri);
+        assert!(o.contains(&Point::new(3, 3)), "the closing edge");
+        let mut sorted = o.clone();
+        sorted.sort_by_key(|p| (p.y, p.x));
+        sorted.dedup();
+        assert_eq!(sorted.len(), o.len(), "no pixel twice");
+    }
 
     fn runs(points: &[Point]) -> Vec<usize> {
         let mut out = vec![1];

@@ -12,8 +12,9 @@ Rust SDK.
 ## Status
 
 Early. `pixl-core` (in `core/`) holds the editor core with no UI: the document
-model, compositing, undo history, raster tools, transforms, and PNG and sprite
-sheet I/O (sheets carry Aseprite-compatible JSON). The editor itself is the
+model, compositing, undo history, raster tools, adjustments and filters,
+palettes and their files, transforms, and PNG and sprite sheet I/O (sheets
+carry Aseprite-compatible JSON). The editor itself is the
 `pixl` program in `app/`, built with the Lumen Rust SDK: one document per
 window, with a menu row, the tool bar, tool options, the canvas, and the color,
 palette, layers and history panels.

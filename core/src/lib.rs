@@ -9,6 +9,7 @@ pub mod color;
 pub mod composite;
 pub mod document;
 pub mod error;
+pub mod filters;
 pub mod geom;
 pub mod gif;
 pub mod history;
@@ -16,12 +17,13 @@ pub mod image;
 pub mod io;
 pub mod merge;
 pub mod native;
+pub mod palettes;
 pub mod rig;
 pub mod selection;
 pub mod tools;
 pub mod transform;
 
-pub use color::{Color, ColorMode, Palette, Rgba};
+pub use color::{Color, ColorMode, Hsl, Palette, Rgba};
 pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame, composite_ghosts};
 pub use document::{
     Background, BlendMode, Cel, Document, Frame, ImageId, Layer, LayerId, LayerKind, LayerMask,
@@ -39,4 +41,7 @@ pub use selection::{SelectOp, Selection};
 pub use tools::{
     Bayer, Brush, BrushShape, Canvas, Ink, Symmetry, SymmetryMode, ToolContext, edit_cel,
 };
-pub use transform::{CanvasTransform, CelTransform, Pixels, transform_canvas, transform_cel};
+pub use transform::{
+    Affine, CanvasTransform, CelTransform, Pixels, Resample, crop, resize_canvas, transform_canvas,
+    transform_cel,
+};
