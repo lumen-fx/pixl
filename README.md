@@ -183,13 +183,27 @@ run it from `app/`: `cd app && ../target/release/pixl`.
 
 A skeleton layer rigs a character so it can be posed instead of redrawn:
 bones in a tree, with raster layers (or selected regions of them) bound to
-one bone each as rigid parts. A pose turns and moves bones, with two-bone IK
-for limbs; poses save to a library and mirror left to right by bone name
-(`arm.L` and `arm.R`, `leg_l` and `leg_r`). Rendering a pose draws every part
-at its bone's place with RotSprite, so turned parts keep clean one-pixel
-outlines, into a new frame of ordinary pixels to touch up. Poses keyed on
-frames fill the frames between them, eased, and generated frames are marked
-so they can be rendered again after the rig changes.
+one bone each as rigid parts. Rendering a pose draws every part at its
+bone's place with RotSprite, so turned parts keep clean one-pixel outlines,
+into frames of ordinary pixels to touch up.
+
+The Rig panel works on the document's skeleton (New skeleton makes one).
+In Bones mode a drag on the canvas draws a bone, starting from the selected
+bone's end to chain one to it; dragging a joint or a binding's pivot moves
+it, and Shift moves the selected bone's end. The panel lists the bones,
+renames and reparents the selected one, and binds the active layer, or the
+selected pixels of it, to it. The rig reads its parts from its rest frame,
+which "Use this frame" sets. In Pose mode a drag turns a bone, its head
+moves it, and with IK on the end of a bone bends it together with its
+parent; Shift snaps turns to 15 degrees. Posing a frame other than the rest
+frame draws the pose into that frame as it changes and keys it there; on
+the rest frame only the bones move. Poses save to a library with
+thumbnails, mirror left to right by bone name (`arm.L` and `arm.R`,
+`leg_l` and `leg_r`), and reset to rest. A frame's key has an easing toward
+the next key. Render to new frame adds a frame holding the pose; Render
+keyed fills a range of frames from the keys, eased; Regenerate renders
+every generated frame again after the rig changes. Bones are drawn over the
+art in the theme's colors and are never part of it.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
@@ -215,7 +229,9 @@ cargo test
 ```
 
 `cargo bench -p pixl-core --bench rig` times posing and rendering a
-20-bone character.
+20-bone character, and `cargo bench -p pixl --bench pose -- gpu` (or `cpu`)
+times a pose drag to the frame that shows it (`side=4096 layers=32` puts the
+character in the view bench's document).
 
 `pixl --perf-log frames.csv` writes one row per frame to a CSV file: the
 frame's start, its time, the editor's work and compositing, the tiles

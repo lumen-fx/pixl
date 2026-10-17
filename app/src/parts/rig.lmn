@@ -1,0 +1,94 @@
+<column id="panel-rig" class="panel">
+  <row class="panel-header">
+    <label class="panel-title" text="Rig"/>
+    <spacer/>
+    <tooltip text="Draw bones and bind layers to them"><button id="rig-mode-bones" class="flat small" text="Bones"/></tooltip>
+    <tooltip text="Pose the bones"><button id="rig-mode-pose" class="flat small" text="Pose"/></tooltip>
+  </row>
+  <scroll id="rig-scroll" class="rig-scroll">
+    <column id="rig-body" class="panel-body">
+      <if signal="rig_none" mode="hide">
+        <row class="rig-row">
+          <label class="rig-empty" text="Rig a character to pose it"/>
+          <spacer/>
+          <button id="rig-new" class="flat small" text="New skeleton"/>
+        </row>
+      </if>
+      <if signal="rig_some" mode="hide">
+        <column class="rig-section">
+          <label id="rig-frame-info" class="rig-info" bind-text="rig_frame_info" text=""/>
+          <label id="rig-hint" class="rig-hint" bind-text="rig_hint" text=""/>
+        </column>
+      </if>
+      <if signal="rig_bones" mode="hide">
+        <column class="rig-section">
+          <scroll id="rig-bone-list" class="rig-list"/>
+          <if signal="rig_has_bone" mode="hide">
+            <column class="rig-section">
+              <row class="rig-row">
+                <input id="rig-bone-name" class="rig-name" bind-text="rig_bone_name" text=""/>
+                <tooltip text="Delete the bone"><button id="rig-bone-delete" class="flat small" text="Delete"/></tooltip>
+              </row>
+              <row id="rig-parent-box" class="rig-row"/>
+              <column id="rig-binding-list" class="rig-bindings"/>
+              <row class="rig-row">
+                <tooltip text="Bind the active layer to the bone"><button id="rig-bind-layer" class="flat small" text="Bind layer"/></tooltip>
+                <tooltip text="Bind the selected pixels of the active layer to the bone"><button id="rig-bind-selection" class="flat small" text="Bind selection"/></tooltip>
+              </row>
+            </column>
+          </if>
+          <row class="rig-row">
+            <label class="option-label" bind-text="rig_rest_text" text=""/>
+            <spacer/>
+            <tooltip text="Read the parts from this frame"><button id="rig-rest-frame" class="flat small" text="Use this frame"/></tooltip>
+          </row>
+        </column>
+      </if>
+      <if signal="rig_posing" mode="hide">
+        <column class="rig-section">
+          <row class="rig-row">
+            <tooltip text="Dragging a bone's end bends it and its parent"><button id="rig-ik" class="flat small toggle" text="IK"/></tooltip>
+            <tooltip text="Swap left and right"><button id="rig-mirror" class="flat small" text="Mirror"/></tooltip>
+            <tooltip text="Back to the rest pose"><button id="rig-reset" class="flat small" text="Reset"/></tooltip>
+          </row>
+          <row class="rig-row">
+            <input id="rig-pose-name" class="rig-name" placeholder="Pose name" bind-text="rig_pose_name" text=""/>
+            <tooltip text="Save the pose to the library"><button id="rig-pose-save" class="flat small" text="Save"/></tooltip>
+          </row>
+          <scroll id="rig-library" class="rig-list library"/>
+          <row class="rig-row">
+            <dropdown id="rig-easing" class="rig-easing" bind-value="rig_easing">
+              <option value="Linear"/>
+              <option value="Ease in"/>
+              <option value="Ease out"/>
+              <option value="Ease in-out"/>
+              <option value="Hold"/>
+            </dropdown>
+            <tooltip text="Key the pose on this frame"><button id="rig-key" class="flat small" text="Key"/></tooltip>
+            <tooltip text="Remove this frame's key"><button id="rig-unkey" class="flat small" text="Unkey"/></tooltip>
+          </row>
+          <row class="rig-row">
+            <tooltip text="Render the pose into a new frame after this one"><button id="rig-render-new" class="flat small" text="Render to new frame"/></tooltip>
+          </row>
+          <row class="rig-row">
+            <label class="option-label" text="Frames"/>
+            <input id="rig-from" type="number" min="1" class="rig-frame-field" bind-text="rig_from" value="1"/>
+            <label class="option-label" text="to"/>
+            <input id="rig-to" type="number" min="1" class="rig-frame-field" bind-text="rig_to" value="1"/>
+          </row>
+          <row class="rig-row">
+            <tooltip text="Render the keyed poses, eased, into these frames"><button id="rig-render-keyed" class="flat small" text="Render keyed"/></tooltip>
+            <tooltip text="Render every generated frame again"><button id="rig-regenerate" class="flat small" text="Regenerate"/></tooltip>
+          </row>
+        </column>
+      </if>
+    </column>
+  </scroll>
+  <tile class="probe">
+    <tile id="probe-bone"/>
+    <tile id="probe-bone-edge"/>
+    <tile id="probe-bone-active"/>
+    <tile id="probe-bone-pivot"/>
+    <tile id="probe-bone-link"/>
+  </tile>
+</column>

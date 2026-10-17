@@ -74,6 +74,7 @@
     <column id="stage">
       <canvas id="checker"/>
       <canvas id="art"/>
+      <canvas id="rig"/>
       <canvas id="overlay"/>
       <include src="parts/perf.lmn"/>
     </column>
@@ -143,6 +144,7 @@
           </row>
         </column>
       </column>
+      <include src="parts/rig.lmn"/>
       <column id="panel-history" class="panel">
         <row class="panel-header">
           <label class="panel-title" text="History"/>

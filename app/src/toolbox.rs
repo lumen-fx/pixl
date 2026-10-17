@@ -1218,7 +1218,8 @@ pub fn use_toolbox(
                     | Tool::Slice
             )
     };
-    if !mine(editor.tool) {
+    // The Rig panel's modes take the stage's pointer too.
+    if !mine(editor.tool) || place.rig.captures_pointer() {
         pointer.events();
         return;
     }

@@ -24,3 +24,7 @@ harness = false
 [[bench]]
 name = "playback"
 harness = false
+
+[[bench]]
+name = "pose"
+harness = false

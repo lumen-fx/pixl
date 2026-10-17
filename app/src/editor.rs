@@ -316,12 +316,19 @@ impl Editor {
     /// Records that only the active layer's pixels changed, so a view needs
     /// to look at that layer alone.
     pub fn touch_pixels(&mut self) {
-        self.revision += 1;
         let layer = self.layer;
-        if let Touched::Layers(ids) = &mut self.touched
-            && !ids.contains(&layer)
-        {
-            ids.push(layer);
+        self.touch_layers(&[layer]);
+    }
+
+    /// Records that only the pixels of `layers` changed.
+    pub fn touch_layers(&mut self, layers: &[LayerId]) {
+        self.revision += 1;
+        if let Touched::Layers(ids) = &mut self.touched {
+            for layer in layers {
+                if !ids.contains(layer) {
+                    ids.push(*layer);
+                }
+            }
         }
     }
 

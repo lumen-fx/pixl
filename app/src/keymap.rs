@@ -273,6 +273,9 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("pan-left", "Move view left", "View", Kind::Hold),
     ("pan-down", "Move view down", "View", Kind::Hold),
     ("pan-right", "Move view right", "View", Kind::Hold),
+    ("rig-mode-bones", "Bones mode", "Rig", Kind::Press),
+    ("rig-mode-pose", "Pose mode", "Rig", Kind::Press),
+    ("rig-leave", "Leave bones or pose mode", "Rig", Kind::Press),
 ];
 
 /// Every command a key can run: the tools, then the rest by group.
@@ -398,6 +401,7 @@ fn pixl_default(id: &str) -> &'static [&'static str] {
         "pan-left" => &["A"],
         "pan-down" => &["S"],
         "pan-right" => &["D"],
+        "rig-leave" => &["Escape"],
         _ => &[],
     }
 }

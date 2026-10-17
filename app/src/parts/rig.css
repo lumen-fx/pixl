@@ -1,0 +1,78 @@
+/* The Rig panel and the bones on the stage. Bone colors reach the canvas
+   through the probe elements at the end of rig.lmn. */
+
+.pixl.dark {
+  --bone: #c8c8c8b3;
+  --bone-edge: #101010;
+  --bone-active: #4f9cf0e6;
+  --bone-pivot: #f0c04f;
+  --bone-link: #c8c8c873;
+}
+
+.pixl.light {
+  --bone: #3a3a3aa6;
+  --bone-edge: #f4f4f4;
+  --bone-active: #2f78d6e6;
+  --bone-pivot: #c08a10;
+  --bone-link: #3a3a3a66;
+}
+
+#probe-bone { bg: var(--bone); }
+#probe-bone-edge { bg: var(--bone-edge); }
+#probe-bone-active { bg: var(--bone-active); }
+#probe-bone-pivot { bg: var(--bone-pivot); }
+#probe-bone-link { bg: var(--bone-link); }
+
+.rig-scroll { max-height: 236; }
+#rig-body { gap: var(--space-2); }
+.rig-section { gap: var(--space-2); }
+.rig-row { align: center; gap: var(--space-2); min-height: 22; }
+.rig-info { text-color: var(--text); font-size: var(--font-size-small); text-overflow: ellipsis; }
+.rig-hint { text-color: var(--text-faint); font-size: var(--font-size-small); text-overflow: ellipsis; }
+.rig-empty { text-color: var(--text-faint); font-size: var(--font-size-small); padding: var(--space-2); }
+.rig-list { height: 84; min-height: 84; bg: var(--surface-1); border: 1px solid var(--edge); }
+.rig-list.library { height: 94; min-height: 94; }
+.rig-name { grow: 1; min-width: 0; font-size: var(--font-size-small); }
+.rig-parent { grow: 1; min-width: 0; }
+.rig-easing { grow: 1; min-width: 0; }
+.rig-frame-field { width: 56; font-size: var(--font-size-small); }
+
+.rig-bone {
+  height: 20;
+  min-height: 20;
+  align: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  bg: var(--surface-1);
+}
+.rig-bone:hover { bg: var(--surface-3); }
+.rig-bone.active { bg: var(--accent-soft); }
+.rig-bone.depth-1 { padding: 0 var(--space-3) 0 16; }
+.rig-bone.depth-2 { padding: 0 var(--space-3) 0 28; }
+.rig-bone.depth-3 { padding: 0 var(--space-3) 0 40; }
+.rig-bone.depth-4 { padding: 0 var(--space-3) 0 52; }
+.rig-bone-name { text-color: var(--text-dim); font-size: var(--font-size-small); }
+.rig-bone.active .rig-bone-name { text-color: var(--text); }
+.rig-bone.sided .rig-bone-name { text-color: var(--text); }
+.rig-bone-meta { text-color: var(--text-faint); font-size: var(--font-size-small); }
+
+.rig-bindings { gap: 1; }
+.rig-binding { align: center; gap: var(--space-2); height: 20; min-height: 20; padding: 0 var(--space-2); bg: var(--surface-1); }
+.rig-binding-name { text-color: var(--text); font-size: var(--font-size-small); }
+.rig-binding-meta { text-color: var(--text-faint); font-size: var(--font-size-small); }
+
+.rig-pose {
+  height: 46;
+  min-height: 46;
+  align: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2);
+  bg: var(--surface-1);
+  border-bottom: 1px solid var(--edge-soft);
+}
+.rig-pose:hover { bg: var(--surface-3); }
+.rig-thumb { width: 40; height: 40; min-width: 40; bg: var(--surface-0); }
+.rig-pose-name { text-color: var(--text); font-size: var(--font-size-small); }
+
+button.toggle.active { bg: var(--accent); text-color: var(--on-accent); }
+#panel-rig button.small.active { bg: var(--accent); text-color: var(--on-accent); }

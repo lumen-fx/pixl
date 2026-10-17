@@ -1265,10 +1265,11 @@ impl Default for RenderOptions {
 }
 
 impl Document {
-    /// Writes posed layers into frame `frame`: each bound layer's cel there
-    /// is replaced by the posed pixels. Fails on the rig's source frame and
-    /// on a locked layer, before changing anything.
-    fn write_posed(
+    /// Writes posed layers ([`Parts::render`]) into frame `frame`: each
+    /// bound layer's cel there is replaced by the posed pixels. Fails on the
+    /// rig's source frame and on a locked layer, before changing anything.
+    /// Returns the changed area.
+    pub fn write_posed(
         &mut self,
         skeleton: LayerId,
         posed: &[PosedLayer],

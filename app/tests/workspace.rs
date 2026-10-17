@@ -90,6 +90,7 @@ fn paint_is_the_default_layout_with_the_panels_right_and_the_timeline_below() {
             "panel-color",
             "panel-palette",
             "panel-layers",
+            "panel-rig",
             "panel-history"
         ]
     );
@@ -110,7 +111,10 @@ fn the_rig_layout_puts_the_colors_on_the_left() {
     common::save(&out.frame, "workspace-rig");
     let d = docks.lock().unwrap().clone();
     assert_eq!(d.panels(Dock::Left), ["panel-color", "panel-palette"]);
-    assert_eq!(d.panels(Dock::Right), ["panel-layers", "panel-history"]);
+    assert_eq!(
+        d.panels(Dock::Right),
+        ["panel-layers", "panel-rig", "panel-history"]
+    );
     assert!(d.shows(Dock::Left));
     assert!(d.widths.0 > 100.0, "the left dock has room: {:?}", d.widths);
 }
@@ -130,7 +134,8 @@ fn header_buttons_collapse_and_hide_and_the_window_menu_shows_all() {
     );
     common::save(&out.frame, "workspace-collapsed");
     let d = docks.lock().unwrap().clone();
-    assert_eq!(d.collapsed, ["panel-color"]);
+    // The Rig panel starts folded outside the Rig layout.
+    assert_eq!(d.collapsed, ["panel-color", "panel-rig"]);
     assert_eq!(d.closed, ["panel-history", "panel-preview"]);
 
     let (app, docks) = watch(editor());
@@ -212,8 +217,9 @@ fn the_panel_menu_moves_a_panel_to_the_bottom_dock_and_back_up() {
         [
             "panel-color",
             "panel-palette",
+            "panel-layers",
             "panel-history",
-            "panel-layers"
+            "panel-rig"
         ]
     );
 }

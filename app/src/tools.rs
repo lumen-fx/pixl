@@ -245,6 +245,7 @@ pub struct Place<'w, 's> {
     pub(crate) nav: Res<'w, Navigation>,
     pub(crate) modifiers: Res<'w, ModifiersState>,
     pub(crate) hovered: Query<'w, 's, Option<&'static LumenId>, With<Hovered>>,
+    pub(crate) rig: Res<'w, crate::rig::RigUi>,
 }
 
 impl Place<'_, '_> {
@@ -253,7 +254,12 @@ impl Place<'_, '_> {
     /// the stage's own rectangle decides.
     pub(crate) fn over_stage(&self) -> bool {
         self.hovered.iter().all(|id| {
-            id.is_some_and(|id| matches!(id.0.as_str(), "stage" | "checker" | "art" | "overlay"))
+            id.is_some_and(|id| {
+                matches!(
+                    id.0.as_str(),
+                    "stage" | "checker" | "art" | "rig" | "overlay"
+                )
+            })
         })
     }
 }
@@ -272,7 +278,12 @@ pub fn use_tools(
     let alt = place.modifiers.0.alt;
     // A popup or a panel over the stage takes the press.
     let over_stage = place.over_stage();
-    for event in pointer.events() {
+    let events = pointer.events();
+    // The Rig panel's modes take the stage's pointer.
+    if place.rig.captures_pointer() {
+        return;
+    }
+    for event in events {
         match event {
             Pointer::Down { at, button, data } => {
                 if gesture.0.is_some()

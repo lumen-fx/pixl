@@ -13,6 +13,7 @@ pub mod perf;
 pub mod preview;
 pub mod progressive;
 pub mod recents;
+pub mod rig;
 pub mod settings;
 pub mod settings_ui;
 pub mod slices;
@@ -76,7 +77,7 @@ pub fn starting(app: App, recents: Recents, file: Option<PathBuf>) -> App {
 /// test runs the editor with its own settings.
 pub fn editor(source: Source) -> App {
     let side = u64::from(MAX_VIEW_SIDE);
-    App::new()
+    let app = App::new()
         .add_plugins(LumenDefaultPlugins.with_source(source))
         // A buffer per layer: room for many, each up to the largest side.
         .add_plugin(CanvasPlugin::with_caps(1 << 20, side * side, 4096))
@@ -214,7 +215,8 @@ pub fn editor(source: Source) -> App {
         .add_systems(
             TickStage::A11ySync,
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
-        )
+        );
+    rig::install(app)
 }
 
 /// Asks for another tick soon. A system that edits the DOM or a signal after

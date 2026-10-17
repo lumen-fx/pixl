@@ -517,6 +517,10 @@ pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
         None => 0,
     };
     for (layer, class) in roots.iter().zip(&classes).skip(first) {
+        // A skeleton paints nothing; its bones are drawn by the rig.
+        if matches!(layer.kind, LayerKind::Skeleton { .. }) {
+            continue;
+        }
         let opacity = f64::from(layer.props.opacity) / 255.0;
         let item = match class {
             Class::Direct(op) => {

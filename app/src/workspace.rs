@@ -140,6 +140,11 @@ impl Layout {
             collapsed: false,
             shown,
         };
+        // The Rig panel shows its header alone outside the Rig layout.
+        let rig_folded = Place {
+            collapsed: true,
+            ..place("panel-rig", Dock::Right, true)
+        };
         let panels = match name {
             // Drawing: color and layers at hand, the timeline below the
             // canvas to move between frames.
@@ -147,6 +152,7 @@ impl Layout {
                 place("panel-color", Dock::Right, true),
                 place("panel-palette", Dock::Right, true),
                 place("panel-layers", Dock::Right, true),
+                rig_folded,
                 place("panel-history", Dock::Right, true),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, false),
@@ -157,15 +163,18 @@ impl Layout {
                 place("panel-color", Dock::Right, true),
                 place("panel-palette", Dock::Right, true),
                 place("panel-layers", Dock::Right, true),
+                rig_folded,
                 place("panel-history", Dock::Right, false),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, true),
             ],
-            // Rigging: layers and history on the right, colors on the left.
+            // Rigging: layers, the rig and history on the right, colors on
+            // the left.
             "Rig" => vec![
                 place("panel-color", Dock::Left, true),
                 place("panel-palette", Dock::Left, true),
                 place("panel-layers", Dock::Right, true),
+                place("panel-rig", Dock::Right, true),
                 place("panel-history", Dock::Right, true),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, false),
@@ -933,6 +942,7 @@ mod tests {
             "panel-color",
             "panel-palette",
             "panel-layers",
+            "panel-rig",
             "panel-history",
         ]
         .iter()
@@ -982,19 +992,19 @@ mod tests {
         assert_eq!(order(&l, Dock::Left), ["panel-palette"]);
         assert_eq!(
             order(&l, Dock::Right),
-            ["panel-color", "panel-layers", "panel-history"]
+            ["panel-color", "panel-layers", "panel-rig", "panel-history"]
         );
         l.shift("panel-history", true);
         assert_eq!(
             order(&l, Dock::Right),
-            ["panel-color", "panel-history", "panel-layers"]
+            ["panel-color", "panel-layers", "panel-history", "panel-rig"]
         );
         // At the ends a shift does nothing.
         l.shift("panel-color", true);
-        l.shift("panel-layers", false);
+        l.shift("panel-rig", false);
         assert_eq!(
             order(&l, Dock::Right),
-            ["panel-color", "panel-history", "panel-layers"]
+            ["panel-color", "panel-layers", "panel-history", "panel-rig"]
         );
     }
 
