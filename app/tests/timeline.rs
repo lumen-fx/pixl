@@ -225,3 +225,57 @@ fn the_onion_skin_ghosts_the_next_frame() {
     // The current frame's ball is untouched.
     assert_eq!(pixel(&plain, 15, 5), pixel(&onion, 15, 5));
 }
+
+#[test]
+fn a_tag_end_drags_to_another_frame() {
+    let out = drive(
+        editor_over(animation()),
+        vec![
+            Step::Move(At::Element("tl-tag-0-3")),
+            Step::Down(At::Element("tl-tag-0-3"), PointerButton::Primary),
+            Step::Move(At::Element("tl-frame-5")),
+            Step::Up(At::Element("tl-frame-5"), PointerButton::Primary),
+            Step::Wait,
+        ],
+    );
+    let t = &out.doc.tags()[0];
+    assert_eq!((t.from, t.to), (0, 5));
+    assert_eq!(out.undo, ["Tag frames"]);
+}
+
+#[test]
+fn the_onion_skin_can_go_over_the_frame() {
+    let pixel = |out: &common::drive::Outcome, x: i32, y: i32| {
+        let view = out.views.last().unwrap();
+        let at = pixl::tools::screen_of(view, pixl_core::Point::new(x, y));
+        out.frame.pixel(at.x as u32, at.y as u32).unwrap()
+    };
+    // On frame 2 the ball is where it is again two frames later, so with
+    // two frames after, a ghost lies on the current ball.
+    let run = |above: bool| {
+        drive(
+            editor_over(animation()),
+            vec![
+                Step::Edit(|e| e.frame = 2),
+                Step::Flag("onion_on", true),
+                Step::Text("onion_after", "2"),
+                Step::Number("onion_opacity", 100.0),
+                Step::Flag("onion_above", above),
+                Step::Wait,
+                Step::Wait,
+                Step::Wait,
+            ],
+        )
+    };
+    let (under, over) = (run(false), run(true));
+    common::save(&over.frame, "timeline-onion-above");
+    let ball = pixel(&under, 15, 19);
+    assert_eq!(
+        &ball[..3],
+        &[220, 60, 60],
+        "under, the ball covers its ghost"
+    );
+    let tinted = pixel(&over, 15, 19);
+    assert_ne!(tinted, ball, "over, the ghost tints the ball");
+    assert!(tinted[2] > ball[2]);
+}

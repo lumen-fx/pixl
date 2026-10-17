@@ -5,6 +5,7 @@ pub mod common;
 
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
+use lumenui::prelude::dom;
 use pixl_core::{ColorMode, Document, LayerId, LayerKind, Locks, NewLayer, Placement, Rgba};
 
 /// Layer 1 at the bottom with a red pixel at (1, 1), then layers 2 and 3.
@@ -235,4 +236,65 @@ fn the_properties_dialog_opens_on_the_layer_as_it_is() {
         ],
     );
     common::save(&out.frame, "layers-properties-open");
+}
+
+#[test]
+fn a_folded_group_hides_its_layers_and_a_drag_takes_one_out() {
+    let mut d = doc();
+    let g = d
+        .add_layer(NewLayer::Group, "Group", Placement::default())
+        .unwrap();
+    d.move_layer(
+        LayerId(1),
+        Placement {
+            parent: Some(g),
+            index: None,
+        },
+    )
+    .unwrap();
+    let out = drive(
+        editor_over(d.clone()),
+        vec![
+            Step::Edit(|_| assert!(dom::get_by_id("layer-row-1").is_some())),
+            Step::Click("layer-fold-4"),
+            Step::Wait,
+            Step::Wait,
+            // The folded group's child has no row in the list or the
+            // timeline.
+            Step::Edit(|_| {
+                assert!(dom::get_by_id("layer-row-1").is_none());
+                assert!(dom::get_by_id("tl-layer-1").is_none());
+            }),
+        ],
+    );
+    common::save(&out.frame, "layers-folded");
+    let out = drive(
+        editor_over(d),
+        vec![
+            Step::Move(At::Element("layer-row-1")),
+            Step::Down(At::Element("layer-row-1"), PointerButton::Primary),
+            Step::Move(At::Element("layer-row-2")),
+            Step::Move(At::Element("layer-row-2")),
+            Step::Up(At::Element("layer-row-2"), PointerButton::Primary),
+            Step::Wait,
+        ],
+    );
+    assert_eq!(out.doc.parent_of(LayerId(1)), None, "out of the group");
+}
+
+#[test]
+fn a_mask_turns_off_and_goes() {
+    let mut d = doc();
+    d.add_layer_mask(LayerId(3)).unwrap();
+    let out = drive(
+        editor_over(d),
+        vec![
+            Step::Menu("lm-mask-toggle"),
+            Step::Wait,
+            Step::Menu("lm-mask-delete"),
+            Step::Wait,
+        ],
+    );
+    assert!(mask_of(&out.doc, LayerId(3)).is_none());
+    assert_eq!(out.undo, ["Disable mask", "Delete mask"]);
 }
