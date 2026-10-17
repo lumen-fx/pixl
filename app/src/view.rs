@@ -23,6 +23,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
+use lumenui::ecs::system::SystemParam;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::components::Transform;
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -30,7 +31,7 @@ use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, CompositeOperation, Context2d, PixelBuffer};
 use pixl_core::{
     Background, BlendMode, CompositeOptions, Document, LayerId, LayerKind, OnionSkin, Palette,
-    Point, Raster, Rect, Rgba, TILE_SIZE,
+    Point, Raster, Rect, Rgba, Selection, TILE_SIZE,
 };
 
 use crate::editor::{Editor, Touched};
@@ -86,6 +87,61 @@ pub struct View {
     fitted_generation: u64,
     /// Bumped whenever zoom, pan or the stage size change.
     pub revision: u64,
+    /// Degrees the view turns clockwise around the stage's middle.
+    pub rotation: f64,
+    /// The view is mirrored left to right (before it turns).
+    pub flipped: bool,
+    /// The document repeats left and right, and above and below.
+    pub tiled: (bool, bool),
+    /// What document positions snap to, when snapping is on.
+    pub snap: Option<Snap>,
+}
+
+/// What positions snap to: grid lines and guides, as document pixel edges.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Snap {
+    /// Grid cells: width, height and the offset of the first line.
+    pub grid: Option<(u32, u32, i32, i32)>,
+    /// Vertical lines (guides, slice edges) at these x edges.
+    pub xs: Vec<i32>,
+    /// Horizontal lines at these y edges.
+    pub ys: Vec<i32>,
+}
+
+/// How near, in screen pixels, a position snaps to a line.
+pub const SNAP_DISTANCE: f64 = 6.0;
+
+impl Snap {
+    /// `v` moved to the nearest line within `reach` along one axis.
+    fn axis(v: f64, lines: &[i32], grid: Option<(u32, i32)>, reach: f64) -> f64 {
+        let mut best: Option<f64> = None;
+        let mut take = |t: f64| {
+            if (v - t).abs() <= reach && best.is_none_or(|b| (v - t).abs() < (v - b).abs()) {
+                best = Some(t);
+            }
+        };
+        for l in lines {
+            take(f64::from(*l));
+        }
+        if let Some((cell, off)) = grid
+            && cell > 0
+        {
+            let c = f64::from(cell);
+            let k = ((v - f64::from(off)) / c).round();
+            take(f64::from(off) + k * c);
+        }
+        best.unwrap_or(v)
+    }
+
+    /// A document position moved onto the nearest line within `reach`.
+    pub fn apply(&self, p: (f64, f64), reach: f64) -> (f64, f64) {
+        let gx = self.grid.map(|(w, _, ox, _)| (w, ox));
+        let gy = self.grid.map(|(_, h, _, oy)| (h, oy));
+        (
+            Self::axis(p.0, &self.xs, gx, reach),
+            Self::axis(p.1, &self.ys, gy, reach),
+        )
+    }
 }
 
 impl Default for View {
@@ -97,11 +153,68 @@ impl Default for View {
             fit_pending: true,
             fitted_generation: 0,
             revision: 1,
+            rotation: 0.0,
+            flipped: false,
+            tiled: (false, false),
+            snap: None,
         }
     }
 }
 
 impl View {
+    /// Whether the view turns or mirrors the document.
+    pub fn turned(&self) -> bool {
+        self.rotation.rem_euclid(360.0) != 0.0 || self.flipped
+    }
+
+    /// A stage position as it would be with no turn and no mirror: the
+    /// frame the zoom and the origin are in.
+    pub fn unturn(&self, stage: (f64, f64)) -> (f64, f64) {
+        if !self.turned() {
+            return stage;
+        }
+        let (cx, cy) = self.middle();
+        let (s, c) = self.rotation.to_radians().sin_cos();
+        let (dx, dy) = (stage.0 - cx, stage.1 - cy);
+        let (x, y) = (dx * c + dy * s, -dx * s + dy * c);
+        let x = if self.flipped { -x } else { x };
+        (cx + x, cy + y)
+    }
+
+    /// The canvas transform that turns and mirrors what the stage draws,
+    /// from the unturned frame onto the stage.
+    pub fn matrix(&self) -> [f64; 6] {
+        let (cx, cy) = self.middle();
+        let (s, c) = self.rotation.to_radians().sin_cos();
+        let fx = if self.flipped { -1.0 } else { 1.0 };
+        let (a, b, cc, d) = (c * fx, s * fx, -s, c);
+        [a, b, cc, d, cx - (a * cx + cc * cy), cy - (b * cx + d * cy)]
+    }
+
+    /// Puts the view's turn and mirror on a canvas about to draw.
+    pub fn apply_turn(&self, ctx: &Context2d) {
+        if self.turned() {
+            ctx.set_transform(self.matrix());
+        }
+    }
+
+    /// The part of the unturned frame the stage shows: left, top, right,
+    /// bottom.
+    pub fn shown_frame(&self) -> (f64, f64, f64, f64) {
+        let (w, h) = (f64::from(self.stage.1.x), f64::from(self.stage.1.y));
+        let corners = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)].map(|p| self.unturn(p));
+        let x0 = corners.iter().map(|c| c.0).fold(f64::INFINITY, f64::min);
+        let y0 = corners.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
+        let x1 = corners
+            .iter()
+            .map(|c| c.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let y1 = corners
+            .iter()
+            .map(|c| c.1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        (x0, y0, x1, y1)
+    }
     /// A window position in stage coordinates.
     pub fn stage_point(&self, window: Vec2) -> (f64, f64) {
         (
@@ -118,15 +231,33 @@ impl View {
 
     /// The document position under a stage position, in pixels (fractional).
     pub fn to_doc(&self, stage: (f64, f64)) -> (f64, f64) {
+        let stage = self.unturn(stage);
         (
             (stage.0 - self.origin.0) / self.zoom,
             (stage.1 - self.origin.1) / self.zoom,
         )
     }
 
-    /// The document pixel under a window position.
+    /// The document pixel under a window position, moved onto a grid line
+    /// or a guide when snapping is on and one is near.
     pub fn doc_pixel(&self, window: Vec2) -> Point {
         let (x, y) = self.to_doc(self.stage_point(window));
+        let (x, y) = match &self.snap {
+            Some(s) => {
+                let (sx, sy) = s.apply((x, y), SNAP_DISTANCE / self.zoom);
+                // A pixel snapped to an edge is the one on the pointer's
+                // side of it.
+                let side = |snapped: f64, raw: f64| {
+                    if snapped != raw && raw < snapped {
+                        snapped - 0.5
+                    } else {
+                        snapped
+                    }
+                };
+                (side(sx, x), side(sy, y))
+            }
+            None => (x, y),
+        };
         Point::new(x.floor() as i32, y.floor() as i32)
     }
 
@@ -135,6 +266,7 @@ impl View {
     pub fn zoom_at(&mut self, zoom: f64, anchor: (f64, f64)) {
         let zoom = zoom.clamp(ZOOM_STEPS[0], ZOOM_STEPS[ZOOM_STEPS.len() - 1]);
         let (dx, dy) = self.to_doc(anchor);
+        let anchor = self.unturn(anchor);
         self.zoom = zoom;
         self.origin = (
             (anchor.0 - dx * zoom).round(),
@@ -168,6 +300,11 @@ impl View {
     }
 
     pub fn pan(&mut self, dx: f64, dy: f64) {
+        // A drag on a turned view moves the document the way the pointer
+        // goes on screen.
+        let (cx, cy) = self.middle();
+        let (ux, uy) = self.unturn((cx + dx, cy + dy));
+        let (dx, dy) = (ux - cx, uy - cy);
         self.origin = ((self.origin.0 + dx).round(), (self.origin.1 + dy).round());
         self.revision += 1;
     }
@@ -206,8 +343,15 @@ impl View {
 
     /// The document pixels the stage shows, clipped to the document.
     pub fn visible_pixels(&self, width: u32, height: u32) -> Rect {
-        let (x0, y0) = self.to_doc((0.0, 0.0));
-        let (x1, y1) = self.to_doc((f64::from(self.stage.1.x), f64::from(self.stage.1.y)));
+        let (fx0, fy0, fx1, fy1) = self.shown_frame();
+        let doc = |x: f64, y: f64| {
+            (
+                (x - self.origin.0) / self.zoom,
+                (y - self.origin.1) / self.zoom,
+            )
+        };
+        let (x0, y0) = doc(fx0, fy0);
+        let (x1, y1) = doc(fx1, fy1);
         let r = Rect::new(
             x0.floor() as i32,
             y0.floor() as i32,
@@ -1251,7 +1395,26 @@ impl Layers {
     /// Draws every visible buffer onto the art canvas.
     fn draw(&self, ctx: &Context2d, doc: &Document, view: &View) {
         ctx.clear();
-        self.draw_document(ctx, doc, view, true);
+        view.apply_turn(ctx);
+        // Tiled mode draws the copies around the document as well.
+        let (tx, ty) = view.tiled;
+        let (w, h) = (
+            f64::from(doc.width()) * view.zoom,
+            f64::from(doc.height()) * view.zoom,
+        );
+        let xs: &[f64] = if tx { &[-1.0, 0.0, 1.0] } else { &[0.0] };
+        let ys: &[f64] = if ty { &[-1.0, 0.0, 1.0] } else { &[0.0] };
+        for &j in ys {
+            for &i in xs {
+                if i == 0.0 && j == 0.0 {
+                    self.draw_document(ctx, doc, view, true);
+                } else {
+                    let mut copy = view.clone();
+                    copy.origin = (view.origin.0 + i * w, view.origin.1 + j * h);
+                    self.draw_document(ctx, doc, &copy, false);
+                }
+            }
+        }
     }
 
     /// Draws the buffers onto `ctx` where `view` places the document, with
@@ -1319,7 +1482,9 @@ pub struct Drawn {
     view: u64,
     colors: u64,
     preview: u64,
-    selection: Option<Rect>,
+    selection: Option<Selection>,
+    /// The view aids' revision the overlay last drew.
+    aids: u64,
     checker: Option<(PixelBuffer, u32, u32)>,
     checker_colors: u64,
     doc_size: (u32, u32),
@@ -1377,16 +1542,29 @@ pub fn sync_layers(
     }
 }
 
+/// What the stage draws over the document: the theme's colors, the tool
+/// preview and the view aids.
+#[derive(SystemParam)]
+pub struct OverStage<'w> {
+    colors: Res<'w, ViewColors>,
+    preview: Res<'w, Preview>,
+    aids: Res<'w, crate::aids::Aids>,
+}
+
 /// Draws the three stage canvases where something they show changed.
 pub fn draw_stage(
     editor: Res<Editor>,
     view: Res<View>,
-    colors: Res<ViewColors>,
-    preview: Res<Preview>,
+    over: OverStage,
     settings: Res<Settings>,
     mut layers: ResMut<Layers>,
     mut drawn: ResMut<Drawn>,
 ) {
+    let OverStage {
+        colors,
+        preview,
+        aids,
+    } = over;
     let size = (view.stage.1.x, view.stage.1.y);
     if size.0 <= 0.0 || size.1 <= 0.0 {
         return;
@@ -1439,17 +1617,25 @@ pub fn draw_stage(
         layers.draw(&art, doc, &view);
         layers.art_dirty = false;
     }
-    let selection = editor.selection.as_ref().map(|s| s.bounds());
     if view_changed
         || drawn.colors != colors.revision
         || drawn.preview != preview.revision
-        || drawn.selection != selection
+        || drawn.selection != editor.selection
+        || drawn.aids != aids.revision
     {
         draw_overlay(
-            &overlay, &view, &colors, &preview, selection, doc_size, grid_from,
+            &overlay,
+            &view,
+            &colors,
+            &preview,
+            editor.selection.as_ref(),
+            doc_size,
+            grid_from,
         );
+        crate::aids::draw(&overlay, &view, &aids, &editor);
         drawn.preview = preview.revision;
-        drawn.selection = selection;
+        drawn.selection = editor.selection.clone();
+        drawn.aids = aids.revision;
     }
     drawn.view = view.revision;
     drawn.colors = colors.revision;
@@ -1473,12 +1659,22 @@ fn draw_checker(
     let (Some(a), Some(b)) = (colors.checker_a, colors.checker_b) else {
         return;
     };
-    let (dx, dy, dw, dh) = view.doc_rect(doc.0, doc.1);
-    let (sw, sh) = (f64::from(view.stage.1.x), f64::from(view.stage.1.y));
-    let x0 = dx.max(0.0);
-    let y0 = dy.max(0.0);
-    let x1 = (dx + dw).min(sw);
-    let y1 = (dy + dh).min(sh);
+    view.apply_turn(ctx);
+    let (mut dx, mut dy, mut dw, mut dh) = view.doc_rect(doc.0, doc.1);
+    // Tiled copies have the checkerboard under them too.
+    if view.tiled.0 {
+        dx -= dw;
+        dw *= 3.0;
+    }
+    if view.tiled.1 {
+        dy -= dh;
+        dh *= 3.0;
+    }
+    let (fx0, fy0, fx1, fy1) = view.shown_frame();
+    let x0 = dx.max(fx0);
+    let y0 = dy.max(fy0);
+    let x1 = (dx + dw).min(fx1);
+    let y1 = (dy + dh).min(fy1);
     if x1 <= x0 || y1 <= y0 {
         return;
     }
@@ -1531,11 +1727,12 @@ fn draw_overlay(
     view: &View,
     colors: &ViewColors,
     preview: &Preview,
-    selection: Option<Rect>,
+    selection: Option<&Selection>,
     doc: (u32, u32),
     grid_from: f64,
 ) {
     ctx.clear();
+    view.apply_turn(ctx);
     let z = view.zoom;
     let (ox, oy) = view.origin;
     if !preview.pixels.is_empty() {
@@ -1564,9 +1761,18 @@ fn draw_overlay(
             ctx.fill_rect(left, oy + f64::from(y) * z, width, 1.0);
         }
     }
-    if let (Some(r), Some(a), Some(b)) = (selection, colors.marquee_a, colors.marquee_b)
-        && !r.is_empty()
-    {
+    let (Some(sel), Some(a), Some(b)) = (selection, colors.marquee_a, colors.marquee_b) else {
+        return;
+    };
+    let r = sel.bounds();
+    if r.is_empty() {
+        return;
+    }
+    let shown = r.intersect(&view.visible_pixels(doc.0, doc.1));
+    // Past this many pixels the outline is the bounding box: tracing every
+    // edge of a huge selection on each redraw costs more than it shows.
+    const TRACE_MOST: i64 = 1 << 20;
+    if shown.area() > TRACE_MOST || shown.is_empty() {
         let x = ox + f64::from(r.x) * z;
         let y = oy + f64::from(r.y) * z;
         let w = f64::from(r.w) * z;
@@ -1576,7 +1782,58 @@ fn draw_overlay(
         ctx.stroke_rect(x - 0.5, y - 0.5, w + 1.0, h + 1.0);
         ctx.set_stroke_color(canvas_color(a));
         ctx.stroke_rect(x + 0.5, y + 0.5, w - 1.0, h - 1.0);
+        return;
     }
+    // Every edge between a selected and an unselected pixel, as runs.
+    let edges = selection_edges(sel, shown);
+    for (color, inset) in [(b, -1.0), (a, 0.0)] {
+        ctx.set_fill_color(canvas_color(color));
+        for &(x, y, len, horizontal) in &edges {
+            let (px, py) = (ox + f64::from(x) * z, oy + f64::from(y) * z);
+            if horizontal {
+                ctx.fill_rect(px, py + inset, f64::from(len) * z, 1.0);
+            } else {
+                ctx.fill_rect(px + inset, py, 1.0, f64::from(len) * z);
+            }
+        }
+    }
+}
+
+/// The edges of a selection inside `area`, merged into runs: `(x, y, len,
+/// horizontal)` in pixel edge coordinates.
+pub fn selection_edges(sel: &Selection, area: Rect) -> Vec<(i32, i32, i32, bool)> {
+    let mut out = Vec::new();
+    let at = |x: i32, y: i32| sel.contains(x, y);
+    // Horizontal edges: above row y, between y - 1 and y.
+    for y in area.y..=area.bottom() {
+        let mut start: Option<i32> = None;
+        for x in area.x..=area.right() {
+            let edge = x < area.right() && at(x, y) != at(x, y - 1);
+            match (start, edge) {
+                (None, true) => start = Some(x),
+                (Some(s), false) => {
+                    out.push((s, y, x - s, true));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+    }
+    for x in area.x..=area.right() {
+        let mut start: Option<i32> = None;
+        for y in area.y..=area.bottom() {
+            let edge = y < area.bottom() && at(x, y) != at(x - 1, y);
+            match (start, edge) {
+                (None, true) => start = Some(y),
+                (Some(s), false) => {
+                    out.push((x, s, y - s, false));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]

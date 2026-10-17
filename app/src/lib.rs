@@ -1,6 +1,8 @@
 //! The pixl editor: the start screen, the window, its panels and the canvas
 //! view, over the document model in `pixl-core`.
 
+pub mod adjust;
+pub mod aids;
 pub mod editor;
 pub mod exports;
 pub mod files;
@@ -9,6 +11,7 @@ pub mod image_menu;
 pub mod input;
 pub mod keymap;
 pub mod layers;
+pub mod menus;
 pub mod palette;
 pub mod panels;
 pub mod perf;
@@ -17,6 +20,7 @@ pub mod preview;
 pub mod progressive;
 pub mod recents;
 pub mod rig;
+pub mod select;
 pub mod settings;
 pub mod settings_ui;
 pub mod sheets;
@@ -27,6 +31,7 @@ pub mod timeline;
 pub mod toolbar;
 pub mod toolbox;
 pub mod tools;
+pub mod transform_tool;
 pub mod view;
 pub mod workspace;
 
@@ -144,6 +149,12 @@ pub fn editor(source: Source) -> App {
         .insert_signal("home_can_return", false)
         .insert_resource(tools::Gesture::default())
         .insert_resource(toolbox::Toolbox::default())
+        .insert_resource(menus::Chosen::default())
+        .insert_resource(select::Selections::default())
+        .insert_resource(image_menu::ImageMenu::default())
+        .insert_resource(adjust::Adjust::default())
+        .insert_resource(aids::Aids::default())
+        .insert_resource(transform_tool::FreeTransform::default())
         .insert_resource(panels::Panels::default())
         .insert_resource(files::Files::default())
         .insert_resource(Workspace::in_memory())
@@ -203,6 +214,16 @@ pub fn editor(source: Source) -> App {
                         files::new_form,
                     )
                         .chain(),
+                    // The Select, Image, Filter and View menus.
+                    (
+                        menus::collect,
+                        select::select_commands,
+                        image_menu::image_commands,
+                        adjust::filter_commands,
+                        aids::aids_commands,
+                        aids::aids_input,
+                    )
+                        .chain(),
                     // then the panels and the tools.
                     (
                         layers::layer_input,
@@ -217,6 +238,7 @@ pub fn editor(source: Source) -> App {
                         tools::use_tools,
                         toolbox::toolbox_options,
                         toolbox::use_toolbox,
+                        transform_tool::use_transform,
                         perf::note_stroke,
                     )
                         .chain(),
@@ -230,6 +252,7 @@ pub fn editor(source: Source) -> App {
                     view::sync_layers,
                     view::draw_stage,
                     perf::composite_end,
+                    aids::draw_rulers,
                     timeline::show_timeline,
                     preview::draw_preview,
                     tools::track_pointer,
@@ -245,8 +268,7 @@ pub fn editor(source: Source) -> App {
                     ),
                     home::track_recents,
                     home::show_home,
-                    tools::show_tool,
-                    toolbox::show_toolbox,
+                    (tools::show_tool, toolbox::show_toolbox).chain(),
                     tools::stage_cursor,
                     (
                         settings::save_settings,

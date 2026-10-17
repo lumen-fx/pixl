@@ -55,7 +55,7 @@
 .option-slider.short { width: 80; }
 .option-choice { width: 132; }
 .text-field { width: 140; }
-.number-field { width: 64; }
+.number-field { width: 88; }
 
 /* The workspace takes the height left over, whatever the tool bar's content
    would ask for, so a tall tool bar scrolls instead of squeezing the bars. */

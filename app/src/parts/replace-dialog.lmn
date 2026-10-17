@@ -1,0 +1,14 @@
+<dialog open="replace_open">
+  <column class="dialog-card">
+    <label class="dialog-title" bind-text="replace_title" text=""/>
+    <row class="dialog-row"><label class="field-label" text="Replace"/><input id="replace-from" type="color" alpha="true" bind-value="replace_from"/></row>
+    <row class="dialog-row"><label class="field-label" text="With"/><input id="replace-to" type="color" alpha="true" bind-value="replace_to"/></row>
+    <row class="dialog-row"><label class="field-label" text="Tolerance"/><input id="replace-tolerance" class="size-field" type="number" min="0" max="255" value="0" bind-text="replace_tolerance"/></row>
+    <row class="dialog-row"><label class="field-label" text="Frames"/><dropdown id="replace-frames" class="dialog-choice" bind-value="replace_frames"><option value="This frame"/><option value="Every frame"/></dropdown></row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="replace-cancel" text="Cancel"/>
+      <button id="replace-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>

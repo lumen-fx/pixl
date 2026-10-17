@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use lumenui::ecs::system::SystemParam;
 use lumenui::lumen_core::input::{Key, NamedKey, PointerButton};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
@@ -250,6 +251,9 @@ impl Toolbox {
             .unwrap_or(&self.fonts[0])
     }
 }
+
+/// The largest brush the size keys step to: the size slider's own most.
+const MAX_SIZE: u32 = 32;
 
 /// How long two presses may be apart to make a double-click.
 const DOUBLE_CLICK: Duration = Duration::from_millis(450);
@@ -1130,32 +1134,47 @@ fn show(editor: &Editor, toolbox: &Toolbox, preview: &mut Preview) {
     }
 }
 
+/// The keys the toolbox reads (Enter and Escape), whether they go to a text
+/// field or the start screen instead, and the theme's outline color.
+#[derive(SystemParam)]
+pub struct BoxKeys<'w, 's> {
+    pressed: MessageReader<'w, 's, KeyPressed>,
+    typing: Query<'w, 's, (), (With<Focused>, With<TextInput>)>,
+    home: Res<'w, crate::Home>,
+    colors: Res<'w, crate::view::ViewColors>,
+}
+
+/// The options bar's buttons, and the file dialog the font button opens.
+#[derive(SystemParam)]
+pub struct BoxButtons<'w, 's> {
+    chosen: Res<'w, crate::menus::Chosen>,
+    clicks: MessageReader<'w, 's, ClickEvent>,
+    ids: Query<'w, 's, &'static LumenId>,
+    commands: Commands<'w, 's>,
+}
+
 /// Runs the toolbox's tools over this tick's pointer events, and Enter and
 /// Escape for the tools that take several clicks.
-#[allow(clippy::too_many_arguments)]
 pub fn use_toolbox(
     mut editor: ResMut<Editor>,
     mut toolbox: ResMut<Toolbox>,
     mut preview: ResMut<Preview>,
     place: Place,
     mut pointer: PointerInput,
-    mut keys: MessageReader<KeyPressed>,
-    typing: Query<(), (With<Focused>, With<TextInput>)>,
-    home: Res<crate::Home>,
-    colors: Res<crate::view::ViewColors>,
+    mut keys: BoxKeys,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let editor = &mut *editor;
     let toolbox = &mut *toolbox;
-    if let Some(c) = colors.preview {
+    if let Some(c) = keys.colors.preview {
         toolbox.accent = c;
     }
     // A tool change ends what the last tool was doing.
     if toolbox.session.is_some() && !session_fits(toolbox.session.as_ref(), editor.tool) {
         cancel(editor, toolbox, &mut preview);
     }
-    let typing = !typing.is_empty() || home.open;
-    for k in keys.read() {
+    let typing = !keys.typing.is_empty() || keys.home.open;
+    for k in keys.pressed.read() {
         if typing || toolbox.session.is_none() {
             continue;
         }
@@ -1420,19 +1439,30 @@ fn shape_label(shape: &BrushShape) -> &'static str {
 
 /// Keeps the toolbox's options and their controls in step, keeps each
 /// tool's pixel-perfect choice, and runs the options bar's buttons.
-#[allow(clippy::too_many_arguments)]
 pub fn toolbox_options(
     mut editor: ResMut<Editor>,
     mut toolbox: ResMut<Toolbox>,
     mut shown: Local<Option<Shown>>,
     mut last_tool: Local<Option<Tool>>,
     mut signals: Signals,
-    mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
-    mut commands: Commands,
+    mut buttons: BoxButtons,
     wake: Option<Res<WakeDeadline>>,
 ) {
+    let BoxButtons {
+        chosen,
+        clicks,
+        ids,
+        commands,
+    } = &mut buttons;
     let editor = &mut *editor;
+    // [ and ] step the brush size, within the size slider's range.
+    for id in &chosen.0 {
+        match id.as_str() {
+            "brush-smaller" => editor.options.size = editor.options.size.saturating_sub(1).max(1),
+            "brush-larger" => editor.options.size = (editor.options.size + 1).min(MAX_SIZE),
+            _ => {}
+        }
+    }
     // Each tool keeps its own pixel-perfect choice.
     if *last_tool != Some(editor.tool) {
         if let Some(old) = *last_tool {
@@ -1466,7 +1496,7 @@ pub fn toolbox_options(
                 }
                 _ => editor.message = Some("Select the pixels to make a pattern of".into()),
             },
-            "opt-text-load" => load_font(&mut commands),
+            "opt-text-load" => load_font(commands),
             "crop-to-selection" => match editor.selection.as_ref().map(Selection::bounds) {
                 Some(b) if !b.is_empty() => crate::image_menu::crop_to(editor, b),
                 _ => editor.message = Some("Select the area to keep".into()),

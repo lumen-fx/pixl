@@ -8,6 +8,7 @@ use lumenui::lumen_core::input::{ModifiersState, PointerButton, PointerData, Poi
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::history::Transaction;
+use pixl_core::tools::brushes::Stabilizer;
 use pixl_core::tools::fill::{self, Connectivity, FillOptions};
 use pixl_core::tools::paint::{self, PencilStroke};
 use pixl_core::tools::shapes;
@@ -44,6 +45,7 @@ enum Session {
         tx: Option<Transaction>,
         line: Line,
         last: Point,
+        stabilizer: Stabilizer,
     },
     /// A line, rectangle or ellipse from where the press landed.
     Shape {
@@ -272,6 +274,7 @@ pub fn use_tools(
     place: Place,
     mut pointer: PointerInput,
     settings: Res<Settings>,
+    toolbox: Res<crate::toolbox::Toolbox>,
 ) {
     let (view, nav) = (&place.view, &place.nav);
     let shift = place.modifiers.0.shift;
@@ -314,6 +317,7 @@ pub fn use_tools(
                     shift,
                     alt,
                     pen: settings.pen.clone(),
+                    stabilizer: toolbox.options.stabilizer,
                 };
                 gesture.0 = begin(&mut editor, &mut preview, press);
             }
@@ -359,6 +363,8 @@ struct Press {
     shift: bool,
     alt: bool,
     pen: PenSettings,
+    /// The stroke stabilizer's string length in pixels; 0 is off.
+    stabilizer: u32,
 }
 
 /// Starts a gesture.
@@ -371,6 +377,7 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
         shift,
         alt,
         pen,
+        stabilizer,
     } = press;
     let tool = if eraser_end {
         Tool::Eraser
@@ -426,6 +433,7 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                 tx: Some(tx),
                 line,
                 last: p,
+                stabilizer: Stabilizer::new(f64::from(stabilizer)),
             };
             stroke_to(editor, &mut session, p, data.pressure);
             Some(session)
@@ -530,11 +538,15 @@ fn stroke_to(editor: &mut Editor, session: &mut Session, p: Point, pressure: f32
         ctx,
         line,
         last,
+        stabilizer,
         ..
     } = session
     else {
         return;
     };
+    // The stabilizer's string trails the pointer; the stroke follows it.
+    let (sx, sy) = stabilizer.feed(f64::from(p.x) + 0.5, f64::from(p.y) + 0.5);
+    let p = Point::new(sx.floor() as i32, sy.floor() as i32);
     let pressed = match line {
         Line::Pressure { size, pen } => Some(editor.brush(pressure_size(*size, pressure, pen))),
         Line::Steady(_) => None,
@@ -954,10 +966,15 @@ pub fn tool_options(
 /// The window position of a document pixel's middle, for tests that drive
 /// the tools with the pointer.
 pub fn screen_of(view: &View, p: Point) -> Vec2 {
-    Vec2::new(
-        view.stage.0.x + (view.origin.0 + (f64::from(p.x) + 0.5) * view.zoom) as f32,
-        view.stage.0.y + (view.origin.1 + (f64::from(p.y) + 0.5) * view.zoom) as f32,
-    )
+    let x = view.origin.0 + (f64::from(p.x) + 0.5) * view.zoom;
+    let y = view.origin.1 + (f64::from(p.y) + 0.5) * view.zoom;
+    let [a, b, c, d, e, f] = view.matrix();
+    let (x, y) = if view.turned() {
+        (a * x + c * y + e, b * x + d * y + f)
+    } else {
+        (x, y)
+    };
+    Vec2::new(view.stage.0.x + x as f32, view.stage.0.y + y as f32)
 }
 
 #[cfg(test)]

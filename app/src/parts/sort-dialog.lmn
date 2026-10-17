@@ -1,0 +1,11 @@
+<dialog open="sort_open">
+  <column class="dialog-card">
+    <label class="dialog-title" bind-text="sort_title" text=""/>
+    <row class="dialog-row"><label class="field-label" text="By"/><dropdown id="sort-key" class="dialog-choice" bind-value="sort_key"><option value="Hue"/><option value="Saturation"/><option value="Lightness"/><option value="Brightness"/></dropdown></row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="sort-cancel" text="Cancel"/>
+      <button id="sort-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>

@@ -1,0 +1,21 @@
+<menu id="image-menu">
+  <menuitem id="image-crop" label="Crop to selection"/>
+  <menuitem id="image-canvas-size" label="Canvas size..."/>
+  <menuitem id="image-resize" label="Image size..."/>
+  <separator/>
+  <menuitem id="image-flip-h" label="Flip horizontally"/>
+  <menuitem id="image-flip-v" label="Flip vertically"/>
+  <menuitem id="image-rotate-cw" label="Rotate 90 clockwise"/>
+  <menuitem id="image-rotate-ccw" label="Rotate 90 counterclockwise"/>
+  <separator/>
+  <menuitem id="image-indexed" label="Indexed color..."/>
+  <menuitem id="image-rgba" label="RGBA color"/>
+  <menuitem id="image-replace-color" label="Replace color..."/>
+  <separator/>
+  <menuitem id="palette-load" label="Load palette..."/>
+  <menuitem id="palette-save" label="Save palette..."/>
+  <menuitem id="palette-sort" label="Sort palette..."/>
+  <menuitem id="palette-ramp" label="Ramp builder..."/>
+  <menuitem id="palette-from-image" label="Palette from image..."/>
+  <menuitem id="palette-lock" label="Lock colors to the palette"/>
+</menu>

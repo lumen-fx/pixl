@@ -1,0 +1,16 @@
+<menu id="filter-menu">
+  <menuitem id="filter-hue" label="Hue and saturation... (Ctrl+U)"/>
+  <menuitem id="filter-brightness" label="Brightness and contrast..."/>
+  <menuitem id="filter-levels" label="Levels... (Ctrl+L)"/>
+  <menuitem id="filter-curves" label="Curves... (Ctrl+M)"/>
+  <menuitem id="filter-balance" label="Color balance... (Ctrl+B)"/>
+  <menuitem id="filter-posterize" label="Posterize..."/>
+  <menuitem id="filter-invert" label="Invert (Ctrl+I)"/>
+  <menuitem id="filter-desaturate" label="Desaturate (Ctrl+Shift+U)"/>
+  <menuitem id="filter-gradient-map" label="Gradient map..."/>
+  <separator/>
+  <menuitem id="filter-outline" label="Outline..."/>
+  <menuitem id="filter-shadow" label="Drop shadow..."/>
+  <menuitem id="filter-noise" label="Noise..."/>
+  <menuitem id="filter-pixelate" label="Pixelate..."/>
+</menu>

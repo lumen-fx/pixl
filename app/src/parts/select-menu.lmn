@@ -1,0 +1,15 @@
+<menu id="select-menu">
+  <menuitem id="select-all" label="All (Ctrl+A)"/>
+  <menuitem id="select-none" label="Deselect (Ctrl+D)"/>
+  <menuitem id="select-invert" label="Invert (Ctrl+Alt+I)"/>
+  <separator/>
+  <menuitem id="select-color" label="By the foreground color"/>
+  <menuitem id="select-layer" label="Layer content"/>
+  <separator/>
+  <menuitem id="select-grow" label="Grow..."/>
+  <menuitem id="select-shrink" label="Shrink..."/>
+  <menuitem id="select-border" label="Border..."/>
+  <separator/>
+  <menuitem id="select-save" label="Save selection"/>
+  <menuitem id="select-load" label="Saved selections..."/>
+</menu>

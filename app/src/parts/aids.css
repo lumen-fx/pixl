@@ -1,0 +1,23 @@
+/* The view aids: rulers along the stage's top and left edges, and the
+   colors of guides, slices, symmetry axes and the custom grid, all from the
+   theme's tokens. */
+
+.pixl { --ruler-h: 18; }
+#stage .ruler { display: none; }
+#stage.rulers .ruler { display: flex; }
+#stage #ruler-top { inset: 0 0 auto var(--ruler-h); height: var(--ruler-h); }
+#stage #ruler-left { inset: var(--ruler-h) auto 0 0; width: var(--ruler-h); }
+
+#probe-guide { bg: var(--accent); }
+#probe-slice { bg: var(--preview); }
+#probe-axis { bg: var(--accent-hover); }
+#probe-custom-grid { bg: var(--accent-soft); }
+#probe-ruler { bg: var(--surface-2); }
+#probe-ruler-ink { bg: var(--text-dim); }
+
+/* Dialogs of the Select, Image, Filter and View menus. */
+.filter-card { min-width: 520; }
+.filter-params { gap: var(--space-3); }
+.dialog-slider { width: 260; }
+.dialog-choice { width: 220; }
+.wide-field { width: 260; }

@@ -1,0 +1,15 @@
+<dialog open="grid_open">
+  <column class="dialog-card">
+    <label class="dialog-title" bind-text="grid_title" text=""/>
+    <row class="dialog-row"><label class="field-label" text="Cell width"/><input id="grid-w" class="size-field" type="number" min="1" max="4096" value="16" bind-text="grid_w"/></row>
+    <row class="dialog-row"><label class="field-label" text="Cell height"/><input id="grid-h" class="size-field" type="number" min="1" max="4096" value="16" bind-text="grid_h"/></row>
+    <row class="dialog-row"><label class="field-label" text="Offset x"/><input id="grid-x" class="size-field" type="number" min="0" max="4096" value="0" bind-text="grid_x"/></row>
+    <row class="dialog-row"><label class="field-label" text="Offset y"/><input id="grid-y" class="size-field" type="number" min="0" max="4096" value="0" bind-text="grid_y"/></row>
+    <row class="dialog-row"><label class="field-label" text=""/><checkbox id="grid-iso" label="Isometric (2:1)" bind-checked="grid_iso"/></row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="grid-cancel" text="Cancel"/>
+      <button id="grid-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>

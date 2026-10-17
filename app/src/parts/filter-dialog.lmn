@@ -1,0 +1,91 @@
+<dialog open="filter_open">
+  <column class="dialog-card filter-card">
+    <label class="dialog-title" bind-text="flt_title" text="Filter"/>
+    <if signal="flt_show_hue" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Hue"/><slider id="flt-hue" class="dialog-slider" min="-180" max="180" step="1" value="0" bind-value="flt_hue"/><label class="option-value" bind-text="flt_hue_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Saturation"/><slider id="flt-sat" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_sat"/><label class="option-value" bind-text="flt_sat_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Lightness"/><slider id="flt-light" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_light"/><label class="option-value" bind-text="flt_light_text" text="0"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_brightness" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Brightness"/><slider id="flt-bright" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_bright"/><label class="option-value" bind-text="flt_bright_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Contrast"/><slider id="flt-contrast" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_contrast"/><label class="option-value" bind-text="flt_contrast_text" text="0"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_levels" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Input black"/><slider id="flt-in-lo" class="dialog-slider" min="0" max="254" step="1" value="0" bind-value="flt_in_lo"/><label class="option-value" bind-text="flt_in_lo_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Input white"/><slider id="flt-in-hi" class="dialog-slider" min="1" max="255" step="1" value="255" bind-value="flt_in_hi"/><label class="option-value" bind-text="flt_in_hi_text" text="255"/></row>
+      <row class="dialog-row"><label class="field-label" text="Gamma (x100)"/><slider id="flt-gamma" class="dialog-slider" min="10" max="300" step="1" value="100" bind-value="flt_gamma"/><label class="option-value" bind-text="flt_gamma_text" text="100"/></row>
+      <row class="dialog-row"><label class="field-label" text="Output black"/><slider id="flt-out-lo" class="dialog-slider" min="0" max="255" step="1" value="0" bind-value="flt_out_lo"/><label class="option-value" bind-text="flt_out_lo_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Output white"/><slider id="flt-out-hi" class="dialog-slider" min="0" max="255" step="1" value="255" bind-value="flt_out_hi"/><label class="option-value" bind-text="flt_out_hi_text" text="255"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_curves" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Points"/><input id="flt-points" class="wide-field" bind-text="flt_points" text="64:48 192:208"/></row>
+      <label class="dialog-text" text="Input:output pairs from 0 to 255; the curve runs smoothly through them."/>
+      </column>
+    </if>
+    <if signal="flt_show_balance" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Shadows red"/><slider id="flt-sh-r" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_sh_r"/><label class="option-value" bind-text="flt_sh_r_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Shadows green"/><slider id="flt-sh-g" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_sh_g"/><label class="option-value" bind-text="flt_sh_g_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Shadows blue"/><slider id="flt-sh-b" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_sh_b"/><label class="option-value" bind-text="flt_sh_b_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Midtones red"/><slider id="flt-mid-r" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_mid_r"/><label class="option-value" bind-text="flt_mid_r_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Midtones green"/><slider id="flt-mid-g" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_mid_g"/><label class="option-value" bind-text="flt_mid_g_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Midtones blue"/><slider id="flt-mid-b" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_mid_b"/><label class="option-value" bind-text="flt_mid_b_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Highlights red"/><slider id="flt-hi-r" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_hi_r"/><label class="option-value" bind-text="flt_hi_r_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Highlights green"/><slider id="flt-hi-g" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_hi_g"/><label class="option-value" bind-text="flt_hi_g_text" text="0"/></row>
+      <row class="dialog-row"><label class="field-label" text="Highlights blue"/><slider id="flt-hi-b" class="dialog-slider" min="-100" max="100" step="1" value="0" bind-value="flt_hi_b"/><label class="option-value" bind-text="flt_hi_b_text" text="0"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_posterize" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Levels"/><slider id="flt-levels" class="dialog-slider" min="2" max="32" step="1" value="4" bind-value="flt_levels"/><label class="option-value" bind-text="flt_levels_text" text="4"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_gradient_map" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Colors"/><dropdown id="flt-map-colors" class="dialog-choice" bind-value="flt_map_colors"><option value="Two colors"/><option value="Palette"/></dropdown></row>
+      <label class="dialog-text" text="Dark to light runs from the foreground to the background color, or along the palette between them."/>
+      </column>
+    </if>
+    <if signal="flt_show_outline" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text=""/><checkbox id="flt-outside" label="Outside the shape" checked="true" bind-checked="flt_outside"/></row>
+      <row class="dialog-row"><label class="field-label" text=""/><checkbox id="flt-diagonal" label="Diagonals too" bind-checked="flt_diagonal"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_shadow" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Offset x"/><slider id="flt-dx" class="dialog-slider" min="-16" max="16" step="1" value="1" bind-value="flt_dx"/><label class="option-value" bind-text="flt_dx_text" text="1"/></row>
+      <row class="dialog-row"><label class="field-label" text="Offset y"/><slider id="flt-dy" class="dialog-slider" min="-16" max="16" step="1" value="1" bind-value="flt_dy"/><label class="option-value" bind-text="flt_dy_text" text="1"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_noise" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Amount"/><slider id="flt-amount" class="dialog-slider" min="0" max="128" step="1" value="16" bind-value="flt_amount"/><label class="option-value" bind-text="flt_amount_text" text="16"/></row>
+      <row class="dialog-row"><label class="field-label" text=""/><checkbox id="flt-mono" label="Same on every channel" checked="true" bind-checked="flt_mono"/></row>
+      <row class="dialog-row"><label class="field-label" text="Pattern"/><slider id="flt-seed" class="dialog-slider" min="0" max="999" step="1" value="1" bind-value="flt_seed"/><label class="option-value" bind-text="flt_seed_text" text="1"/></row>
+      </column>
+    </if>
+    <if signal="flt_show_pixelate" mode="hide">
+      <column class="filter-params">
+      <row class="dialog-row"><label class="field-label" text="Block size"/><slider id="flt-size" class="dialog-slider" min="2" max="32" step="1" value="4" bind-value="flt_size"/><label class="option-value" bind-text="flt_size_text" text="4"/></row>
+      </column>
+    </if>
+    <row class="dialog-row">
+      <checkbox id="flt-preview" label="Preview" checked="true" bind-checked="flt_preview"/>
+      <spacer/>
+      <label class="dialog-text" bind-text="flt_progress" text=""/>
+    </row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="flt-cancel" text="Cancel"/>
+      <button id="flt-ok" class="primary" default="true" text="Apply"/>
+    </row>
+  </column>
+</dialog>

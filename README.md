@@ -73,17 +73,58 @@ whose tooltip names the tool and its key:
 - Select: rectangle, ellipse, lasso, polygon lasso and magic wand
   (tolerance, contiguous or not, one layer or all, diagonals or not). Shift
   adds, Alt subtracts, both intersect.
+- Transform: free transform (Ctrl+T) lifts the selection or the layer into
+  a box with handles: drag inside to move, a corner or an edge to scale from
+  the opposite side (Shift keeps the proportions, Alt scales from the
+  middle, Ctrl on an edge skews), outside to turn (Shift steps 15 degrees),
+  or type an angle; Flip H and Flip V mirror it. The preview resamples with
+  RotSprite, clean edge or nearest neighbor, and Enter applies it as one
+  undo step while Escape puts the pixels back.
 - Other: eyedropper, move, crop, text in bitmap fonts (pixl's own 5x7 font,
   or any BDF font), measure, and slices.
 
 The size slider, the brush shape (round, square, or a custom brush made from
 the selection), the stroke stabilizer, pixel-perfect (kept per tool) and
 symmetry (mirror left and right, top and bottom, both, or radial with any
-number of copies) sit in the tool options bar. X swaps the foreground and
+number of copies) sit in the tool options bar. [ and ] step the brush size. X swaps the foreground and
 background colors, the secondary button paints with the background color,
 and Shift snaps lines to clean pixel steps and shapes to squares and
 circles. Every tool keeps to the selection. With a pen, pressure sets the
 brush size; the pen's eraser end erases.
+
+The Select menu selects everything, nothing, the inverse, every pixel of
+the foreground color or of the layer's content, grows, shrinks or borders the
+selection by a number of pixels, and saves selections to load again later in
+the session, replacing, adding to, subtracting from or intersecting the
+current one.
+
+The Image menu crops to the selection, sets the canvas size around an anchor,
+resizes the image (nearest, RotSprite or clean-edge sampling, so no new
+colors appear), flips and turns the canvas, converts to indexed color (on the
+current palette or a new one made from the image, with no dither, a Bayer
+matrix or Floyd-Steinberg) or back to RGBA, and replaces one color with
+another in this frame or every frame. It also loads and saves palettes as
+`.gpl`, `.pal`, `.hex` and `.ase`, sorts the palette by hue, saturation,
+lightness or brightness, builds a ramp around the foreground color with its
+hue turning from shadow to highlight, makes a palette from the image, and
+locks the painting colors to the palette.
+
+The Filter menu has hue and saturation, brightness and contrast, levels,
+curves, color balance, posterize, invert, desaturate, gradient map, outline
+(inside or outside, with or without diagonals), drop shadow, noise and
+pixelate. Each previews on the canvas while its settings change and applies
+as one undo step; Cancel puts the layer back. A filter works through the
+image tile by tile on worker threads, nearest the middle of the view first,
+so a large layer fills in as it goes and a change of setting stops the work
+at once. Indexed layers stay on their palette.
+
+The View menu shows rulers, which guides drag out of and back into; snaps to
+the grid, the guides and the slices; draws a grid of any cell size and
+offset, square or isometric; repeats the document left and right and above
+and below for seamless tiles; turns the view in 15 degree steps and mirrors
+it; and shows the slices. The symmetry axes are marked in the rulers and
+move by their marks. Guides and the grid last as long as the editor runs and
+are not saved with the document.
 
 The panels on the right show the document: the color panel edits the
 foreground color with RGBA sliders and a hex field; the palette sets the

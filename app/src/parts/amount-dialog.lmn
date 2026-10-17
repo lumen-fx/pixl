@@ -1,0 +1,11 @@
+<dialog open="amount_open">
+  <column class="dialog-card">
+    <label class="dialog-title" bind-text="amount_title" text=""/>
+    <row class="dialog-row"><label class="field-label" text="Pixels"/><input id="amount-value" class="size-field" type="number" min="1" max="256" value="1" bind-text="amount_value"/></row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="amount-cancel" text="Cancel"/>
+      <button id="amount-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>

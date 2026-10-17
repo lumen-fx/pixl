@@ -1,0 +1,16 @@
+<dialog open="ramp_open">
+  <column class="dialog-card">
+    <label class="dialog-title" bind-text="ramp_title" text=""/>
+    <row class="dialog-row"><label class="field-label" text="Steps"/><input id="ramp-steps" class="size-field" type="number" min="2" max="16" value="5" bind-text="ramp_steps"/></row>
+    <row class="dialog-row"><label class="field-label" text="Hue shift"/><input id="ramp-hue" class="size-field" type="number" min="-180" max="180" value="40" bind-text="ramp_hue"/></row>
+    <row class="dialog-row"><label class="field-label" text="Darkest (%)"/><input id="ramp-dark" class="size-field" type="number" min="0" max="100" value="15" bind-text="ramp_dark"/></row>
+    <row class="dialog-row"><label class="field-label" text="Lightest (%)"/><input id="ramp-light" class="size-field" type="number" min="0" max="100" value="85" bind-text="ramp_light"/></row>
+    <row class="dialog-row"><label class="field-label" text="Saturation shift"/><input id="ramp-sat" class="size-field" type="number" min="-100" max="100" value="-15" bind-text="ramp_sat"/></row>
+    <row id="ramp-preview" class="swatches"/>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="ramp-cancel" text="Cancel"/>
+      <button id="ramp-ok" class="primary" default="true" text="Add to palette"/>
+    </row>
+  </column>
+</dialog>

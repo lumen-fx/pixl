@@ -26,7 +26,14 @@
       <separator/>
       <menuitem id="edit-settings" label="Settings..."/>
     </menu>
+    <button id="menu-select" class="menu-title" text="Select"/>
+    <include src="parts/select-menu.lmn"/>
+    <button id="menu-image" class="menu-title" text="Image"/>
+    <include src="parts/image-menu.lmn"/>
+    <button id="menu-filter" class="menu-title" text="Filter"/>
+    <include src="parts/filter-menu.lmn"/>
     <button id="menu-view" class="menu-title" text="View"/>
+    <include src="parts/view-menu.lmn"/>
     <button id="menu-layer" class="menu-title" text="Layer"/>
     <button id="menu-window" class="menu-title" text="Window"/>
     <include src="parts/window-menu.lmn"/>
@@ -82,6 +89,8 @@
       <canvas id="rig"/>
       <canvas id="overlay"/>
       <include src="parts/perf.lmn"/>
+      <canvas id="ruler-top" class="ruler"/>
+      <canvas id="ruler-left" class="ruler"/>
     </column>
     <column id="dock-bottom" class="dock">
       <include src="parts/timeline.lmn"/>
@@ -170,6 +179,18 @@
   </row>
 
   <include src="parts/workspace.lmn"/>
+  <include src="parts/filter-dialog.lmn"/>
+  <include src="parts/amount-dialog.lmn"/>
+  <include src="parts/canvas-dialog.lmn"/>
+  <include src="parts/resize-dialog.lmn"/>
+  <include src="parts/indexed-dialog.lmn"/>
+  <include src="parts/replace-dialog.lmn"/>
+  <include src="parts/ramp-dialog.lmn"/>
+  <include src="parts/sort-dialog.lmn"/>
+  <include src="parts/quantize-dialog.lmn"/>
+  <include src="parts/grid-dialog.lmn"/>
+  <include src="parts/slice-dialog.lmn"/>
+  <include src="parts/selections-dialog.lmn"/>
   <include src="parts/themes.lmn"/>
   <include src="parts/palette.lmn"/>
   <include src="parts/timeline-menus.lmn"/>
@@ -285,6 +306,7 @@
     </row>
   </column>
 
+  <include src="parts/aid-probes.lmn"/>
   <tile id="probes" class="probe">
     <tile id="probe-checker-a"/>
     <tile id="probe-checker-b"/>

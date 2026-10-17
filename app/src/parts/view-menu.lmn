@@ -1,0 +1,18 @@
+<menu id="view-menu">
+  <menuitem id="view-rulers" label="Rulers (Ctrl+R)"/>
+  <menuitem id="view-guides" label="Guides (Ctrl+;)"/>
+  <menuitem id="view-clear-guides" label="Clear guides"/>
+  <menuitem id="view-snap" label="Snap to grid, guides and slices (Ctrl+Shift+;)"/>
+  <separator/>
+  <menuitem id="view-grid" label="Grid (Ctrl+')"/>
+  <menuitem id="view-grid-settings" label="Grid settings..."/>
+  <menuitem id="view-slices" label="Slices"/>
+  <separator/>
+  <menuitem id="view-tile-x" label="Tile horizontally"/>
+  <menuitem id="view-tile-y" label="Tile vertically"/>
+  <separator/>
+  <menuitem id="view-rotate-ccw" label="Rotate view left (Alt+[)"/>
+  <menuitem id="view-rotate-cw" label="Rotate view right (Alt+])"/>
+  <menuitem id="view-rotate-reset" label="Reset rotation"/>
+  <menuitem id="view-flip" label="Flip view (Alt+H)"/>
+</menu>

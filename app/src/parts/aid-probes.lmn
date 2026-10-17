@@ -1,0 +1,8 @@
+<tile id="aid-probes" class="probe">
+  <tile id="probe-guide"/>
+  <tile id="probe-slice"/>
+  <tile id="probe-axis"/>
+  <tile id="probe-custom-grid"/>
+  <tile id="probe-ruler"/>
+  <tile id="probe-ruler-ink"/>
+</tile>

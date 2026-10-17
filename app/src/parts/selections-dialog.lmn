@@ -1,0 +1,15 @@
+<dialog open="selections_open">
+  <column class="dialog-card">
+    <label class="dialog-title" text="Saved selections"/>
+    <scroll id="selections-list" class="ws-list"/>
+    <row class="dialog-row">
+      <dropdown id="selections-op" class="dialog-choice" bind-value="selections_op"><option value="Replace"/><option value="Add"/><option value="Subtract"/><option value="Intersect"/></dropdown>
+      <spacer/>
+      <button id="selections-delete" text="Delete"/>
+    </row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="selections-close" class="primary" default="true" text="Done"/>
+    </row>
+  </column>
+</dialog>

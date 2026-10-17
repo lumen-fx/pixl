@@ -1,0 +1,24 @@
+<dialog open="slice_open">
+  <column class="dialog-card">
+    <label class="dialog-title" bind-text="slice_title" text=""/>
+    <row class="dialog-row"><label class="field-label" text="Name"/><input id="slice-name" class="wide-field" bind-text="slice_name" text=""/></row>
+    <row class="dialog-row"><label class="field-label" text="X"/><input id="slice-x" class="size-field" type="number" value="0" bind-text="slice_x"/></row>
+    <row class="dialog-row"><label class="field-label" text="Y"/><input id="slice-y" class="size-field" type="number" value="0" bind-text="slice_y"/></row>
+    <row class="dialog-row"><label class="field-label" text="Width"/><input id="slice-w" class="size-field" type="number" min="1" value="1" bind-text="slice_w"/></row>
+    <row class="dialog-row"><label class="field-label" text="Height"/><input id="slice-h" class="size-field" type="number" min="1" value="1" bind-text="slice_h"/></row>
+    <row class="dialog-row"><label class="field-label" text=""/><checkbox id="slice-nine" label="9-slice center" bind-checked="slice_nine"/></row>
+    <row class="dialog-row"><label class="field-label" text="Center x"/><input id="slice-cx" class="size-field" type="number" value="0" bind-text="slice_cx"/></row>
+    <row class="dialog-row"><label class="field-label" text="Center y"/><input id="slice-cy" class="size-field" type="number" value="0" bind-text="slice_cy"/></row>
+    <row class="dialog-row"><label class="field-label" text="Center width"/><input id="slice-cw" class="size-field" type="number" min="1" value="1" bind-text="slice_cw"/></row>
+    <row class="dialog-row"><label class="field-label" text="Center height"/><input id="slice-ch" class="size-field" type="number" min="1" value="1" bind-text="slice_ch"/></row>
+    <row class="dialog-row"><label class="field-label" text=""/><checkbox id="slice-has-pivot" label="Pivot" bind-checked="slice_has_pivot"/></row>
+    <row class="dialog-row"><label class="field-label" text="Pivot x"/><input id="slice-px" class="size-field" type="number" value="0" bind-text="slice_px"/></row>
+    <row class="dialog-row"><label class="field-label" text="Pivot y"/><input id="slice-py" class="size-field" type="number" value="0" bind-text="slice_py"/></row>
+    <row class="dialog-row"><label class="field-label" text=""/><button id="slice-delete" text="Delete slice"/></row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="slice-cancel" text="Cancel"/>
+      <button id="slice-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>

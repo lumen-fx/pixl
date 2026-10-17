@@ -1,0 +1,13 @@
+<dialog open="canvas_open">
+  <column class="dialog-card">
+    <label class="dialog-title" bind-text="canvas_title" text=""/>
+    <row class="dialog-row"><label class="field-label" text="Width"/><input id="canvas-w" class="size-field" type="number" min="1" max="32768" value="64" bind-text="canvas_w"/></row>
+    <row class="dialog-row"><label class="field-label" text="Height"/><input id="canvas-h" class="size-field" type="number" min="1" max="32768" value="64" bind-text="canvas_h"/></row>
+    <row class="dialog-row"><label class="field-label" text="Anchor"/><dropdown id="canvas-anchor" class="dialog-choice" bind-value="canvas_anchor"><option value="Top left"/><option value="Top"/><option value="Top right"/><option value="Left"/><option value="Center"/><option value="Right"/><option value="Bottom left"/><option value="Bottom"/><option value="Bottom right"/></dropdown></row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="canvas-cancel" text="Cancel"/>
+      <button id="canvas-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>
