@@ -22,3 +22,7 @@ harness = false
 [[bench]]
 name = "rig"
 harness = false
+
+[[bench]]
+name = "edits"
+harness = false

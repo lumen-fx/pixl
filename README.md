@@ -339,6 +339,10 @@ cargo test
 times a pose drag to the frame that shows it (`side=4096 layers=32` puts the
 character in the view bench's document).
 
+`cargo bench -p pixl-core --bench edits` times the brushes, the filters, the
+gradient, palette and indexed conversion, free transform resampling and
+selection grow and border on a 4096x4096 document of 32 layers.
+
 `pixl --perf-log frames.csv` writes one row per frame to a CSV file: the
 frame's start, its time, the editor's work and compositing, the tiles
 written, the layer buffers and their memory, the worker queue and the time
