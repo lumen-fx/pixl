@@ -201,7 +201,9 @@ palette also answers "what is the shortcut for this".
 The timeline panel, below the canvas by default, lists every layer against
 every frame, with the document's tags above the frame numbers.
 A cel shows whether it holds pixels and joins its neighbors when they are
-linked. Click a cel or a frame number to go there; drag or Shift-click to
+linked; the frames a rig rendered are marked, on their frame numbers and on
+the cels of the skeleton and the layers bound to it, as the ones Regenerate
+draws again. Click a cel or a frame number to go there; drag or Shift-click to
 select a range of cels or frames. The timeline adds empty frames, copies,
 deletes and reverses frames, links the selected cels to the first one or
 gives each its own pixels, clears cels, and sets the duration of the selected

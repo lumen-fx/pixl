@@ -14,6 +14,7 @@
   --cel-on: #b8b8b8;
   --cel-off: #3a3a3a;
   --cel-link: #6f6f6f;
+  --cel-generated: #5aa0d8;
   --cel-current: #2a3a4d;
   --onion-before: #ff4040a0;
   --onion-after: #4080ffa0;
@@ -31,6 +32,7 @@
   --cel-on: #3c3c3c;
   --cel-off: #c4c4c4;
   --cel-link: #8a8a8a;
+  --cel-generated: #2f78b8;
   --cel-current: #cfe0f5;
   --onion-before: #e02020a0;
   --onion-after: #2060e0a0;
@@ -101,6 +103,8 @@
 .tl-frame.cur { bg: var(--accent); }
 .tl-frame-num { font-size: 10; text-color: var(--text-dim); }
 .tl-frame.cur .tl-frame-num { text-color: var(--on-accent); }
+/* A frame a rig rendered: its number underlined in the generated mark. */
+.tl-frame.generated { border-bottom: 2px solid var(--cel-generated); }
 
 .cel {
   bg: var(--surface-1);
@@ -117,6 +121,7 @@
 .cel-dot { width: 6; height: 6; radius: 3; }
 .cel.on .cel-dot { bg: var(--cel-on); }
 .cel.off .cel-dot { width: 4; height: 4; radius: 2; bg: var(--cel-off); }
+.cel.generated .cel-dot { bg: var(--cel-generated); }
 .cel.link-l .cel-dot, .cel.link-r .cel-dot { bg: var(--cel-link); radius: 0; height: 2; width: var(--cel-w); }
 .cel.group, .cel.reference, .cel.skeleton { bg: var(--surface-2); }
 .cel.group.cur, .cel.reference.cur, .cel.skeleton.cur { bg: var(--cel-current); }

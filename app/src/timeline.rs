@@ -1435,8 +1435,9 @@ mod mark {
     pub const SKELETON: u16 = 1 << 6;
     pub const SEL: u16 = 1 << 7;
     pub const CUR: u16 = 1 << 8;
-    pub const ACTIVE: u16 = 1 << 9;
-    pub const HIDDEN: u16 = 1 << 10;
+    pub const GENERATED: u16 = 1 << 9;
+    pub const ACTIVE: u16 = 1 << 10;
+    pub const HIDDEN: u16 = 1 << 11;
 }
 
 /// What the grid shows. Its shape (the tags, the rows and the number of
@@ -1464,6 +1465,7 @@ fn cel_class(m: u16) -> String {
         (GROUP, " group"),
         (REFERENCE, " reference"),
         (SKELETON, " skeleton"),
+        (GENERATED, " generated"),
         (SEL, " sel"),
         (CUR, " cur"),
     ] {
@@ -1481,6 +1483,9 @@ fn frame_class(m: u16) -> String {
     }
     if m & mark::CUR != 0 {
         c.push_str(" cur");
+    }
+    if m & mark::GENERATED != 0 {
+        c.push_str(" generated");
     }
     c
 }
@@ -1533,6 +1538,25 @@ fn tags_markup(doc: &Document) -> String {
     grid
 }
 
+/// The cels a rig drew: the skeleton's own row and every layer bound to it,
+/// on each frame the rig rendered.
+fn generated(doc: &Document) -> BTreeSet<(LayerId, usize)> {
+    let mut out = BTreeSet::new();
+    for (_, layer) in doc.walk() {
+        let LayerKind::Skeleton { rig } = &layer.kind else {
+            continue;
+        };
+        let bound: BTreeSet<LayerId> = rig.bindings().iter().map(|b| b.layer).collect();
+        for (f, frame) in rig.frames().iter().enumerate() {
+            if frame.generated {
+                out.insert((layer.id, f));
+                out.extend(bound.iter().map(|l| (*l, f)));
+            }
+        }
+    }
+    out
+}
+
 /// What the grid shows of the document, the selection and the current frame.
 pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel {
     use mark::*;
@@ -1549,6 +1573,8 @@ pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel
     let columns = tl
         .selection
         .is_some_and(|s| rows.len() <= 1 || s.anchor.0 != s.focus.0 || sa != sb);
+    let made = generated(doc);
+    let frame_made: BTreeSet<usize> = made.iter().map(|(_, f)| *f).collect();
     let frames = (0..n)
         .map(|f| {
             let mut m = 0;
@@ -1557,6 +1583,9 @@ pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel
             }
             if f == editor.frame {
                 m |= CUR;
+            }
+            if frame_made.contains(&f) {
+                m |= GENERATED;
             }
             m
         })
@@ -1601,6 +1630,9 @@ pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel
                 }
                 if f == editor.frame {
                     m |= CUR;
+                }
+                if made.contains(&(layer.id, f)) {
+                    m |= GENERATED;
                 }
                 m
             })
@@ -1977,5 +2009,48 @@ mod tests {
         let before = grid_model(&e, &tl, &tree);
         e.add_layer();
         assert_eq!(grid_model(&e, &tl, &tree).changes(&before), None);
+    }
+
+    #[test]
+    fn frames_a_rig_rendered_are_marked_on_its_layers() {
+        let mut e = editor(3);
+        let art = e.layer;
+        let skel = e
+            .doc
+            .add_layer(
+                pixl_core::NewLayer::Skeleton,
+                "Rig",
+                pixl_core::Placement::default(),
+            )
+            .unwrap();
+        let rig = e.doc.rig_mut(skel).unwrap();
+        let bone = rig
+            .add_bone(
+                "arm",
+                None,
+                pixl_core::Vec2::new(1.0, 1.0),
+                pixl_core::Vec2::new(4.0, 1.0),
+            )
+            .unwrap();
+        rig.bind(pixl_core::rig::Binding {
+            layer: art,
+            region: None,
+            bone,
+            pivot: pixl_core::Vec2::new(1.0, 1.0),
+        })
+        .unwrap();
+        rig.frame_mut(2).unwrap().generated = true;
+        let model = grid_model(&e, &Timeline::default(), &LayerTree::default());
+        let (grid, _) = model.markup();
+        for id in [format!("cel-{}-2", art.0), format!("cel-{}-2", skel.0)] {
+            let class = grid
+                .split(&format!(r#"id="{id}" class=""#))
+                .nth(1)
+                .and_then(|r| r.split('"').next())
+                .unwrap();
+            assert!(class.contains("generated"), "{id}: {class}");
+        }
+        assert!(grid.contains(r#"id="tl-frame-2" class="tl-frame generated""#));
+        assert!(!grid.contains(&format!(r#"id="cel-{}-1" class="cel off generated"#, art.0)));
     }
 }
