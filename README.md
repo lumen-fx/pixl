@@ -264,6 +264,12 @@ document, `budget=MiB` the layer buffer memory, and `log=FILE` writes the
 per-frame CSV the `--perf-log` flag writes. Numbers move with the load on
 the machine, so compare runs taken under the same load.
 
+`cargo bench -p pixl --bench customize -- gpu` (or `cpu`) times, on the
+same document, what the workspace, themes, command palette and export
+presets cost each frame with a layout and a user theme in force, beside the
+time from one frame to the next. They are meant to cost nothing a frame
+would show.
+
 On Linux the build links GTK 3, X11, xkbcommon and Wayland, so their
 development packages must be installed.
 

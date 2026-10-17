@@ -28,3 +28,7 @@ harness = false
 [[bench]]
 name = "pose"
 harness = false
+
+[[bench]]
+name = "customize"
+harness = false
