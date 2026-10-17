@@ -851,6 +851,8 @@ pub struct Layers {
     /// Tiles written into buffers since the view started, for the
     /// performance overlay to count per frame.
     pub tiles_written: u64,
+    /// The plan must be made again: the buffer budget changed.
+    replan: bool,
 }
 
 impl Default for Layers {
@@ -873,6 +875,7 @@ impl Default for Layers {
             onion: None,
             seen_onion: None,
             tiles_written: 0,
+            replan: false,
         }
     }
 }
@@ -886,8 +889,9 @@ impl Layers {
         let budget = budget_pixels(perf.buffer_budget_mib);
         if budget != self.budget {
             self.budget = budget;
-            // Re-plan on the next sync.
+            // Re-plan on the next sync, whatever changed in the document.
             self.seen_revision = 0;
+            self.replan = true;
         }
         self.sync_tiles = perf.progressive_tiles.max(1);
         if perf.worker_threads != self.workers_asked && self.pending() == 0 {
@@ -971,8 +975,11 @@ impl Layers {
         self.seen_frame = editor.frame;
         self.seen_onion = self.onion.clone();
         let frame = editor.frame;
+        let replan = std::mem::take(&mut self.replan);
         let pixels_only = match touched {
-            Touched::Layers(ids) if same_view && !self.items.is_empty() => Some(ids.as_slice()),
+            Touched::Layers(ids) if same_view && !replan && !self.items.is_empty() => {
+                Some(ids.as_slice())
+            }
             _ => None,
         };
         if let Some(ids) = pixels_only {

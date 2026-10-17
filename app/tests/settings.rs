@@ -4,6 +4,8 @@
 
 pub mod common;
 
+use lumenui::prelude::*;
+
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::glam::Vec2;
 use pixl::Settings;
@@ -183,4 +185,96 @@ fn the_interface_settings_reach_the_window() {
     let h = out.frame.height();
     assert_eq!(out.frame.pixel(4, h - 4), Some([0xe2, 0xe2, 0xe2, 0xff]));
     assert_eq!(out.frame.pixel(4, h - 36), Some([0xe2, 0xe2, 0xe2, 0xff]));
+}
+
+#[test]
+fn a_new_buffer_budget_plans_the_layers_again() {
+    use std::sync::{Arc, Mutex};
+    // Five layers of 2048x2048 are 16 MiB each: 64 MiB holds four buffers,
+    // so the bottom two layers share one; 128 MiB holds all five.
+    let mut doc = Document::new(2048, 2048, ColorMode::Rgba).unwrap();
+    for i in 0..4 {
+        doc.add_layer(
+            pixl_core::NewLayer::Raster,
+            format!("l{i}"),
+            pixl_core::Placement::default(),
+        )
+        .unwrap();
+    }
+    let mut settings = Settings::default();
+    settings.performance.buffer_budget_mib = 64;
+    let counts: Arc<Mutex<Vec<usize>>> = Arc::default();
+    let seen = Arc::clone(&counts);
+    let app = editor_over(doc).insert_resource(settings).add_systems(
+        lumenui::prelude::TickStage::Systems,
+        (move |layers: lumenui::prelude::Res<pixl::view::Layers>| {
+            seen.lock().unwrap().push(layers.current_plan().len());
+        })
+        .after(pixl::view::draw_stage),
+    );
+    drive(
+        app,
+        vec![
+            Step::Wait,
+            Step::Text("set_buffer_budget", "128"),
+            Step::Wait,
+            Step::Wait,
+        ],
+    );
+    let counts = counts.lock().unwrap();
+    assert!(counts.contains(&4), "{counts:?}");
+    assert_eq!(counts.last(), Some(&5), "{counts:?}");
+}
+
+/// Runs a saved, then edited, document for over a second with `settings`,
+/// and says whether a recovery copy was written.
+fn recovery_written(name: &str, settings: Settings) -> bool {
+    let dir = std::env::temp_dir().join(format!("pixl-settings-files-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(name);
+    let mut editor = pixl::Editor::new(doc());
+    pixl::files::save_to(&mut editor, &path).unwrap();
+    let _ = pixl_core::native::discard_recovery(&path);
+    drive(
+        editor_over(doc())
+            .insert_resource(editor)
+            .insert_resource(settings),
+        vec![
+            Step::Wait,
+            Step::Edit(|e| e.touch()),
+            Step::Wait,
+            Step::Sleep(1100),
+            Step::Wait,
+            Step::Wait,
+        ],
+    );
+    pixl_core::native::find_recovery(&path).is_some()
+}
+
+#[test]
+fn autosave_follows_the_files_settings() {
+    let mut every_second = Settings::default();
+    every_second.files.autosave_seconds = 1;
+    assert!(recovery_written("every-second.pixl", every_second.clone()));
+    let mut off = every_second;
+    off.files.recovery = false;
+    assert!(!recovery_written("recovery-off.pixl", off));
+}
+
+#[test]
+fn without_zoom_to_cursor_the_wheel_zooms_around_the_middle() {
+    let mut settings = Settings::default();
+    settings.navigation.zoom_to_cursor = false;
+    let corner = At::Window(Vec2::new(300.0, 200.0));
+    let out = drive(
+        editor_over(doc()).insert_resource(settings),
+        vec![Step::Wait, Step::Wheel(corner, -32.0), Step::Wait],
+    );
+    let (a, b) = (&out.views[0], out.views.last().unwrap());
+    assert!(b.zoom > a.zoom);
+    let (ma, mb) = (a.to_doc(a.middle()), b.to_doc(b.middle()));
+    assert!(
+        (ma.0 - mb.0).abs() < 1.0 && (ma.1 - mb.1).abs() < 1.0,
+        "{ma:?} {mb:?}"
+    );
 }
