@@ -365,6 +365,14 @@ performance overlay while it runs, and `log=FILE` writes the per-frame CSV
 the `--perf-log` flag writes. Numbers move with the load on
 the machine, so compare runs taken under the same load.
 
+`cargo bench -p pixl --bench playback -- gpu` (or `cpu`) times stepping to
+the next frame, with the onion skin and without, until the frame first shows
+and until all of it is drawn, and the frame rate playback reaches at 12
+frames per second and as fast as it goes. It plays two 4096x4096 documents
+of 32 layers: `sprite` (the default), where a few layers redraw a figure
+each frame and the rest are linked, and `full`, where every cel is its own
+full image; `frames=N`, `side=N` and `layers=N` change them.
+
 `cargo bench -p pixl --bench customize -- gpu` (or `cpu`) times, on the
 same document, what the workspace, themes, command palette and export
 presets cost each frame with a layout and a user theme in force, beside the

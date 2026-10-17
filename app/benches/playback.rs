@@ -231,11 +231,28 @@ fn run(doc: Document, backend: &str) {
         (move |mut phase: Local<Option<Phase>>,
                mut since: Local<Option<(Instant, usize, usize)>>,
                mut stepped: Local<Option<Instant>>,
+               mut shown_phase: Local<Option<Phase>>,
+               wake: Option<Res<lumenui::lumen_core::tick::WakeDeadline>>,
                mut editor: ResMut<Editor>,
                mut timeline: ResMut<Timeline>,
                mut signals: Signals,
                layers: Res<Layers>| {
+            // A window ticks every frame; the bench keeps the headless run
+            // ticking the same way.
+            if let Some(wake) = &wake {
+                wake.request(Instant::now() + Duration::from_millis(2));
+            }
             let p = phase.get_or_insert(Phase::Opening);
+            // Progress on stderr, once per part of the script.
+            let part = match *p {
+                Phase::Step { onion, .. } => Phase::Step { n: 0, onion },
+                Phase::Play { run } => Phase::Play { run },
+                other => other,
+            };
+            if *shown_phase != Some(part) {
+                eprintln!("{part:?} at {:?}", opened.elapsed());
+                *shown_phase = Some(part);
+            }
             let mut results = out.lock().unwrap();
             match *p {
                 Phase::Opening => {

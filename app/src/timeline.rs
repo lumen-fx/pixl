@@ -186,11 +186,12 @@ impl Playback {
         }
     }
 
-    /// The frames per second playback reached over the last second.
+    /// The frames per second playback reached over the last second, or over
+    /// the last two frames when it shows fewer than that.
     pub fn fps(&self) -> Option<f64> {
         let (first, last) = (self.shown.front()?, self.shown.back()?);
         let span = last.duration_since(*first).as_secs_f64();
-        (self.shown.len() > 2 && span > 0.0).then(|| (self.shown.len() - 1) as f64 / span)
+        (self.shown.len() >= 2 && span > 0.0).then(|| (self.shown.len() - 1) as f64 / span)
     }
 }
 
