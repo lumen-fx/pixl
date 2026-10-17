@@ -91,7 +91,8 @@ fn paint_is_the_default_layout_with_the_panels_right_and_the_timeline_below() {
             "panel-palette",
             "panel-layers",
             "panel-rig",
-            "panel-history"
+            "panel-history",
+            "panel-brushes"
         ]
     );
     assert!(d.shows(Dock::Right));
@@ -113,7 +114,12 @@ fn the_rig_layout_puts_the_colors_on_the_left() {
     assert_eq!(d.panels(Dock::Left), ["panel-color", "panel-palette"]);
     assert_eq!(
         d.panels(Dock::Right),
-        ["panel-layers", "panel-rig", "panel-history"]
+        [
+            "panel-layers",
+            "panel-rig",
+            "panel-history",
+            "panel-brushes"
+        ]
     );
     assert!(d.shows(Dock::Left));
     assert!(d.widths.0 > 100.0, "the left dock has room: {:?}", d.widths);
@@ -219,7 +225,8 @@ fn the_panel_menu_moves_a_panel_to_the_bottom_dock_and_back_up() {
             "panel-palette",
             "panel-layers",
             "panel-history",
-            "panel-rig"
+            "panel-rig",
+            "panel-brushes"
         ]
     );
 }

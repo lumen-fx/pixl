@@ -1,0 +1,3 @@
+<spacer/>
+<row id="quickbar" class="quickbar"/>
+<tooltip text="Save and pick presets of this tool's options"><button id="tp-open" class="flat small" text="Presets"/></tooltip>

@@ -1,0 +1,18 @@
+<column id="panel-brushes" class="panel">
+  <row class="panel-header"><label class="panel-title" text="Brushes"/></row>
+  <column id="brushes-body" class="panel-body">
+    <scroll id="brush-list" class="brush-list"/>
+    <row class="brush-actions">
+      <input id="brush-name" class="brush-name-field" placeholder="Brush name" bind-text="brush_name" text=""/>
+      <tooltip text="Keep the current brush under this name"><button id="brush-save" class="flat small" text="Save"/></tooltip>
+      <tooltip text="Make a brush of the selected pixels"><button id="brush-from-selection" class="flat small" text="Selection"/></tooltip>
+    </row>
+    <row class="brush-actions">
+      <tooltip text="Make a brush of a PNG's opaque pixels"><button id="brush-import-png" class="flat small" text="PNG..."/></tooltip>
+      <tooltip text="Add the brushes of a .pixlbrushes pack"><button id="brush-import-pack" class="flat small" text="Import..."/></tooltip>
+      <tooltip text="Write every brush to a .pixlbrushes pack"><button id="brush-export-pack" class="flat small" text="Export..."/></tooltip>
+      <spacer/>
+      <button id="brush-delete" class="flat small" text="Delete"/>
+    </row>
+  </column>
+</column>

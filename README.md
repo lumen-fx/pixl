@@ -117,6 +117,20 @@ Reset layout puts the current layout back as it was saved. The arrangement in
 use and the saved layouts are kept in `workspace.json` in pixl's data folder,
 so the window reopens as it was left.
 
+The Brushes panel is a library of named brushes: each keeps a shape (round,
+square, or a custom mask), a size, opacity and hardness for the soft brush,
+dithering, pixel-perfect, the stroke stabilizer and the pen's pressure
+mapping. A click makes one the brush in use. Save keeps the current brush
+under the name typed beside it; Selection makes a brush of the selected
+pixels; PNG... makes one of an image's opaque pixels; Import... and
+Export... share brushes as a `.pixlbrushes` pack. The Presets button at the
+end of the tool options keeps a tool's whole set of options under a name and
+puts them back with a click, picking the tool too. Beside it, the quick bar
+holds the last colors and brushes painted with; a click takes one again.
+Brushes, tool presets and the quick bar are kept in pixl's data folder
+(`brushes.json`, `tool-presets.json`, `quickbar.json`), and the command
+palette lists the brushes and presets as well.
+
 File > Export presets keeps named export settings: the format (PNG frames,
 an animated GIF, or a sprite sheet with its Aseprite-shape JSON), the scale,
 which frames (all, the current one, one tag, or each tag), which layers (the

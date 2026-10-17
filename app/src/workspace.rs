@@ -154,6 +154,7 @@ impl Layout {
                 place("panel-layers", Dock::Right, true),
                 rig_folded,
                 place("panel-history", Dock::Right, true),
+                place("panel-brushes", Dock::Right, true),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, false),
             ],
@@ -165,6 +166,7 @@ impl Layout {
                 place("panel-layers", Dock::Right, true),
                 rig_folded,
                 place("panel-history", Dock::Right, false),
+                place("panel-brushes", Dock::Right, false),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, true),
             ],
@@ -176,6 +178,7 @@ impl Layout {
                 place("panel-layers", Dock::Right, true),
                 place("panel-rig", Dock::Right, true),
                 place("panel-history", Dock::Right, true),
+                place("panel-brushes", Dock::Right, false),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, false),
             ],
@@ -944,6 +947,7 @@ mod tests {
             "panel-layers",
             "panel-rig",
             "panel-history",
+            "panel-brushes",
         ]
         .iter()
         .map(|p| (p.to_string(), Dock::Right))
@@ -992,19 +996,37 @@ mod tests {
         assert_eq!(order(&l, Dock::Left), ["panel-palette"]);
         assert_eq!(
             order(&l, Dock::Right),
-            ["panel-color", "panel-layers", "panel-rig", "panel-history"]
+            [
+                "panel-color",
+                "panel-layers",
+                "panel-rig",
+                "panel-history",
+                "panel-brushes"
+            ]
         );
         l.shift("panel-history", true);
         assert_eq!(
             order(&l, Dock::Right),
-            ["panel-color", "panel-layers", "panel-history", "panel-rig"]
+            [
+                "panel-color",
+                "panel-layers",
+                "panel-history",
+                "panel-rig",
+                "panel-brushes"
+            ]
         );
         // At the ends a shift does nothing.
         l.shift("panel-color", true);
-        l.shift("panel-rig", false);
+        l.shift("panel-brushes", false);
         assert_eq!(
             order(&l, Dock::Right),
-            ["panel-color", "panel-layers", "panel-history", "panel-rig"]
+            [
+                "panel-color",
+                "panel-layers",
+                "panel-history",
+                "panel-rig",
+                "panel-brushes"
+            ]
         );
     }
 

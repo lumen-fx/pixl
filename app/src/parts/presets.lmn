@@ -1,0 +1,15 @@
+<dialog open="tp_open">
+  <column class="dialog-card tp-card">
+    <label class="dialog-title" bind-text="tp_title" text="Tool presets"/>
+    <scroll id="tp-list" class="tp-list"/>
+    <row class="dialog-row">
+      <input id="tp-name" class="tp-name" placeholder="Preset name" bind-text="tp_name" text=""/>
+      <button id="tp-save" text="Save the current options"/>
+    </row>
+    <label class="dialog-text" bind-text="tp_message" text=""/>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="tp-close" class="primary" default="true" text="Done"/>
+    </row>
+  </column>
+</dialog>

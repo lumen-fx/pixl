@@ -79,7 +79,7 @@ fn freehand(tool: Tool) -> bool {
 }
 
 /// The painting tools, which honor symmetry.
-fn paints(tool: Tool) -> bool {
+pub fn paints(tool: Tool) -> bool {
     freehand(tool)
         || matches!(
             tool,

@@ -1,0 +1,32 @@
+/* The brush library, the tool presets dialog and the quick bar. */
+
+.brush-list { height: 140; bg: var(--surface-1); border: 1px solid var(--edge); }
+.brush-row { align: center; padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--edge-soft); }
+.brush-row:hover { bg: var(--surface-3); }
+.brush-row.current { bg: var(--accent-soft); }
+.brush-text { gap: 1; min-width: 0; }
+.brush-name { text-color: var(--text); }
+.brush-meta { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.brush-actions { align: center; gap: var(--space-1); }
+.brush-name-field { grow: 1; min-width: 0; }
+
+.tp-card { min-width: 460; }
+.tp-list { height: 200; bg: var(--surface-1); border: 1px solid var(--edge); }
+.tp-row { align: center; gap: var(--space-3); padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--edge-soft); }
+.tp-use { min-width: 120; justify: start; }
+.tp-meta { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.tp-empty { text-color: var(--text-dim); padding: var(--space-4); }
+.tp-name { grow: 1; min-width: 0; }
+
+.quickbar { align: center; gap: 2; shrink: 0; }
+.qb-color { width: 14; height: 14; }
+.qb-brush {
+  width: 22;
+  height: 18;
+  min-height: 18;
+  padding: 0;
+  font-size: var(--font-size-small);
+  bg: var(--surface-1);
+  text-color: var(--text-dim);
+}
+.qb-brush.round { radius: 9; }

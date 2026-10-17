@@ -1,6 +1,6 @@
 //! The command palette (Ctrl+Shift+P): one search field over every command
-//! a key can run, every tool, the workspace layouts and themes, and the
-//! recent documents. Typing filters by the letters in order; the arrow keys
+//! a key can run, every tool, the workspace layouts and themes, the brushes
+//! and tool presets, and the recent documents. Typing filters by the letters in order; the arrow keys
 //! pick and Enter runs, as a click on a result does.
 //!
 //! A command runs the way its key would, through the keymap's commands; a
@@ -15,6 +15,7 @@ use lumenui::prelude::*;
 use crate::home::Home;
 use crate::keymap::{KeyCommands, Keymap, Kind, commands};
 use crate::panels::escape;
+use crate::presets::Presets;
 use crate::recents::{Recents, key};
 use crate::settings::Theme;
 use crate::themes::Themes;
@@ -104,6 +105,7 @@ pub fn entries(
     keymap: &Keymap,
     workspace: &Workspace,
     themes: &Themes,
+    presets: &Presets,
     recents: &Recents,
 ) -> Vec<Entry> {
     let mut out: Vec<Entry> = commands()
@@ -139,6 +141,23 @@ pub fn entries(
             group: "Theme".to_string(),
             keys: String::new(),
             run: Run::Item(format!("th-pick-{k}")),
+        });
+    }
+    for (i, b) in presets.brushes.iter().enumerate() {
+        out.push(Entry {
+            label: format!("{} brush", b.name),
+            group: "Brush".to_string(),
+            keys: String::new(),
+            run: Run::Item(format!("brush-pick-{i}")),
+        });
+    }
+    for (i, p) in presets.tools.iter().enumerate() {
+        let tool = p.tool().map_or("", |t| t.label());
+        out.push(Entry {
+            label: format!("{} ({tool})", p.name),
+            group: "Preset".to_string(),
+            keys: String::new(),
+            run: Run::Item(format!("tp-use-{i}")),
         });
     }
     for recent in &recents.entries {
@@ -179,6 +198,7 @@ pub struct Sources<'w> {
     keymap: Res<'w, Keymap>,
     workspace: Res<'w, Workspace>,
     themes: Res<'w, Themes>,
+    presets: Res<'w, Presets>,
     recents: Res<'w, Recents>,
     home: Res<'w, Home>,
 }
@@ -204,6 +224,7 @@ pub fn palette_input(
             &sources.keymap,
             &sources.workspace,
             &sources.themes,
+            &sources.presets,
             &sources.recents,
         );
         palette.query = None;

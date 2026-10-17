@@ -63,6 +63,7 @@
     </if>
     <include src="parts/tool-options.lmn"/>
     <label id="tool-hint" class="option-label" bind-text="tool_hint" text=""/>
+    <include src="parts/quickbar.lmn"/>
   </row>
 
   <row id="workspace">
@@ -150,6 +151,7 @@
         </column>
       </column>
       <include src="parts/rig.lmn"/>
+      <include src="parts/brushes.lmn"/>
       <column id="panel-history" class="panel">
         <row class="panel-header">
           <label class="panel-title" text="History"/>
@@ -171,6 +173,7 @@
   <include src="parts/timeline-menus.lmn"/>
   <include src="parts/exports.lmn"/>
   <include src="parts/layer-menus.lmn"/>
+  <include src="parts/presets.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

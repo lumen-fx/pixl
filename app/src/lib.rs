@@ -12,6 +12,7 @@ pub mod layers;
 pub mod palette;
 pub mod panels;
 pub mod perf;
+pub mod presets;
 pub mod preview;
 pub mod progressive;
 pub mod recents;
@@ -61,6 +62,7 @@ pub fn app(file: Option<PathBuf>) -> App {
     .insert_resource(Workspace::user())
     .insert_resource(Themes::user())
     .insert_resource(exports::Exports::user())
+    .insert_resource(presets::Presets::user())
 }
 
 /// `app` (an [`editor`]) starting on the start screen over `recents`, or on
@@ -240,7 +242,8 @@ pub fn editor(source: Source) -> App {
             TickStage::A11ySync,
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
         );
-    rig::install(app)
+    let app = rig::install(app);
+    presets::install(app, presets::Presets::in_memory())
 }
 
 /// Asks for another tick soon. A system that edits the DOM or a signal after

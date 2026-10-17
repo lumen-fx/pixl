@@ -622,6 +622,7 @@ const MODAL_SIGNALS: &[&str] = &[
     "themes_open",
     "cp_open",
     "ex_open",
+    "tp_open",
 ];
 
 /// Turns this tick's key presses into commands, through the keymap the
