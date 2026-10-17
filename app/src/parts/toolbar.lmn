@@ -1,0 +1,32 @@
+<!-- The tool bar: two columns of tools, grouped as the spec lists them. -->
+<tooltip text="Pencil (B)"><button id="tool-pencil" class="tool active" text=""><tile class="tool-icon icon-pencil"/></button></tooltip>
+<tooltip text="Brush (Shift+B)"><button id="tool-brush" class="tool" text=""><tile class="tool-icon icon-brush"/></button></tooltip>
+<tooltip text="Eraser (E)"><button id="tool-eraser" class="tool" text=""><tile class="tool-icon icon-eraser"/></button></tooltip>
+<tooltip text="Spray (J)"><button id="tool-spray" class="tool" text=""><tile class="tool-icon icon-spray"/></button></tooltip>
+<tooltip text="Shading (O)"><button id="tool-shade" class="tool" text=""><tile class="tool-icon icon-shade"/></button></tooltip>
+<tooltip text="Dither brush (Shift+O)"><button id="tool-dither" class="tool" text=""><tile class="tool-icon icon-dither"/></button></tooltip>
+<tooltip text="Clone stamp (K)"><button id="tool-clone" class="tool" text=""><tile class="tool-icon icon-clone"/></button></tooltip>
+<tooltip text="Pattern stamp (Shift+K)"><button id="tool-pattern" class="tool" text=""><tile class="tool-icon icon-pattern"/></button></tooltip>
+<tooltip text="Smudge (R)"><button id="tool-smudge" class="tool" text=""><tile class="tool-icon icon-smudge"/></button></tooltip>
+<tooltip text="Blur and sharpen (Shift+R)"><button id="tool-blur" class="tool" text=""><tile class="tool-icon icon-blur"/></button></tooltip>
+<tooltip text="Replace color (Y)"><button id="tool-replace" class="tool" text=""><tile class="tool-icon icon-replace"/></button></tooltip>
+<tooltip text="Eyedropper (I)"><button id="tool-eyedropper" class="tool" text=""><tile class="tool-icon icon-eyedropper"/></button></tooltip>
+<tooltip text="Line (L)"><button id="tool-line" class="tool" text=""><tile class="tool-icon icon-line"/></button></tooltip>
+<tooltip text="Curve (Shift+L)"><button id="tool-curve" class="tool" text=""><tile class="tool-icon icon-curve"/></button></tooltip>
+<tooltip text="Rectangle (U)"><button id="tool-rect" class="tool" text=""><tile class="tool-icon icon-rect"/></button></tooltip>
+<tooltip text="Ellipse (Shift+U)"><button id="tool-ellipse" class="tool" text=""><tile class="tool-icon icon-ellipse"/></button></tooltip>
+<tooltip text="Polygon (H)"><button id="tool-polygon" class="tool" text=""><tile class="tool-icon icon-polygon"/></button></tooltip>
+<tooltip text="Contour (Shift+P)"><button id="tool-contour" class="tool" text=""><tile class="tool-icon icon-contour"/></button></tooltip>
+<tooltip text="Bucket (G)"><button id="tool-bucket" class="tool" text=""><tile class="tool-icon icon-bucket"/></button></tooltip>
+<tooltip text="Gradient (Shift+G)"><button id="tool-gradient" class="tool" text=""><tile class="tool-icon icon-gradient"/></button></tooltip>
+<tooltip text="Rectangle select (M)"><button id="tool-select" class="tool" text=""><tile class="tool-icon icon-select"/></button></tooltip>
+<tooltip text="Ellipse select (Shift+M)"><button id="tool-ellipse-select" class="tool" text=""><tile class="tool-icon icon-ellipse-select"/></button></tooltip>
+<tooltip text="Lasso (Q)"><button id="tool-lasso" class="tool" text=""><tile class="tool-icon icon-lasso"/></button></tooltip>
+<tooltip text="Polygon lasso (Shift+Q)"><button id="tool-polylasso" class="tool" text=""><tile class="tool-icon icon-polylasso"/></button></tooltip>
+<tooltip text="Magic wand (N)"><button id="tool-wand" class="tool" text=""><tile class="tool-icon icon-wand"/></button></tooltip>
+<tooltip text="Move (V)"><button id="tool-move" class="tool" text=""><tile class="tool-icon icon-move"/></button></tooltip>
+<tooltip text="Free transform (Ctrl+T)"><button id="tool-transform" class="tool" text=""><tile class="tool-icon icon-transform"/></button></tooltip>
+<tooltip text="Crop (C)"><button id="tool-crop" class="tool" text=""><tile class="tool-icon icon-crop"/></button></tooltip>
+<tooltip text="Text (T)"><button id="tool-text" class="tool" text=""><tile class="tool-icon icon-text"/></button></tooltip>
+<tooltip text="Measure (Shift+C)"><button id="tool-measure" class="tool" text=""><tile class="tool-icon icon-measure"/></button></tooltip>
+<tooltip text="Slice (F)"><button id="tool-slice" class="tool" text=""><tile class="tool-icon icon-slice"/></button></tooltip>

@@ -1,0 +1,62 @@
+/* The tool bar and its icons. Each icon is a mask over the ink color, so one
+   file serves both themes and every state (assets/icons/draw.py draws them). */
+
+/* Rows of two; past the window's height (a large UI scale) the bar scrolls. */
+#toolbar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  width: var(--toolbar-w);
+  min-height: 0;
+  overflow-y: scroll;
+}
+.tool-icon {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  bg: var(--text);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+.tool.active .tool-icon { bg: var(--on-accent); }
+.icon-pencil { mask-image: url("assets/icons/pencil.png"); }
+.icon-brush { mask-image: url("assets/icons/brush.png"); }
+.icon-eraser { mask-image: url("assets/icons/eraser.png"); }
+.icon-spray { mask-image: url("assets/icons/spray.png"); }
+.icon-shade { mask-image: url("assets/icons/shade.png"); }
+.icon-dither { mask-image: url("assets/icons/dither.png"); }
+.icon-clone { mask-image: url("assets/icons/clone.png"); }
+.icon-pattern { mask-image: url("assets/icons/pattern.png"); }
+.icon-smudge { mask-image: url("assets/icons/smudge.png"); }
+.icon-blur { mask-image: url("assets/icons/blur.png"); }
+.icon-replace { mask-image: url("assets/icons/replace.png"); }
+.icon-eyedropper { mask-image: url("assets/icons/eyedropper.png"); }
+.icon-line { mask-image: url("assets/icons/line.png"); }
+.icon-curve { mask-image: url("assets/icons/curve.png"); }
+.icon-rect { mask-image: url("assets/icons/rect.png"); }
+.icon-ellipse { mask-image: url("assets/icons/ellipse.png"); }
+.icon-polygon { mask-image: url("assets/icons/polygon.png"); }
+.icon-contour { mask-image: url("assets/icons/contour.png"); }
+.icon-bucket { mask-image: url("assets/icons/bucket.png"); }
+.icon-gradient { mask-image: url("assets/icons/gradient.png"); }
+.icon-select { mask-image: url("assets/icons/select.png"); }
+.icon-ellipse-select { mask-image: url("assets/icons/ellipse-select.png"); }
+.icon-lasso { mask-image: url("assets/icons/lasso.png"); }
+.icon-polylasso { mask-image: url("assets/icons/polylasso.png"); }
+.icon-wand { mask-image: url("assets/icons/wand.png"); }
+.icon-move { mask-image: url("assets/icons/move.png"); }
+.icon-transform { mask-image: url("assets/icons/transform.png"); }
+.icon-crop { mask-image: url("assets/icons/crop.png"); }
+.icon-text { mask-image: url("assets/icons/text.png"); }
+.icon-measure { mask-image: url("assets/icons/measure.png"); }
+.icon-slice { mask-image: url("assets/icons/slice.png"); }
+
+/* The tool options of the tools in toolbox.rs. */
+.option-slider.short { width: 80; }
+.option-choice { width: 132; }
+.text-field { width: 140; }
+.number-field { width: 64; }
+
+/* The workspace takes the height left over, whatever the tool bar's content
+   would ask for, so a tall tool bar scrolls instead of squeezing the bars. */
+#workspace { flex-basis: 0; }

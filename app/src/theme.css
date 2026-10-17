@@ -29,7 +29,7 @@
   --panel-w: 264;
   --dock-bottom-h: 200;
   --gutter: 4;
-  --toolbar-w: 38;
+  --toolbar-w: 71;
   --swatch: 16;
   --scrollbar: 6;
   --canvas-bg: var(--surface-0);
@@ -68,26 +68,6 @@
   --marquee-b: #000000;
   --preview: #4f9cf0;
 
-  /* Tool icons inked in --text, and in --on-accent for the active tool
-     (assets/icons/draw.py draws them). */
-  --icon-pencil: url("assets/icons/text-dark/pencil.png");
-  --icon-pencil-on: url("assets/icons/on-accent-dark/pencil.png");
-  --icon-eraser: url("assets/icons/text-dark/eraser.png");
-  --icon-eraser-on: url("assets/icons/on-accent-dark/eraser.png");
-  --icon-line: url("assets/icons/text-dark/line.png");
-  --icon-line-on: url("assets/icons/on-accent-dark/line.png");
-  --icon-rect: url("assets/icons/text-dark/rect.png");
-  --icon-rect-on: url("assets/icons/on-accent-dark/rect.png");
-  --icon-ellipse: url("assets/icons/text-dark/ellipse.png");
-  --icon-ellipse-on: url("assets/icons/on-accent-dark/ellipse.png");
-  --icon-bucket: url("assets/icons/text-dark/bucket.png");
-  --icon-bucket-on: url("assets/icons/on-accent-dark/bucket.png");
-  --icon-eyedropper: url("assets/icons/text-dark/eyedropper.png");
-  --icon-eyedropper-on: url("assets/icons/on-accent-dark/eyedropper.png");
-  --icon-select: url("assets/icons/text-dark/select.png");
-  --icon-select-on: url("assets/icons/on-accent-dark/select.png");
-  --icon-move: url("assets/icons/text-dark/move.png");
-  --icon-move-on: url("assets/icons/on-accent-dark/move.png");
 }
 
 /* Light: the same roles, inverted. */
@@ -115,24 +95,6 @@
   --marquee-b: #ffffff;
   --preview: #2f78d6;
 
-  --icon-pencil: url("assets/icons/text-light/pencil.png");
-  --icon-pencil-on: url("assets/icons/on-accent-light/pencil.png");
-  --icon-eraser: url("assets/icons/text-light/eraser.png");
-  --icon-eraser-on: url("assets/icons/on-accent-light/eraser.png");
-  --icon-line: url("assets/icons/text-light/line.png");
-  --icon-line-on: url("assets/icons/on-accent-light/line.png");
-  --icon-rect: url("assets/icons/text-light/rect.png");
-  --icon-rect-on: url("assets/icons/on-accent-light/rect.png");
-  --icon-ellipse: url("assets/icons/text-light/ellipse.png");
-  --icon-ellipse-on: url("assets/icons/on-accent-light/ellipse.png");
-  --icon-bucket: url("assets/icons/text-light/bucket.png");
-  --icon-bucket-on: url("assets/icons/on-accent-light/bucket.png");
-  --icon-eyedropper: url("assets/icons/text-light/eyedropper.png");
-  --icon-eyedropper-on: url("assets/icons/on-accent-light/eyedropper.png");
-  --icon-select: url("assets/icons/text-light/select.png");
-  --icon-select-on: url("assets/icons/on-accent-light/select.png");
-  --icon-move: url("assets/icons/text-light/move.png");
-  --icon-move-on: url("assets/icons/on-accent-light/move.png");
 }
 
 #app {
@@ -288,25 +250,6 @@ dropdown { height: var(--control-h); min-width: 90; }
 .tool:active { bg: var(--surface-0); opacity: 1; }
 .tool.active { bg: var(--accent); border: 1px solid var(--accent-press); opacity: 1; }
 .tool.active:hover { bg: var(--accent-hover); }
-.tool-icon { width: var(--icon-size); height: var(--icon-size); image-rendering: pixelated; bg-fit: fill; }
-.icon-pencil { bg: var(--icon-pencil); }
-.tool.active .icon-pencil { bg: var(--icon-pencil-on); }
-.icon-eraser { bg: var(--icon-eraser); }
-.tool.active .icon-eraser { bg: var(--icon-eraser-on); }
-.icon-line { bg: var(--icon-line); }
-.tool.active .icon-line { bg: var(--icon-line-on); }
-.icon-rect { bg: var(--icon-rect); }
-.tool.active .icon-rect { bg: var(--icon-rect-on); }
-.icon-ellipse { bg: var(--icon-ellipse); }
-.tool.active .icon-ellipse { bg: var(--icon-ellipse-on); }
-.icon-bucket { bg: var(--icon-bucket); }
-.tool.active .icon-bucket { bg: var(--icon-bucket-on); }
-.icon-eyedropper { bg: var(--icon-eyedropper); }
-.tool.active .icon-eyedropper { bg: var(--icon-eyedropper-on); }
-.icon-select { bg: var(--icon-select); }
-.tool.active .icon-select { bg: var(--icon-select-on); }
-.icon-move { bg: var(--icon-move); }
-.tool.active .icon-move { bg: var(--icon-move-on); }
 
 #stage { bg: var(--canvas-bg); }
 

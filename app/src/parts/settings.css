@@ -82,7 +82,7 @@
   --options-h: 40;
   --header-h: 28;
   --panel-w: 330;
-  --toolbar-w: 48;
+  --toolbar-w: 90;
   --swatch: 20;
   --scrollbar: 8;
 }
@@ -100,7 +100,7 @@
   --options-h: 48;
   --header-h: 33;
   --panel-w: 396;
-  --toolbar-w: 57;
+  --toolbar-w: 106;
   --swatch: 24;
   --scrollbar: 9;
 }
@@ -118,7 +118,7 @@
   --options-h: 64;
   --header-h: 44;
   --panel-w: 528;
-  --toolbar-w: 76;
+  --toolbar-w: 153;
   --swatch: 32;
   --scrollbar: 12;
 }

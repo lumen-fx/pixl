@@ -821,6 +821,8 @@ pub struct Layers {
     seen_revision: u64,
     seen_generation: u64,
     seen_frame: usize,
+    /// The canvas size the buffers were made for.
+    seen_size: (u32, u32),
     /// Something drawn changed since the art canvas was last drawn.
     pub art_dirty: bool,
     /// Bumped each time the buffers' pixels or plan reach the art canvas.
@@ -849,6 +851,7 @@ impl Default for Layers {
             next_key: 1,
             seen_revision: 0,
             seen_generation: u64::MAX,
+            seen_size: (0, 0),
             seen_frame: 0,
             art_dirty: true,
             art_revision: 0,
@@ -936,12 +939,16 @@ impl Layers {
     /// the buffers that show those layers are looked at.
     pub fn sync(&mut self, editor: &Editor, touched: &Touched, focus: (f64, f64)) {
         let doc = &editor.doc;
-        if editor.generation != self.seen_generation {
+        let size = (doc.width(), doc.height());
+        // A new document, or a new canvas size (crop, canvas size, resize),
+        // needs buffers of its own size.
+        if editor.generation != self.seen_generation || size != self.seen_size {
             for item in self.items.drain(..) {
                 self.pool.cancel(item.key);
             }
             self.rewrites.clear();
             self.seen_generation = editor.generation;
+            self.seen_size = size;
             self.seen_revision = 0;
             self.error = None;
         }

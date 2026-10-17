@@ -43,15 +43,36 @@ CPU instead, and so are the bottom layers of a document whose layers would
 not fit the renderer's image budget. Large redraws run on worker threads and
 show tile by tile as they finish.
 
-The tools run on `pixl-core`: the pencil (pixel-perfect by default), eraser,
-line, rectangle, ellipse, bucket, eyedropper, rectangle selection and move. The
-tool bar shows each as a pixel icon, and its tooltip names the tool and its
-key.
-Their keys are B, E, L, U (Shift+U for the ellipse), G, I, M and V; X swaps the
-foreground and background colors, the secondary button paints with the
-background color, and Shift snaps lines to clean pixel steps and shapes to
-squares and circles. Every tool keeps to the selection. With a pen, pressure
-sets the brush size; the pen's eraser end erases.
+The tools run on `pixl-core`, and the tool bar shows each as a pixel icon
+whose tooltip names the tool and its key:
+
+- Paint: the pencil (pixel-perfect by default), a soft brush (opacity and
+  hardness, or the same coverage laid down as a dither of whole pixels), the
+  eraser, a spray, a shading brush that steps pixels along the palette, a
+  dither brush, the clone stamp (Alt+click picks its source), a pattern
+  stamp (any selection makes the pattern), a smudge and a blur that can keep
+  to the colors already there, and a brush that replaces the background
+  color with the foreground.
+- Shapes: line, Bezier curve, rectangle, ellipse, polygon and contour (a
+  freehand shape filled on release), filled or outlined; lines and curves
+  are pixel-perfect when asked.
+- Fill: the bucket, and gradients (linear, radial or conic) that step
+  between two colors or along the palette, broken up by a Bayer matrix, blue
+  noise or a pattern instead of blending.
+- Select: rectangle, ellipse, lasso, polygon lasso and magic wand
+  (tolerance, contiguous or not, one layer or all, diagonals or not). Shift
+  adds, Alt subtracts, both intersect.
+- Other: eyedropper, move, crop, text in bitmap fonts (pixl's own 5x7 font,
+  or any BDF font), measure, and slices.
+
+The size slider, the brush shape (round, square, or a custom brush made from
+the selection), the stroke stabilizer, pixel-perfect (kept per tool) and
+symmetry (mirror left and right, top and bottom, both, or radial with any
+number of copies) sit in the tool options bar. X swaps the foreground and
+background colors, the secondary button paints with the background color,
+and Shift snaps lines to clean pixel steps and shapes to squares and
+circles. Every tool keeps to the selection. With a pen, pressure sets the
+brush size; the pen's eraser end erases.
 
 The panels on the right show the document: the color panel edits the
 foreground color with RGBA sliders and a hex field; the palette sets the
@@ -123,8 +144,8 @@ theme's colors once Lumen applies custom properties set from code
 (lumen-fx/lumen#531). The UI font is Pixelify Sans by Stefie Justprince,
 under the SIL Open Font License (`app/assets/fonts/OFL.txt`); a setting in the
 menu row switches the UI to the platform's sans-serif instead. The tool
-icons are pixl's own, drawn in `app/assets/icons/draw.py` in the theme's ink
-colors, and share pixl's license.
+icons are pixl's own, drawn in `app/assets/icons/draw.py` as masks the theme
+inks, and share pixl's license.
 
 Edit > Settings (Ctrl+,) sets how the view moves (what the wheel does, zoom
 speed, zooming around the pointer, scroll and pan key speeds, an inverted

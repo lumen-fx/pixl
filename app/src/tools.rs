@@ -97,15 +97,6 @@ enum Line {
     Pressure { size: u32, pen: PenSettings },
 }
 
-/// The brush of a size: square up to two pixels, round from three.
-pub fn brush(size: u32) -> Brush {
-    if size >= 3 {
-        Brush::circle(size)
-    } else {
-        Brush::square(size)
-    }
-}
-
 /// The brush size a pen press of `pressure` paints with, for a tool size
 /// of `size`: the pen settings map pressure to a share of it.
 pub fn pressure_size(size: u32, pressure: f32, pen: &PenSettings) -> u32 {
@@ -115,7 +106,7 @@ pub fn pressure_size(size: u32, pressure: f32, pen: &PenSettings) -> u32 {
 
 /// The color a button paints: the foreground for the primary button, the
 /// background for the secondary one.
-fn paint_color(editor: &Editor, button: PointerButton) -> Rgba {
+pub(crate) fn paint_color(editor: &Editor, button: PointerButton) -> Rgba {
     if button == PointerButton::Secondary {
         editor.bg
     } else {
@@ -131,15 +122,15 @@ fn ink_for(editor: &Editor, tool: Tool, button: PointerButton, eraser_end: bool)
     }
 }
 
-fn context(editor: &Editor) -> ToolContext {
+pub(crate) fn context(editor: &Editor) -> ToolContext {
     ToolContext {
         selection: editor.selection.clone(),
-        symmetry: Default::default(),
+        symmetry: editor.symmetry,
     }
 }
 
 /// Explains a refused edit in the status bar.
-fn refuse(editor: &mut Editor, e: Error) {
+pub(crate) fn refuse(editor: &mut Editor, e: Error) {
     editor.message = Some(match e {
         Error::Locked(_) => "The layer is locked".to_string(),
         Error::NotRaster(_) => "Pick a raster layer to paint on".to_string(),
@@ -148,7 +139,7 @@ fn refuse(editor: &mut Editor, e: Error) {
 }
 
 /// The pixels of a shape from `a` to `b`, for the preview and the edit.
-fn shape_pixels(tool: Tool, a: Point, b: Point, filled: bool, size: u32) -> Vec<Point> {
+fn shape_pixels(tool: Tool, a: Point, b: Point, filled: bool, brush: &Brush) -> Vec<Point> {
     let base = match tool {
         Tool::Line => shapes::line(a, b),
         Tool::Rectangle if filled => Rect::from_corners(a, b).points().collect(),
@@ -157,10 +148,10 @@ fn shape_pixels(tool: Tool, a: Point, b: Point, filled: bool, size: u32) -> Vec<
         Tool::Ellipse => shapes::ellipse_outline(a, b),
         _ => Vec::new(),
     };
-    if size <= 1 || filled {
+    if brush.is_pixel() || filled {
         return base;
     }
-    let offsets = brush(size).offsets();
+    let offsets = brush.offsets();
     let mut out: Vec<Point> = base
         .iter()
         .flat_map(|p| {
@@ -250,10 +241,21 @@ pub fn pick_tool(
 /// the element under the pointer.
 #[derive(SystemParam)]
 pub struct Place<'w, 's> {
-    view: Res<'w, View>,
-    nav: Res<'w, Navigation>,
-    modifiers: Res<'w, ModifiersState>,
-    hovered: Query<'w, 's, Option<&'static LumenId>, With<Hovered>>,
+    pub(crate) view: Res<'w, View>,
+    pub(crate) nav: Res<'w, Navigation>,
+    pub(crate) modifiers: Res<'w, ModifiersState>,
+    pub(crate) hovered: Query<'w, 's, Option<&'static LumenId>, With<Hovered>>,
+}
+
+impl Place<'_, '_> {
+    /// Whether the pointer is over the stage and nothing in front of it.
+    /// With nothing hovered (input that did not come through the window),
+    /// the stage's own rectangle decides.
+    pub(crate) fn over_stage(&self) -> bool {
+        self.hovered.iter().all(|id| {
+            id.is_some_and(|id| matches!(id.0.as_str(), "stage" | "checker" | "art" | "overlay"))
+        })
+    }
 }
 
 /// Runs the active tool over this tick's pointer events.
@@ -268,12 +270,8 @@ pub fn use_tools(
     let (view, nav) = (&place.view, &place.nav);
     let shift = place.modifiers.0.shift;
     let alt = place.modifiers.0.alt;
-    // A popup or a panel over the stage takes the press. With nothing
-    // hovered (input that did not come through the window), the stage's
-    // own rectangle decides.
-    let over_stage = place.hovered.iter().all(|id| {
-        id.is_some_and(|id| matches!(id.0.as_str(), "stage" | "checker" | "art" | "overlay"))
-    });
+    // A popup or a panel over the stage takes the press.
+    let over_stage = place.over_stage();
     for event in pointer.events() {
         match event {
             Pointer::Down { at, button, data } => {
@@ -387,6 +385,8 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
             tx.watch(&editor.doc, image);
             let size = editor.options.size;
             let pressure = data.kind == PointerKind::Pen && pen.pressure && size > 1;
+            let steady = editor.brush(size);
+            let pixel_perfect = editor.options.pixel_perfect;
             let line = if pressure {
                 Line::Pressure { size, pen }
             } else {
@@ -397,9 +397,9 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                         let canvas = Canvas::new(target, &ctx);
                         Line::Steady(PencilStroke::new(
                             &canvas,
-                            brush(size),
+                            steady,
                             ink.clone(),
-                            editor.options.pixel_perfect,
+                            pixel_perfect,
                         ))
                     }
                     Err(e) => {
@@ -513,6 +513,8 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                 tx: Some(tx),
             })
         }
+        // The other tools run in the toolbox and the transform tool.
+        _ => None,
     }
 }
 
@@ -529,16 +531,18 @@ fn stroke_to(editor: &mut Editor, session: &mut Session, p: Point, pressure: f32
         return;
     };
     let (layer, frame) = (editor.layer, editor.frame);
+    let pressed = match line {
+        Line::Pressure { size, pen } => Some(editor.brush(pressure_size(*size, pressure, pen))),
+        Line::Steady(_) => None,
+    };
     let Ok(target) = editor.doc.target(layer, frame) else {
         return;
     };
     let mut canvas = Canvas::new(target, ctx);
-    match line {
-        Line::Steady(stroke) => stroke.add(&mut canvas, p),
-        Line::Pressure { size, pen } => {
-            let b = brush(pressure_size(*size, pressure, pen));
-            paint::line(&mut canvas, *last, p, &b, ink);
-        }
+    match (line, pressed) {
+        (Line::Steady(stroke), _) => stroke.add(&mut canvas, p),
+        (Line::Pressure { .. }, Some(b)) => paint::line(&mut canvas, *last, p, &b, ink),
+        (Line::Pressure { .. }, None) => {}
     }
     *last = p;
     if !canvas.dirty().is_empty() {
@@ -635,7 +639,7 @@ fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point
             preview.clear();
             let to = constrain(tool, from, if to == p { to } else { p }, shift);
             let filled = editor.options.filled;
-            let b = brush(editor.options.size);
+            let b = editor.brush(editor.options.size);
             let ctx = context(editor);
             let done = edit_cel(
                 &mut editor.doc,
@@ -755,7 +759,8 @@ fn show_shape(editor: &Editor, preview: &mut Preview, session: &Session, shift: 
     } = session
     {
         let to = constrain(*tool, *from, *to, shift);
-        let pixels = shape_pixels(*tool, *from, to, editor.options.filled, editor.options.size);
+        let b = editor.brush(editor.options.size);
+        let pixels = shape_pixels(*tool, *from, to, editor.options.filled, &b);
         preview.set(pixels, paint_color(editor, *button));
     }
 }
@@ -861,11 +866,17 @@ pub fn show_tool(
     signals.set("tool_label", tool.label());
     signals.set(
         "show_size",
-        matches!(tool, Pencil | Eraser | Line | Rectangle | Ellipse),
+        matches!(
+            tool,
+            Pencil | Eraser | Line | Rectangle | Ellipse | Curve | Polygon
+        ) || (crate::toolbox::sized(tool) && tool != Spray),
     );
-    signals.set("show_pixel_perfect", tool == Pencil);
+    signals.set(
+        "show_pixel_perfect",
+        matches!(tool, Pencil | Eraser) || crate::toolbox::pixel_perfect_tool(tool),
+    );
     signals.set("show_pressure", matches!(tool, Pencil | Eraser));
-    signals.set("show_filled", matches!(tool, Rectangle | Ellipse));
+    signals.set("show_filled", matches!(tool, Rectangle | Ellipse | Polygon));
     signals.set("show_bucket", tool == Bucket);
     signals.set(
         "tool_hint",
@@ -875,7 +886,7 @@ pub fn show_tool(
             Move => "Drag the selection, or the whole layer",
             Line => "Shift snaps to clean pixel steps",
             Rectangle | Ellipse => "Shift keeps it square",
-            _ => "",
+            other => crate::toolbox::hint(other),
         },
     );
     *shown = Some(tool);
@@ -966,7 +977,8 @@ mod tests {
         assert_eq!(ran("B"), ["tool-pencil"]);
         assert_eq!(ran("U"), ["tool-rect"]);
         assert_eq!(ran("Shift+U"), ["tool-ellipse"]);
-        assert!(ran("Q").is_empty());
+        assert_eq!(ran("Q"), ["tool-lasso"]);
+        assert!(ran("Z").is_empty());
         // Every tool has a key, and its tooltip names it.
         for tool in Tool::ALL {
             assert!(!map.chords(tool.button_id()).is_empty(), "{tool:?}");

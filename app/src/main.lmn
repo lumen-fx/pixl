@@ -59,20 +59,13 @@
       </row>
       <checkbox id="opt-contiguous" label="Contiguous" checked="true" bind-checked="opt_contiguous"/>
     </if>
+    <include src="parts/tool-options.lmn"/>
     <label id="tool-hint" class="option-label" bind-text="tool_hint" text=""/>
   </row>
 
   <row id="workspace">
     <column id="toolbar">
-      <tooltip text="Pencil (B)"><button id="tool-pencil" class="tool active" text=""><tile class="tool-icon icon-pencil"/></button></tooltip>
-      <tooltip text="Eraser (E)"><button id="tool-eraser" class="tool" text=""><tile class="tool-icon icon-eraser"/></button></tooltip>
-      <tooltip text="Line (L)"><button id="tool-line" class="tool" text=""><tile class="tool-icon icon-line"/></button></tooltip>
-      <tooltip text="Rectangle (U)"><button id="tool-rect" class="tool" text=""><tile class="tool-icon icon-rect"/></button></tooltip>
-      <tooltip text="Ellipse (Shift+U)"><button id="tool-ellipse" class="tool" text=""><tile class="tool-icon icon-ellipse"/></button></tooltip>
-      <tooltip text="Bucket (G)"><button id="tool-bucket" class="tool" text=""><tile class="tool-icon icon-bucket"/></button></tooltip>
-      <tooltip text="Eyedropper (I)"><button id="tool-eyedropper" class="tool" text=""><tile class="tool-icon icon-eyedropper"/></button></tooltip>
-      <tooltip text="Rectangle select (M)"><button id="tool-select" class="tool" text=""><tile class="tool-icon icon-select"/></button></tooltip>
-      <tooltip text="Move (V)"><button id="tool-move" class="tool" text=""><tile class="tool-icon icon-move"/></button></tooltip>
+      <include src="parts/toolbar.lmn"/>
     </column>
 
     <split id="docks" class="docks">

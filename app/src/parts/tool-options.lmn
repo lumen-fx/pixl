@@ -1,0 +1,151 @@
+<!-- Options of the brushes, fills, selections and the other tools beyond
+     the pencil and the shapes. Each group shows while its tool is active. -->
+<if signal="show_brush_shape" mode="hide">
+  <row class="option">
+    <dropdown id="opt-brush-shape" class="option-choice" bind-value="opt_brush_shape">
+      <option value="Round"/>
+      <option value="Square"/>
+      <option value="Custom"/>
+    </dropdown>
+    <tooltip text="Make a brush of the selected pixels"><button id="opt-brush-from-selection" class="flat small" text="From selection"/></tooltip>
+  </row>
+</if>
+<if signal="show_opacity" mode="hide">
+  <row class="option">
+    <label class="option-label" text="Opacity"/>
+    <slider id="opt-opacity" class="option-slider short" min="1" max="100" step="1" value="100" bind-value="opt_opacity"/>
+    <label class="option-value" bind-text="opt_opacity_text" text="100%"/>
+  </row>
+  <row class="option">
+    <label class="option-label" text="Hardness"/>
+    <slider id="opt-hardness" class="option-slider short" min="0" max="100" step="1" value="50" bind-value="opt_hardness"/>
+    <label class="option-value" bind-text="opt_hardness_text" text="50%"/>
+  </row>
+  <checkbox id="opt-dithered" label="Dithered" bind-checked="opt_dithered"/>
+</if>
+<if signal="show_spray" mode="hide">
+  <row class="option">
+    <label class="option-label" text="Radius"/>
+    <slider id="opt-spray-radius" class="option-slider short" min="1" max="64" step="1" value="8" bind-value="opt_spray_radius"/>
+    <label class="option-value" bind-text="opt_spray_radius_text" text="8 px"/>
+  </row>
+  <row class="option">
+    <label class="option-label" text="Density"/>
+    <slider id="opt-spray-density" class="option-slider short" min="1" max="100" step="1" value="12" bind-value="opt_spray_density"/>
+    <label class="option-value" bind-text="opt_spray_density_text" text="12"/>
+  </row>
+</if>
+<if signal="show_dither" mode="hide">
+  <row class="option">
+    <label class="option-label" text="Amount"/>
+    <slider id="opt-dither-amount" class="option-slider short" min="0" max="100" step="1" value="50" bind-value="opt_dither_amount"/>
+    <label class="option-value" bind-text="opt_dither_amount_text" text="50%"/>
+  </row>
+  <dropdown id="opt-dither-matrix" class="option-choice" bind-value="opt_dither_matrix">
+    <option value="Bayer 2x2"/>
+    <option value="Bayer 4x4"/>
+    <option value="Bayer 8x8"/>
+  </dropdown>
+</if>
+<if signal="show_strength" mode="hide">
+  <row class="option">
+    <label class="option-label" text="Strength"/>
+    <slider id="opt-strength" class="option-slider short" min="1" max="100" step="1" value="50" bind-value="opt_strength"/>
+    <label class="option-value" bind-text="opt_strength_text" text="50%"/>
+  </row>
+  <checkbox id="opt-keep-colors" label="Keep colors" bind-checked="opt_keep_colors"/>
+</if>
+<if signal="show_sharpen" mode="hide">
+  <checkbox id="opt-sharpen" label="Sharpen" bind-checked="opt_sharpen"/>
+</if>
+<if signal="show_pattern" mode="hide">
+  <tooltip text="Use the selected pixels as the pattern"><button id="opt-pattern-from-selection" class="flat small" text="Pattern from selection"/></tooltip>
+</if>
+<if signal="show_match" mode="hide">
+  <row class="option">
+    <label class="option-label" text="Tolerance"/>
+    <slider id="opt-match-tolerance" class="option-slider short" min="0" max="255" step="1" value="0" bind-value="opt_tolerance"/>
+    <label class="option-value" bind-text="opt_tolerance_text" text="0"/>
+  </row>
+</if>
+<if signal="show_wand" mode="hide">
+  <checkbox id="opt-wand-contiguous" label="Contiguous" checked="true" bind-checked="opt_contiguous"/>
+  <checkbox id="opt-merged" label="All layers" bind-checked="opt_merged"/>
+  <checkbox id="opt-eight" label="Diagonals" bind-checked="opt_eight"/>
+</if>
+<if signal="show_select_op" mode="hide">
+  <dropdown id="opt-select-op" class="option-choice" bind-value="opt_select_op">
+    <option value="Replace"/>
+    <option value="Add"/>
+    <option value="Subtract"/>
+    <option value="Intersect"/>
+  </dropdown>
+</if>
+<if signal="show_gradient" mode="hide">
+  <dropdown id="opt-gradient-shape" class="option-choice" bind-value="opt_gradient_shape">
+    <option value="Linear"/>
+    <option value="Radial"/>
+    <option value="Conic"/>
+  </dropdown>
+  <dropdown id="opt-gradient-dither" class="option-choice" bind-value="opt_gradient_dither">
+    <option value="Bayer 4x4"/>
+    <option value="Bayer 2x2"/>
+    <option value="Bayer 8x8"/>
+    <option value="Blue noise"/>
+    <option value="Pattern"/>
+    <option value="Hard steps"/>
+  </dropdown>
+  <dropdown id="opt-gradient-colors" class="option-choice" bind-value="opt_gradient_colors">
+    <option value="Two colors"/>
+    <option value="Palette"/>
+  </dropdown>
+  <checkbox id="opt-gradient-repeat" label="Repeat" bind-checked="opt_gradient_repeat"/>
+</if>
+<if signal="show_text" mode="hide">
+  <input id="opt-text" class="text-field" bind-text="opt_text" text="pixl"/>
+  <dropdown id="opt-text-font" class="option-choice" bind-value="opt_text_font">
+    <option value="pixl 5x7"/>
+  </dropdown>
+  <tooltip text="Load a BDF bitmap font"><button id="opt-text-load" class="flat small" text="Load font..."/></tooltip>
+  <row class="option">
+    <label class="option-label" text="Scale"/>
+    <input id="opt-text-scale" class="number-field" type="number" min="1" max="16" step="1" value="1" bind-text="opt_text_scale"/>
+  </row>
+</if>
+<if signal="show_transform" mode="hide">
+  <dropdown id="opt-resample" class="option-choice" bind-value="opt_resample">
+    <option value="RotSprite"/>
+    <option value="Clean edge"/>
+    <option value="Nearest"/>
+  </dropdown>
+  <row class="option">
+    <label class="option-label" text="Angle"/>
+    <input id="opt-angle" class="number-field" type="number" step="any" value="0" bind-text="opt_angle"/>
+  </row>
+  <button id="xf-flip-h" class="flat small" text="Flip H"/>
+  <button id="xf-flip-v" class="flat small" text="Flip V"/>
+  <button id="xf-apply" class="flat small" text="Apply"/>
+  <button id="xf-cancel" class="flat small" text="Cancel"/>
+</if>
+<if signal="show_crop" mode="hide">
+  <button id="crop-to-selection" class="flat small" text="Crop to selection"/>
+</if>
+<if signal="show_stabilizer" mode="hide">
+  <row class="option">
+    <label class="option-label" text="Stabilizer"/>
+    <slider id="opt-stabilizer" class="option-slider short" min="0" max="32" step="1" value="0" bind-value="opt_stabilizer"/>
+    <label class="option-value" bind-text="opt_stabilizer_text" text="off"/>
+  </row>
+</if>
+<if signal="show_symmetry" mode="hide">
+  <dropdown id="opt-symmetry" class="option-choice" bind-value="opt_symmetry">
+    <option value="No symmetry"/>
+    <option value="Mirror left and right"/>
+    <option value="Mirror top and bottom"/>
+    <option value="Mirror both"/>
+    <option value="Radial"/>
+  </dropdown>
+  <if signal="show_radial" mode="hide">
+    <input id="opt-radial" class="number-field" type="number" min="2" max="32" step="1" value="4" bind-text="opt_radial"/>
+  </if>
+</if>

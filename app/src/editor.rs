@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use lumenui::prelude::*;
 use pixl_core::{
-    ColorMode, Document, History, LayerId, LayerKind, NewLayer, Placement, Rect, Rgba, Scope,
-    Selection,
+    Brush, ColorMode, Document, History, LayerId, LayerKind, NewLayer, Placement, Rect, Rgba,
+    Scope, Selection, Symmetry,
 };
 
 /// The tools of the tool bar, with the key that picks each.
@@ -15,41 +15,107 @@ use pixl_core::{
 pub enum Tool {
     #[default]
     Pencil,
+    Brush,
     Eraser,
+    Spray,
+    Shade,
+    DitherBrush,
+    CloneStamp,
+    PatternStamp,
+    Smudge,
+    Blur,
+    ReplaceColor,
     Line,
+    Curve,
     Rectangle,
     Ellipse,
+    Polygon,
+    Contour,
     Bucket,
+    Gradient,
     Eyedropper,
     Select,
+    EllipseSelect,
+    Lasso,
+    PolygonLasso,
+    Wand,
     Move,
+    Transform,
+    Crop,
+    Text,
+    Measure,
+    Slice,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 9] = [
+    pub const ALL: [Tool; 31] = [
         Tool::Pencil,
+        Tool::Brush,
         Tool::Eraser,
+        Tool::Spray,
+        Tool::Shade,
+        Tool::DitherBrush,
+        Tool::CloneStamp,
+        Tool::PatternStamp,
+        Tool::Smudge,
+        Tool::Blur,
+        Tool::ReplaceColor,
         Tool::Line,
+        Tool::Curve,
         Tool::Rectangle,
         Tool::Ellipse,
+        Tool::Polygon,
+        Tool::Contour,
         Tool::Bucket,
+        Tool::Gradient,
         Tool::Eyedropper,
         Tool::Select,
+        Tool::EllipseSelect,
+        Tool::Lasso,
+        Tool::PolygonLasso,
+        Tool::Wand,
         Tool::Move,
+        Tool::Transform,
+        Tool::Crop,
+        Tool::Text,
+        Tool::Measure,
+        Tool::Slice,
     ];
 
     /// The id of the tool's button in the tool bar.
     pub fn button_id(self) -> &'static str {
         match self {
             Tool::Pencil => "tool-pencil",
+            Tool::Brush => "tool-brush",
             Tool::Eraser => "tool-eraser",
+            Tool::Spray => "tool-spray",
+            Tool::Shade => "tool-shade",
+            Tool::DitherBrush => "tool-dither",
+            Tool::CloneStamp => "tool-clone",
+            Tool::PatternStamp => "tool-pattern",
+            Tool::Smudge => "tool-smudge",
+            Tool::Blur => "tool-blur",
+            Tool::ReplaceColor => "tool-replace",
             Tool::Line => "tool-line",
+            Tool::Curve => "tool-curve",
             Tool::Rectangle => "tool-rect",
             Tool::Ellipse => "tool-ellipse",
+            Tool::Polygon => "tool-polygon",
+            Tool::Contour => "tool-contour",
             Tool::Bucket => "tool-bucket",
+            Tool::Gradient => "tool-gradient",
             Tool::Eyedropper => "tool-eyedropper",
             Tool::Select => "tool-select",
+            Tool::EllipseSelect => "tool-ellipse-select",
+            Tool::Lasso => "tool-lasso",
+            Tool::PolygonLasso => "tool-polylasso",
+            Tool::Wand => "tool-wand",
             Tool::Move => "tool-move",
+            Tool::Transform => "tool-transform",
+            Tool::Crop => "tool-crop",
+            Tool::Text => "tool-text",
+            Tool::Measure => "tool-measure",
+            Tool::Slice => "tool-slice",
         }
     }
 
@@ -60,16 +126,49 @@ impl Tool {
     pub fn label(self) -> &'static str {
         match self {
             Tool::Pencil => "Pencil",
+            Tool::Brush => "Brush",
             Tool::Eraser => "Eraser",
+            Tool::Spray => "Spray",
+            Tool::Shade => "Shading",
+            Tool::DitherBrush => "Dither brush",
+            Tool::CloneStamp => "Clone stamp",
+            Tool::PatternStamp => "Pattern stamp",
+            Tool::Smudge => "Smudge",
+            Tool::Blur => "Blur and sharpen",
+            Tool::ReplaceColor => "Replace color",
             Tool::Line => "Line",
+            Tool::Curve => "Curve",
             Tool::Rectangle => "Rectangle",
             Tool::Ellipse => "Ellipse",
+            Tool::Polygon => "Polygon",
+            Tool::Contour => "Contour",
             Tool::Bucket => "Bucket",
+            Tool::Gradient => "Gradient",
             Tool::Eyedropper => "Eyedropper",
             Tool::Select => "Select",
+            Tool::EllipseSelect => "Ellipse select",
+            Tool::Lasso => "Lasso",
+            Tool::PolygonLasso => "Polygon lasso",
+            Tool::Wand => "Magic wand",
             Tool::Move => "Move",
+            Tool::Transform => "Free transform",
+            Tool::Crop => "Crop",
+            Tool::Text => "Text",
+            Tool::Measure => "Measure",
+            Tool::Slice => "Slice",
         }
     }
+}
+
+/// The shape of the brush the size slider sets.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum BrushShape {
+    /// Square up to two pixels, round from three.
+    #[default]
+    Round,
+    Square,
+    /// A brush made from selected pixels; it keeps its own size.
+    Custom(Brush),
 }
 
 /// The settings the tool options bar shows.
@@ -121,6 +220,10 @@ pub struct Editor {
     pub bg: Rgba,
     pub tool: Tool,
     pub options: ToolOptions,
+    /// The symmetry every painting tool applies.
+    pub symmetry: Symmetry,
+    /// The shape brushes draw with.
+    pub brush_shape: BrushShape,
     pub selection: Option<Selection>,
     /// Bumped on every change to the document; views compare it.
     pub revision: u64,
@@ -160,6 +263,8 @@ impl Editor {
             bg: Rgba::WHITE,
             tool: Tool::default(),
             options: ToolOptions::default(),
+            symmetry: Symmetry::NONE,
+            brush_shape: BrushShape::Round,
             selection: None,
             revision: 1,
             saved_revision: 1,
@@ -181,11 +286,24 @@ impl Editor {
         next.bg = self.bg;
         next.tool = self.tool;
         next.options = self.options;
+        next.brush_shape = self.brush_shape.clone();
+        // The symmetry keeps its mode and centers on the new canvas.
+        let (w, h) = (next.doc.width(), next.doc.height());
+        next.symmetry = Symmetry::centered(self.symmetry.mode, w, h);
         next.path = path;
         next.generation = self.generation + 1;
         next.revision = self.revision + 1;
         next.saved_revision = next.revision;
         *self = next;
+    }
+
+    /// The brush of `size` in the current brush shape.
+    pub fn brush(&self, size: u32) -> Brush {
+        match &self.brush_shape {
+            BrushShape::Round if size >= 3 => Brush::circle(size),
+            BrushShape::Round | BrushShape::Square => Brush::square(size),
+            BrushShape::Custom(b) => b.clone(),
+        }
     }
 
     /// Records that the document changed, in ways a view must look for

@@ -4,6 +4,7 @@
 pub mod editor;
 pub mod files;
 pub mod home;
+pub mod image_menu;
 pub mod input;
 pub mod keymap;
 pub mod palette;
@@ -13,9 +14,11 @@ pub mod progressive;
 pub mod recents;
 pub mod settings;
 pub mod settings_ui;
+pub mod slices;
 pub mod store;
 pub mod themes;
 pub mod timeline;
+pub mod toolbox;
 pub mod tools;
 pub mod view;
 pub mod workspace;
@@ -102,6 +105,7 @@ pub fn editor(source: Source) -> App {
         .insert_signal("home_filter", "")
         .insert_signal("home_can_return", false)
         .insert_resource(tools::Gesture::default())
+        .insert_resource(toolbox::Toolbox::default())
         .insert_resource(panels::Panels::default())
         .insert_resource(files::Files::default())
         .insert_resource(Workspace::in_memory())
@@ -152,6 +156,8 @@ pub fn editor(source: Source) -> App {
                         tools::pick_tool,
                         tools::tool_options,
                         tools::use_tools,
+                        toolbox::toolbox_options,
+                        toolbox::use_toolbox,
                     )
                         .chain(),
                 )
@@ -176,6 +182,7 @@ pub fn editor(source: Source) -> App {
                     home::track_recents,
                     home::show_home,
                     tools::show_tool,
+                    toolbox::show_toolbox,
                     tools::stage_cursor,
                     settings::save_settings,
                     settings_ui::pressure_preview,

@@ -26,24 +26,6 @@
   --marquee-a: #ffd400;
   --marquee-b: #000000;
   --preview: #ffd400;
-  --icon-pencil: url("assets/icons/text-dark/pencil.png");
-  --icon-pencil-on: url("assets/icons/on-accent-dark/pencil.png");
-  --icon-eraser: url("assets/icons/text-dark/eraser.png");
-  --icon-eraser-on: url("assets/icons/on-accent-dark/eraser.png");
-  --icon-line: url("assets/icons/text-dark/line.png");
-  --icon-line-on: url("assets/icons/on-accent-dark/line.png");
-  --icon-rect: url("assets/icons/text-dark/rect.png");
-  --icon-rect-on: url("assets/icons/on-accent-dark/rect.png");
-  --icon-ellipse: url("assets/icons/text-dark/ellipse.png");
-  --icon-ellipse-on: url("assets/icons/on-accent-dark/ellipse.png");
-  --icon-bucket: url("assets/icons/text-dark/bucket.png");
-  --icon-bucket-on: url("assets/icons/on-accent-dark/bucket.png");
-  --icon-eyedropper: url("assets/icons/text-dark/eyedropper.png");
-  --icon-eyedropper-on: url("assets/icons/on-accent-dark/eyedropper.png");
-  --icon-select: url("assets/icons/text-dark/select.png");
-  --icon-select-on: url("assets/icons/on-accent-dark/select.png");
-  --icon-move: url("assets/icons/text-dark/move.png");
-  --icon-move-on: url("assets/icons/on-accent-dark/move.png");
 }
 
 /* Retro: the four greens of a handheld's screen. */
@@ -70,24 +52,6 @@
   --marquee-a: #0f380f;
   --marquee-b: #9bbc0f;
   --preview: #306230;
-  --icon-pencil: url("assets/icons/text-dark/pencil.png");
-  --icon-pencil-on: url("assets/icons/on-accent-dark/pencil.png");
-  --icon-eraser: url("assets/icons/text-dark/eraser.png");
-  --icon-eraser-on: url("assets/icons/on-accent-dark/eraser.png");
-  --icon-line: url("assets/icons/text-dark/line.png");
-  --icon-line-on: url("assets/icons/on-accent-dark/line.png");
-  --icon-rect: url("assets/icons/text-dark/rect.png");
-  --icon-rect-on: url("assets/icons/on-accent-dark/rect.png");
-  --icon-ellipse: url("assets/icons/text-dark/ellipse.png");
-  --icon-ellipse-on: url("assets/icons/on-accent-dark/ellipse.png");
-  --icon-bucket: url("assets/icons/text-dark/bucket.png");
-  --icon-bucket-on: url("assets/icons/on-accent-dark/bucket.png");
-  --icon-eyedropper: url("assets/icons/text-dark/eyedropper.png");
-  --icon-eyedropper-on: url("assets/icons/on-accent-dark/eyedropper.png");
-  --icon-select: url("assets/icons/text-dark/select.png");
-  --icon-select-on: url("assets/icons/on-accent-dark/select.png");
-  --icon-move: url("assets/icons/text-dark/move.png");
-  --icon-move-on: url("assets/icons/on-accent-dark/move.png");
 }
 
 /* -- The theme editor ------------------------------------------------------- */

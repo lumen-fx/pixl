@@ -100,9 +100,9 @@ fn a_rebound_key_runs_its_command_and_a_taken_one_asks_first() {
             Step::Wait,
             Step::Wait,
             Step::Wait,
-            // Q is free: it binds at once.
+            // Z is free: it binds at once.
             Step::Click("key-bind-tool-pencil"),
-            Step::Key("q", false),
+            Step::Key("z", false),
             Step::Wait,
             // E is the eraser's: it waits for an answer, then moves.
             Step::Click("key-bind-tool-line"),
@@ -118,7 +118,7 @@ fn a_rebound_key_runs_its_command_and_a_taken_one_asks_first() {
     );
     common::save(&out.frame, "settings-rebound");
     let o = &out.settings.shortcuts.overrides;
-    assert_eq!(o.get("tool-pencil"), Some(&vec!["Q".to_string()]));
+    assert_eq!(o.get("tool-pencil"), Some(&vec!["Z".to_string()]));
     assert_eq!(o.get("tool-line"), Some(&vec!["E".to_string()]));
     assert_eq!(o.get("tool-eraser"), Some(&Vec::new()));
     assert_eq!(out.tool, pixl::Tool::Line);
