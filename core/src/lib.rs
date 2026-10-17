@@ -20,6 +20,7 @@ pub mod native;
 pub mod palettes;
 pub mod rig;
 pub mod selection;
+pub mod sheet;
 pub mod tools;
 pub mod transform;
 

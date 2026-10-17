@@ -11,8 +11,9 @@ use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::gif::{GifOptions, export_gif};
-use pixl_core::io::{SheetLayout, SheetOptions, export_frame_png, sprite_sheet};
+use pixl_core::io::export_frame_png;
 use pixl_core::native::write_atomic;
+use pixl_core::sheet::{SheetLayout, SheetOptions, sprite_sheet};
 use pixl_core::{Document, LayerId, LayerKind};
 use serde::{Deserialize, Serialize};
 

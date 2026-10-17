@@ -15,6 +15,7 @@ use lumenui::prelude::*;
 use pixl_core::gif::{GifOptions, export_gif, import_gif};
 use pixl_core::io::{export_frame_png, import_png};
 use pixl_core::native::{self, SaveOptions};
+use pixl_core::sheet::SheetGrid;
 use pixl_core::{Background, ColorMode, Document, aseprite};
 
 use crate::editor::Editor;
@@ -38,6 +39,9 @@ pub enum Replace {
     Recent(PathBuf),
     /// A listed document's recovery copy.
     Recover(PathBuf),
+    /// The frames a sprite sheet image splits into, each lasting the given
+    /// milliseconds.
+    Sheet(PathBuf, SheetGrid, u32),
 }
 
 /// File work in progress.
@@ -46,6 +50,9 @@ pub struct Files {
     /// Whether opening a document offers its newer recovery copy; the
     /// files settings turn recovery copies off.
     pub offer_recovery: bool,
+    /// A replacement another dialog asked for, carried out (or put to the
+    /// discard question) on the next tick.
+    pub queued: Option<Replace>,
     /// A replacement waiting on the discard question.
     pub confirming: Option<Replace>,
     /// The document whose newer recovery copy is on offer.
@@ -58,6 +65,7 @@ impl Default for Files {
     fn default() -> Self {
         Self {
             offer_recovery: true,
+            queued: None,
             confirming: None,
             recovery: None,
             last_autosave: None,
@@ -207,7 +215,7 @@ pub fn export_to(editor: &mut Editor, path: &Path, gif: bool) -> std::result::Re
 }
 
 /// `path` with `ext` when it has no extension of that kind.
-fn with_extension(path: &Path, ext: &str) -> PathBuf {
+pub(crate) fn with_extension(path: &Path, ext: &str) -> PathBuf {
     let has = path
         .extension()
         .is_some_and(|e| e.to_string_lossy().eq_ignore_ascii_case(ext));
@@ -361,6 +369,7 @@ fn start(
         }
         Replace::Recent(path) => open_recent(editor, files, signals, &path),
         Replace::Recover(path) => recover_path(editor, &path),
+        Replace::Sheet(path, grid, ms) => crate::sheets::import_into(editor, &path, &grid, ms),
     }
 }
 
@@ -500,6 +509,21 @@ pub fn file_commands(
         if editor.generation == before {
             // The file did not open: the start screen says why.
             home.show(editor, false);
+        }
+    }
+    if let Some(r) = files.queued.take() {
+        if editor.is_modified() {
+            files.confirming = Some(r);
+            signals.set("discard_open", true);
+        } else {
+            start(
+                r,
+                editor,
+                &mut files,
+                &mut home,
+                &mut commands,
+                &mut signals,
+            );
         }
     }
     let chosen = input.chosen();

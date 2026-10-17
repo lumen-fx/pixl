@@ -1,0 +1,16 @@
+/* The Export and Import sprite sheet dialogs. */
+
+.sheet-card { min-width: 820; }
+.sheet-main { gap: 16; }
+.sheet-fields { gap: var(--space-4); width: 380; }
+.sheet-label { width: 110; text-color: var(--text-dim); }
+.sheet-frames { align: center; }
+.setting-choice.wide { width: 200; }
+.sheet-file { width: 170; text-color: var(--text); text-overflow: ellipsis; }
+.sheet-side { gap: var(--space-3); grow: 1; min-width: 0; }
+.sheet-preview {
+  width: 400;
+  height: 300;
+  bg: var(--checker-b);
+  border: 1px solid var(--edge);
+}

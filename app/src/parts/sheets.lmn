@@ -1,0 +1,142 @@
+<dialog open="sheet_export_open">
+  <column class="dialog-card sheet-card">
+    <label class="dialog-title" text="Export sprite sheet"/>
+    <row class="sheet-main">
+      <column class="sheet-fields">
+        <row class="setting">
+          <label class="sheet-label" text="Layout"/>
+          <dropdown id="sx-layout" class="setting-choice" bind-value="sx_layout">
+            <option value="Packed"/>
+            <option value="Grid by rows"/>
+            <option value="Grid by columns"/>
+            <option value="Horizontal strip"/>
+            <option value="Vertical strip"/>
+          </dropdown>
+        </row>
+        <if signal="sx_rows_mode" mode="hide">
+          <row class="setting">
+            <label class="sheet-label" text="Columns"/>
+            <input id="sx-columns" class="setting-number" type="number" min="1" max="1024" step="1" bind-text="sx_columns"/>
+          </row>
+        </if>
+        <if signal="sx_columns_mode" mode="hide">
+          <row class="setting">
+            <label class="sheet-label" text="Rows"/>
+            <input id="sx-rows" class="setting-number" type="number" min="1" max="1024" step="1" bind-text="sx_rows"/>
+          </row>
+        </if>
+        <row class="setting">
+          <label class="sheet-label" text="Frames"/>
+          <row id="sx-frames-box" class="sheet-frames"/>
+        </row>
+        <if signal="sx_range_mode" mode="hide">
+          <row class="setting">
+            <label class="sheet-label" text="From"/>
+            <input id="sx-from" class="setting-number" type="number" min="1" step="1" bind-text="sx_from"/>
+            <label class="option-label" text="to"/>
+            <input id="sx-to" class="setting-number" type="number" min="1" step="1" bind-text="sx_to"/>
+          </row>
+        </if>
+        <row class="setting">
+          <label class="sheet-label" text="Padding"/>
+          <input id="sx-padding" class="setting-number" type="number" min="0" max="256" step="1" bind-text="sx_padding"/>
+          <label class="setting-hint" text="Between images."/>
+        </row>
+        <row class="setting">
+          <label class="sheet-label" text="Border"/>
+          <input id="sx-border" class="setting-number" type="number" min="0" max="256" step="1" bind-text="sx_border"/>
+          <label class="setting-hint" text="Around the sheet."/>
+        </row>
+        <row class="setting">
+          <label class="sheet-label" text="Scale"/>
+          <input id="sx-scale" class="setting-number" type="number" min="1" max="16" step="1" bind-text="sx_scale"/>
+        </row>
+        <checkbox id="sx-trim" label="Trim each image to its pixels" bind-checked="sx_trim"/>
+        <checkbox id="sx-by-layer" label="One image per layer" bind-checked="sx_by_layer"/>
+        <row class="setting">
+          <label class="sheet-label" text="JSON"/>
+          <dropdown id="sx-json" class="setting-choice" bind-value="sx_json">
+            <option value="Hash"/>
+            <option value="Array"/>
+            <option value="None"/>
+          </dropdown>
+          <label class="setting-hint" text="Aseprite's shape."/>
+        </row>
+      </column>
+      <column class="sheet-side">
+        <canvas id="sx-preview" class="sheet-preview"/>
+        <label class="dialog-text" bind-text="sx_info" text=""/>
+      </column>
+    </row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="sx-cancel" text="Cancel"/>
+      <button id="sx-export" class="primary" default="true" text="Export..."/>
+    </row>
+  </column>
+</dialog>
+
+<dialog open="sheet_import_open">
+  <column class="dialog-card sheet-card">
+    <label class="dialog-title" text="Import sprite sheet"/>
+    <row class="sheet-main">
+      <column class="sheet-fields">
+        <row class="setting">
+          <label class="sheet-label" text="Image"/>
+          <label class="sheet-file" bind-text="si_file" text="none"/>
+          <button id="si-choose" class="small" text="Choose..."/>
+        </row>
+        <row class="setting">
+          <label class="sheet-label" text="Split by"/>
+          <dropdown id="si-mode" class="setting-choice" bind-value="si_mode">
+            <option value="Cell size"/>
+            <option value="Count"/>
+          </dropdown>
+        </row>
+        <if signal="si_size_mode" mode="hide">
+          <row class="setting">
+            <label class="sheet-label" text="Cell"/>
+            <input id="si-w" class="setting-number" type="number" min="1" max="8192" step="1" bind-text="si_w"/>
+            <label class="option-label" text="x"/>
+            <input id="si-h" class="setting-number" type="number" min="1" max="8192" step="1" bind-text="si_h"/>
+          </row>
+        </if>
+        <if signal="si_count_mode" mode="hide">
+          <row class="setting">
+            <label class="sheet-label" text="Columns, rows"/>
+            <input id="si-cols" class="setting-number" type="number" min="1" max="1024" step="1" bind-text="si_cols"/>
+            <label class="option-label" text="x"/>
+            <input id="si-rows" class="setting-number" type="number" min="1" max="1024" step="1" bind-text="si_rows"/>
+          </row>
+        </if>
+        <row class="setting">
+          <label class="sheet-label" text="Offset"/>
+          <input id="si-ox" class="setting-number" type="number" min="0" max="8192" step="1" bind-text="si_ox"/>
+          <label class="option-label" text="x"/>
+          <input id="si-oy" class="setting-number" type="number" min="0" max="8192" step="1" bind-text="si_oy"/>
+        </row>
+        <row class="setting">
+          <label class="sheet-label" text="Padding"/>
+          <input id="si-px" class="setting-number" type="number" min="0" max="1024" step="1" bind-text="si_px"/>
+          <label class="option-label" text="x"/>
+          <input id="si-py" class="setting-number" type="number" min="0" max="1024" step="1" bind-text="si_py"/>
+        </row>
+        <row class="setting">
+          <label class="sheet-label" text="Frame time"/>
+          <input id="si-ms" class="setting-number" type="number" min="1" max="60000" step="10" bind-text="si_ms"/>
+          <label class="setting-hint" text="Milliseconds."/>
+        </row>
+        <checkbox id="si-skip" label="Leave out empty cells" bind-checked="si_skip"/>
+      </column>
+      <column class="sheet-side">
+        <canvas id="si-preview" class="sheet-preview"/>
+        <label class="dialog-text" bind-text="si_info" text=""/>
+      </column>
+    </row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="si-cancel" text="Cancel"/>
+      <button id="si-import" class="primary" default="true" text="Import"/>
+    </row>
+  </column>
+</dialog>

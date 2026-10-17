@@ -178,8 +178,9 @@ size (typed, or one click on a square, sprite or screen preset), RGBA or
 indexed color, and a transparent or colored background. Replacing a document
 with unsaved edits asks first. While
 a saved document has unsaved edits, the editor writes its recovery copy beside
-it every 30 seconds, and opening a document whose recovery copy is newer
-offers to recover it.
+it every 30 seconds (the files settings change the interval or turn recovery
+copies off), and opening a document whose recovery copy is newer offers to
+recover it.
 
 The editor has its own theme, written entirely in CSS over its own tokens: a
 dark set of neutral greys so the colors in the art read true, and light, high
@@ -260,6 +261,19 @@ Aseprite's tilemaps) is listed as a warning instead of dropped silently.
 Animations export as GIF with each frame's duration. One palette covers the
 whole animation; past 256 colors it is reduced by median cut, without
 dithering. GIFs import with their frames, timing and disposal applied.
+
+File > Export sprite sheet (Ctrl+Shift+E) lays the frames out on one PNG: in
+a horizontal or vertical strip, a grid filled by rows or by columns, or
+packed into as small an image as they fit. It takes every frame, a range
+or a tag; padding between images and a border around the sheet; a whole
+number scale; trimming each image to its pixels; and one image per layer
+instead of per frame. Beside the PNG it writes the JSON Aseprite's export
+writes, with the frames as a hash or an array, the tags, layers and slices,
+so engines that read Aseprite sheets read these. The dialog previews the
+sheet as its options change. File > Import sprite sheet (Ctrl+Shift+I) splits
+a PNG into the frames of a new document, by cell size or by a count of
+columns and rows, with an offset and padding, leaving out empty cells if
+asked, and previews the cells over the image.
 
 ## Quick start
 

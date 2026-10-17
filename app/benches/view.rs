@@ -3,7 +3,8 @@
 //! after hiding a layer, stroke-to-screen latency on the top layer and on
 //! the bottom layer (a buffer of its own, or inside the CPU-flattened buffer
 //! when the layers do not fit the buffer budget), the frame after a pan and
-//! after a zoom step, and exporting the frame as a PNG.
+//! after a zoom step, and exporting the frame as a PNG and as a packed,
+//! trimmed sprite sheet.
 //!
 //! `cargo bench -p pixl --bench view -- cpu` or `-- gpu` picks the renderer;
 //! `side=N` and `layers=N` change the document from 4096 and 32, and
@@ -117,6 +118,7 @@ struct Results {
     pan: Vec<Duration>,
     zoom: Vec<Duration>,
     export: Option<(Duration, usize)>,
+    sheet: Option<(Duration, usize)>,
     hide_started: Option<Instant>,
     hide_frame: Option<Duration>,
     /// The buffers the renderer held, and whether the bottom layers were
@@ -344,6 +346,18 @@ fn main() {
                     let png = pixl_core::io::export_frame_png(&editor.doc, 0, 1)
                         .expect("the frame exports");
                     results.export = Some((t.elapsed(), png.len()));
+                    let t = Instant::now();
+                    let sheet = pixl_core::sheet::sprite_sheet(
+                        &editor.doc,
+                        &pixl_core::sheet::SheetOptions {
+                            layout: pixl_core::sheet::SheetLayout::Packed,
+                            trim: true,
+                            ..Default::default()
+                        },
+                    )
+                    .expect("the sheet lays out");
+                    let png = sheet.to_png().expect("the sheet encodes");
+                    results.sheet = Some((t.elapsed(), png.len()));
                     *p = Phase::Done;
                 }
                 Phase::Done => {}
@@ -411,6 +425,13 @@ fn main() {
     }
     if let Some((t, bytes)) = r.export {
         println!("export PNG: {} ({} KiB)", ms(t), bytes / 1024);
+    }
+    if let Some((t, bytes)) = r.sheet {
+        println!(
+            "export sprite sheet, packed and trimmed: {} ({} KiB)",
+            ms(t),
+            bytes / 1024
+        );
     }
 }
 

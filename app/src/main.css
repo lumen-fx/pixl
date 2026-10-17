@@ -10,6 +10,7 @@
 @import "parts/exports.css";
 @import "parts/layers.css";
 @import "parts/presets.css";
+@import "parts/sheets.css";
 
 /* The window's regions and how they share the space. */
 

@@ -19,6 +19,7 @@ pub mod recents;
 pub mod rig;
 pub mod settings;
 pub mod settings_ui;
+pub mod sheets;
 pub mod slices;
 pub mod store;
 pub mod themes;
@@ -93,6 +94,32 @@ pub fn editor(source: Source) -> App {
         .insert_resource(keymap::KeyCommands::default())
         .insert_resource(settings_ui::SettingsDialog::default())
         .insert_resource(perf::Perf::default())
+        .insert_resource(sheets::Sheets::default())
+        .insert_signal("sheet_export_open", false)
+        .insert_signal("sheet_import_open", false)
+        .insert_signal("sx_layout", "Horizontal strip")
+        .insert_signal("sx_frames", "All frames")
+        .insert_signal("sx_json", "Hash")
+        .insert_signal("sx_columns", "8")
+        .insert_signal("sx_rows", "8")
+        .insert_signal("sx_from", "1")
+        .insert_signal("sx_to", "")
+        .insert_signal("sx_padding", "0")
+        .insert_signal("sx_border", "0")
+        .insert_signal("sx_scale", "1")
+        .insert_signal("sx_trim", false)
+        .insert_signal("sx_by_layer", false)
+        .insert_signal("si_mode", "Cell size")
+        .insert_signal("si_w", "32")
+        .insert_signal("si_h", "32")
+        .insert_signal("si_cols", "4")
+        .insert_signal("si_rows", "1")
+        .insert_signal("si_ox", "0")
+        .insert_signal("si_oy", "0")
+        .insert_signal("si_px", "0")
+        .insert_signal("si_py", "0")
+        .insert_signal("si_ms", "100")
+        .insert_signal("si_skip", false)
         .insert_signal("perf_open", false)
         .insert_signal("settings_open", false)
         .insert_resource(Editor::blank())
@@ -163,6 +190,7 @@ pub fn editor(source: Source) -> App {
                         settings_ui::settings_form,
                         settings::look_switches,
                         settings::show_look,
+                        sheets::sheet_commands,
                         view::read_view_colors,
                         view::measure_stage,
                         input::navigate,
@@ -223,6 +251,7 @@ pub fn editor(source: Source) -> App {
                         settings_ui::pressure_preview,
                         settings_ui::menu_labels,
                         perf::show_perf,
+                        sheets::sheet_forms,
                     )
                         .chain(),
                 )

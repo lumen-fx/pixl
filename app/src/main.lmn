@@ -14,6 +14,8 @@
       <menuitem id="file-export-gif" label="Export GIF..."/>
       <menuitem id="file-export-presets" label="Export presets..."/>
       <menuitem id="file-export-all" label="Export all (Ctrl+Alt+E)"/>
+      <menuitem id="file-export-sheet" label="Export sprite sheet..."/>
+      <menuitem id="file-import-sheet" label="Import sprite sheet..."/>
       <separator/>
       <menuitem id="file-close" label="Close (Ctrl+W)"/>
     </menu>
@@ -228,6 +230,7 @@
   </dialog>
 
   <include src="parts/settings.lmn"/>
+  <include src="parts/sheets.lmn"/>
 
   <dialog open="discard_open">
     <column class="dialog-card">
