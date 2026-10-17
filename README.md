@@ -84,6 +84,16 @@ checkout, and CI fails on the app crate. A release build reads its
 stylesheets, font, icons and `lumen.toml` from the directory it starts in, so
 run it from `app/`: `cd app && ../target/release/pixl`.
 
+A skeleton layer rigs a character so it can be posed instead of redrawn:
+bones in a tree, with raster layers (or selected regions of them) bound to
+one bone each as rigid parts. A pose turns and moves bones, with two-bone IK
+for limbs; poses save to a library and mirror left to right by bone name
+(`arm.L` and `arm.R`, `leg_l` and `leg_r`). Rendering a pose draws every part
+at its bone's place with RotSprite, so turned parts keep clean one-pixel
+outlines, into a new frame of ordinary pixels to touch up. Poses keyed on
+frames fill the frames between them, eased, and generated frames are marked
+so they can be rendered again after the rig changes.
+
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
 recovery copy beside the document. A file from a newer pixl opens in an older
@@ -106,6 +116,9 @@ cargo run -p pixl                 # the start screen
 cargo run -p pixl -- art.pixl     # straight into a document
 cargo test
 ```
+
+`cargo bench -p pixl-core --bench rig` times posing and rendering a
+20-bone character.
 
 `cargo bench -p pixl --bench view -- gpu` (or `cpu`) measures the canvas
 view on a 4096x4096 document of 32 layers: the progressive redraws, the time

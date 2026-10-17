@@ -477,8 +477,8 @@ fn layers_json(layers: &[Layer], group: Option<&str>, out: &mut Vec<Value>) {
                 v.insert("blendMode".into(), blend_name(l.props.blend).into());
                 out.push(Value::Object(v));
             }
-            // Reference layers are never exported.
-            LayerKind::Reference { .. } => {}
+            // Reference and skeleton layers are never exported.
+            LayerKind::Reference { .. } | LayerKind::Skeleton { .. } => {}
         }
     }
 }

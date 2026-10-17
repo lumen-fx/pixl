@@ -18,3 +18,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 [[bench]]
 name = "core"
 harness = false
+
+[[bench]]
+name = "rig"
+harness = false

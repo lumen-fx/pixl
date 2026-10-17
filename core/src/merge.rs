@@ -26,6 +26,14 @@ fn tile_bounds(r: &Raster) -> Rect {
     out
 }
 
+/// Root layers flattening leaves in place: they paint no exported pixels.
+fn kept_by_flatten(l: &Layer) -> bool {
+    matches!(
+        l.kind,
+        LayerKind::Reference { .. } | LayerKind::Skeleton { .. }
+    )
+}
+
 /// Where a layer (and everything in a group) may hold pixels at `frame`.
 fn layer_bounds(doc: &Document, layer: &Layer, frame: usize) -> Rect {
     match &layer.kind {
@@ -39,6 +47,7 @@ fn layer_bounds(doc: &Document, layer: &Layer, frame: usize) -> Rect {
             .iter()
             .fold(Rect::EMPTY, |r, c| r.union(&layer_bounds(doc, c, frame))),
         LayerKind::Reference { image } => doc.image(*image).map_or(Rect::EMPTY, tile_bounds),
+        LayerKind::Skeleton { .. } => Rect::EMPTY,
     }
 }
 
@@ -110,6 +119,7 @@ fn deep_copy(doc: &mut Document, layer: &Layer) -> Layer {
         LayerKind::Reference { image } => LayerKind::Reference {
             image: copy(doc, *image),
         },
+        LayerKind::Skeleton { rig } => LayerKind::Skeleton { rig: rig.clone() },
     };
     Layer {
         id,
@@ -153,7 +163,10 @@ impl Document {
             .position(|l| l.id == id)
             .ok_or(Error::LayerNotFound(id))?;
         let upper = &siblings[pos];
-        if matches!(upper.kind, LayerKind::Reference { .. }) {
+        if matches!(
+            upper.kind,
+            LayerKind::Reference { .. } | LayerKind::Skeleton { .. }
+        ) {
             return Err(Error::NotRaster(id));
         }
         let below = pos
@@ -274,7 +287,7 @@ impl Document {
             let rect = self
                 .layers()
                 .iter()
-                .filter(|l| !matches!(l.kind, LayerKind::Reference { .. }))
+                .filter(|l| !kept_by_flatten(l))
                 .fold(Rect::EMPTY, |r, l| r.union(&layer_bounds(self, l, frame)))
                 .intersect(&self.bounds());
             let cel = if rect.is_empty() {
@@ -299,15 +312,13 @@ impl Document {
         let roots = std::mem::take(&mut self.s.layers);
         let first = roots
             .iter()
-            .position(|l| !matches!(l.kind, LayerKind::Reference { .. }))
+            .position(|l| !kept_by_flatten(l))
             .unwrap_or(roots.len());
         // The new layer takes the place of the lowest layer it replaces.
-        let mut kept: Vec<Layer> = roots
-            .into_iter()
-            .filter(|l| matches!(l.kind, LayerKind::Reference { .. }))
-            .collect();
+        let mut kept: Vec<Layer> = roots.into_iter().filter(kept_by_flatten).collect();
         kept.insert(first.min(kept.len()), flat);
         self.s.layers = kept;
+        self.prune_rigs();
         self.collect_garbage();
         Ok(id)
     }

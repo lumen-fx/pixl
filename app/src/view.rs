@@ -420,7 +420,8 @@ fn classify(roots: &[pixl_core::Layer], i: usize) -> Class {
                 Class::Direct(op)
             }
         }
-        LayerKind::Reference { .. } => Class::Direct(op),
+        // A skeleton paints nothing; its bones are an overlay.
+        LayerKind::Reference { .. } | LayerKind::Skeleton { .. } => Class::Direct(op),
         LayerKind::Group { .. } => Class::Isolated(op),
     }
 }
@@ -561,7 +562,7 @@ fn layer_images(
             (cel, mask)
         }
         LayerKind::Reference { image } => (doc.image(*image).cloned(), None),
-        LayerKind::Group { .. } => (None, None),
+        LayerKind::Group { .. } | LayerKind::Skeleton { .. } => (None, None),
     }
 }
 

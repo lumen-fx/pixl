@@ -95,6 +95,7 @@ fn layers_markup(editor: &Editor) -> String {
             LayerKind::Raster { .. } => "",
             LayerKind::Group { .. } => " group",
             LayerKind::Reference { .. } => " reference",
+            LayerKind::Skeleton { .. } => " skeleton",
         };
         let meta = if layer.props.blend == BlendMode::Normal && layer.props.opacity == 255 {
             String::new()

@@ -159,6 +159,8 @@ pub enum ExportWarning {
     ReferenceReduced { layer: String },
     /// A frame longer than 65535 ms was shortened to 65535 ms.
     DurationClamped { frame: usize },
+    /// Aseprite has no skeletons; the skeleton layer is not saved.
+    SkeletonDropped { layer: String },
 }
 
 impl fmt::Display for ExportWarning {
@@ -181,6 +183,9 @@ impl fmt::Display for ExportWarning {
             }
             ExportWarning::DurationClamped { frame } => {
                 write!(f, "frame {frame} is saved with a duration of 65535 ms")
+            }
+            ExportWarning::SkeletonDropped { layer } => {
+                write!(f, "skeleton layer \"{layer}\" is not saved")
             }
         }
     }
@@ -914,7 +919,18 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
         warnings.push(ExportWarning::BackgroundDropped);
     }
 
-    let layers = doc.walk();
+    // Aseprite has no skeletons: the posed frames export as pixels, the rig
+    // stays behind.
+    let mut layers = doc.walk();
+    layers.retain(|(_, l)| {
+        let rig = matches!(l.kind, LayerKind::Skeleton { .. });
+        if rig {
+            warnings.push(ExportWarning::SkeletonDropped {
+                layer: l.props.name.clone(),
+            });
+        }
+        !rig
+    });
     let mut per_frame: Vec<Vec<Vec<u8>>> = vec![Vec::new(); frames];
     {
         let first = &mut per_frame[0];
@@ -944,6 +960,8 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
             }
             let kind = match &l.kind {
                 LayerKind::Group { .. } => LAYER_GROUP,
+                // Filtered out above.
+                LayerKind::Skeleton { .. } => continue,
                 LayerKind::Reference { .. } => {
                     flags |= LAYER_REFERENCE;
                     if indexed {
@@ -1099,7 +1117,7 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
                     cel_chunk(out, index, Point::new(b.x, b.y), 255, CelBody::Linked(0));
                 }
             }
-            LayerKind::Group { .. } => {}
+            LayerKind::Group { .. } | LayerKind::Skeleton { .. } => {}
         }
     }
 
@@ -1197,7 +1215,7 @@ mod tests {
                     let px: Vec<u32> = r.bounds().points().map(|p| r.get_raw(p.x, p.y)).collect();
                     out += &format!("  reference {:x}\n", fnv(&px));
                 }
-                LayerKind::Group { .. } => {}
+                LayerKind::Group { .. } | LayerKind::Skeleton { .. } => {}
             }
         }
         out += &format!("{:?}\n{:?}\n", d.tags(), d.slices());
@@ -1369,11 +1387,20 @@ mod tests {
         .unwrap();
         d.set_background(Background::Color(Rgba::WHITE));
         d.set_frame_duration(1, 70_000).unwrap();
+        d.add_layer(
+            crate::document::NewLayer::Skeleton,
+            "rig",
+            crate::document::Placement::default(),
+        )
+        .unwrap();
         let w = export_aseprite(&d).unwrap().warnings;
         assert_eq!(
             w,
             vec![
                 ExportWarning::BackgroundDropped,
+                ExportWarning::SkeletonDropped {
+                    layer: "rig".into()
+                },
                 ExportWarning::MaskDropped {
                     layer: "Layer 1".into()
                 },

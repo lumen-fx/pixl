@@ -11,6 +11,7 @@ use crate::color::{ColorMode, Palette, Rgba};
 use crate::error::Error;
 use crate::geom::{Point, Rect};
 use crate::image::{Raster, TiledImage};
+use crate::rig::Rig;
 
 /// Identifies a layer for the life of a document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -202,6 +203,9 @@ pub enum LayerKind {
     Group { children: Vec<Layer> },
     /// An image to trace over; shown in the editor, never exported.
     Reference { image: ImageId },
+    /// A rig of bones posing raster layers; draws nothing itself (the
+    /// editor shows its bones as an overlay).
+    Skeleton { rig: Box<Rig> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -230,6 +234,7 @@ pub enum NewLayer {
     Raster,
     Group,
     Reference(TiledImage<Rgba>),
+    Skeleton,
 }
 
 /// Where a new or moved layer goes: into `parent` (the root when `None`) at
@@ -601,6 +606,9 @@ impl Document {
             NewLayer::Group => LayerKind::Group {
                 children: Vec::new(),
             },
+            NewLayer::Skeleton => LayerKind::Skeleton {
+                rig: Box::new(Rig::new(self.s.frames.len())),
+            },
             NewLayer::Reference(img) => {
                 if img.width() != self.s.width || img.height() != self.s.height {
                     return Err(Error::InvalidSize {
@@ -658,8 +666,16 @@ impl Document {
     /// Deletes a layer and everything in it.
     pub fn remove_layer(&mut self, id: LayerId) -> Result<Rect, Error> {
         self.detach(id)?;
+        self.prune_rigs();
         self.collect_garbage();
         Ok(self.bounds())
+    }
+
+    /// Drops rig bindings of layers that are gone.
+    pub(crate) fn prune_rigs(&mut self) {
+        let present: std::collections::BTreeSet<LayerId> =
+            self.walk().into_iter().map(|(_, l)| l.id).collect();
+        self.for_each_rig(|rig| rig.retain_layers(|l| present.contains(&l)));
     }
 
     /// Moves a layer to a new place in the tree.
@@ -695,10 +711,48 @@ impl Document {
                 LayerKind::Reference { image } => {
                     used.insert(*image);
                 }
-                LayerKind::Group { .. } => {}
+                LayerKind::Group { .. } | LayerKind::Skeleton { .. } => {}
             }
         }
         self.images.retain(|id, _| used.contains(id));
+    }
+
+    // ---- skeletons ----
+
+    /// The rig of skeleton layer `layer`.
+    pub fn rig(&self, layer: LayerId) -> Result<&Rig, Error> {
+        match &self.layer(layer).ok_or(Error::LayerNotFound(layer))?.kind {
+            LayerKind::Skeleton { rig } => Ok(rig),
+            _ => Err(Error::NotSkeleton(layer)),
+        }
+    }
+
+    /// Edits a rig. Rigs paint nothing, so no canvas area changes; renders
+    /// ([`Document::render_pose`]) write the pixels.
+    pub fn rig_mut(&mut self, layer: LayerId) -> Result<&mut Rig, Error> {
+        match &mut self
+            .layer_mut(layer)
+            .ok_or(Error::LayerNotFound(layer))?
+            .kind
+        {
+            LayerKind::Skeleton { rig } => Ok(rig),
+            _ => Err(Error::NotSkeleton(layer)),
+        }
+    }
+
+    pub(crate) fn rigs_mut(&mut self) -> Vec<&mut Rig> {
+        fn go<'a>(layers: &'a mut [Layer], out: &mut Vec<&'a mut Rig>) {
+            for l in layers {
+                match &mut l.kind {
+                    LayerKind::Skeleton { rig } => out.push(rig),
+                    LayerKind::Group { children } => go(children, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        go(&mut self.s.layers, &mut out);
+        out
     }
 
     // ---- frames ----
@@ -709,7 +763,20 @@ impl Document {
                 match &mut l.kind {
                     LayerKind::Raster { cels, .. } => f(cels),
                     LayerKind::Group { children } => go(children, f),
-                    LayerKind::Reference { .. } => {}
+                    LayerKind::Reference { .. } | LayerKind::Skeleton { .. } => {}
+                }
+            }
+        }
+        go(&mut self.s.layers, &mut f);
+    }
+
+    fn for_each_rig(&mut self, mut f: impl FnMut(&mut Rig)) {
+        fn go(layers: &mut [Layer], f: &mut dyn FnMut(&mut Rig)) {
+            for l in layers {
+                match &mut l.kind {
+                    LayerKind::Skeleton { rig } => f(rig),
+                    LayerKind::Group { children } => go(children, f),
+                    _ => {}
                 }
             }
         }
@@ -731,6 +798,7 @@ impl Document {
         }
         self.s.frames.insert(at, Frame { duration_ms });
         self.for_each_raster(|cels| cels.insert(at, None));
+        self.for_each_rig(|rig| rig.frame_inserted(at));
         for t in &mut self.s.tags {
             if t.from >= at {
                 t.from += 1;
@@ -762,6 +830,7 @@ impl Document {
         }
         let mut it = fresh.into_iter();
         self.for_each_raster(|cels| cels[at + 1] = it.next().flatten());
+        self.for_each_rig(|rig| rig.frame_duplicated(at, at + 1));
         Ok(at + 1)
     }
 
@@ -775,6 +844,7 @@ impl Document {
         self.for_each_raster(|cels| {
             cels.remove(at);
         });
+        self.for_each_rig(|rig| rig.frame_removed(at));
         let last = self.s.frames.len() - 1;
         self.s.tags.retain_mut(|t| {
             if t.from == at && t.to == at {
@@ -821,6 +891,7 @@ impl Document {
             let old = cels.clone();
             *cels = order.iter().map(|&o| old[o]).collect();
         });
+        self.for_each_rig(|rig| rig.frames_reordered(&order));
         for t in &mut self.s.tags {
             let spots = (t.from..=t.to.min(n - 1)).map(|f| new_of[f]);
             let (lo, hi) = spots.fold((usize::MAX, 0), |(lo, hi), f| (lo.min(f), hi.max(f)));

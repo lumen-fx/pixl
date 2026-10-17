@@ -3,6 +3,7 @@
 use std::fmt;
 
 use crate::document::LayerId;
+use crate::rig::BoneId;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -34,6 +35,18 @@ pub enum Error {
     Format(String),
     /// Reading or writing a file failed.
     Io(String),
+    /// The operation needs a skeleton layer.
+    NotSkeleton(LayerId),
+    /// The rig has no bone with this id.
+    BoneNotFound(BoneId),
+    /// A bone cannot move under itself or one of its children.
+    CyclicBone(BoneId),
+    /// IK needs the bone to have a parent bone.
+    NoIkChain(BoneId),
+    /// The rig has no binding at this index.
+    BindingNotFound(usize),
+    /// A pose cannot render over the rig's source frame.
+    SourceFrame(usize),
 }
 
 impl fmt::Display for Error {
@@ -53,6 +66,17 @@ impl fmt::Display for Error {
             Error::Image(msg) => write!(f, "image error: {msg}"),
             Error::Format(msg) => write!(f, "file error: {msg}"),
             Error::Io(msg) => write!(f, "i/o error: {msg}"),
+            Error::NotSkeleton(id) => write!(f, "layer {} is not a skeleton layer", id.0),
+            Error::BoneNotFound(id) => write!(f, "no bone with id {}", id.0),
+            Error::CyclicBone(id) => write!(f, "bone {} cannot move under itself", id.0),
+            Error::NoIkChain(id) => write!(f, "bone {} has no parent to bend with", id.0),
+            Error::BindingNotFound(i) => write!(f, "no binding {i}"),
+            Error::SourceFrame(i) => {
+                write!(
+                    f,
+                    "frame {i} holds the rig's rest art and cannot be rendered over"
+                )
+            }
         }
     }
 }

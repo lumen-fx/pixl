@@ -1,6 +1,7 @@
 //! The headless core of the pixl pixel art editor: document model,
-//! compositing, history, raster tools, transforms, the native `.pixl` file
-//! format and image I/O. It has no UI dependency; the editor's UI drives it.
+//! compositing, history, raster tools, transforms, skeletons and
+//! pose-to-frame, the native `.pixl` file format and image I/O. It has no UI
+//! dependency; the editor's UI drives it.
 
 pub mod aseprite;
 mod bytes;
@@ -15,6 +16,7 @@ pub mod image;
 pub mod io;
 pub mod merge;
 pub mod native;
+pub mod rig;
 pub mod selection;
 pub mod tools;
 pub mod transform;
@@ -29,6 +31,10 @@ pub use error::Error;
 pub use geom::{Point, Rect};
 pub use history::{History, Scope, Transaction};
 pub use image::{Raster, TILE_SIZE, TiledImage};
+pub use rig::{
+    Bend, Binding, Bone, BoneId, BonePose, Easing, NamedPose, Parts, Pose, PoseKey, PosedLayer,
+    Region, RenderOptions, Rig, RigFrame, Rigid, Vec2,
+};
 pub use selection::{SelectOp, Selection};
 pub use tools::{
     Bayer, Brush, BrushShape, Canvas, Ink, Symmetry, SymmetryMode, ToolContext, edit_cel,

@@ -416,6 +416,7 @@ fn composite_layers(ctx: &Ctx, layers: &[Layer], buf: &mut [Px]) {
                     }
                 }
             }
+            LayerKind::Skeleton { .. } => {}
             LayerKind::Reference { image } => {
                 if ctx.include_reference
                     && shown

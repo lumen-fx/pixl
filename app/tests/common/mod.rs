@@ -23,8 +23,13 @@ pub fn app_dir(backend: &str) -> PathBuf {
     std::fs::create_dir_all(&dir).expect("make the app directory");
     for part in ["src", "assets"] {
         let link = dir.join(part);
-        if !link.exists() {
-            link_dir(&app.join(part), &link);
+        // Tests of one binary start in parallel: another may have just
+        // made the link.
+        if !link.exists()
+            && let Err(e) = link_dir(&app.join(part), &link)
+            && !link.exists()
+        {
+            panic!("link the app sources: {e}");
         }
     }
     let toml = std::fs::read_to_string(app.join("lumen.toml")).expect("read lumen.toml");
@@ -42,13 +47,13 @@ pub fn app_dir(backend: &str) -> PathBuf {
 }
 
 #[cfg(unix)]
-fn link_dir(from: &Path, to: &Path) {
-    std::os::unix::fs::symlink(from, to).expect("link the app sources");
+fn link_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(from, to)
 }
 
 #[cfg(windows)]
-fn link_dir(from: &Path, to: &Path) {
-    std::os::windows::fs::symlink_dir(from, to).expect("link the app sources");
+fn link_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(from, to)
 }
 
 /// Saves `frame` as `<name>.png` under `PIXL_SHOTS` when that is set.

@@ -8,6 +8,7 @@ use crate::document::{Document, LayerId};
 use crate::error::Error;
 use crate::geom::{Point, Rect};
 use crate::image::Raster;
+use crate::rig::{Region, Vec2};
 
 /// A dense row-major buffer of raw pixel values (see [`Raster::get_raw`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -142,6 +143,12 @@ impl Pixels {
         out
     }
 
+    /// The 8x upscale RotSprite samples: three passes of
+    /// [`Pixels::scale2x`].
+    pub fn upscale8(&self) -> Self {
+        self.scale2x().scale2x().scale2x()
+    }
+
     /// The size a rotation by `degrees` needs to hold the whole image.
     pub fn rotated_size(&self, degrees: f64) -> (u32, u32) {
         let (s, c) = degrees.to_radians().sin_cos();
@@ -179,7 +186,7 @@ impl Pixels {
                 }
             });
         }
-        let big = self.scale2x().scale2x().scale2x();
+        let big = self.upscale8();
         let (s, c) = degrees.to_radians().sin_cos();
         let (scx, scy) = (self.width as f64 / 2.0, self.height as f64 / 2.0);
         let (dcx, dcy) = (width as f64 / 2.0, height as f64 / 2.0);
@@ -342,6 +349,47 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
             let abs = map_rect(Rect::pixel(old.x + p.x, old.y + p.y));
             slice.pivot = Some(Point::new(abs.x - slice.bounds.x, abs.y - slice.bounds.y));
         }
+    }
+    let (fw, fh) = (w as f64, h as f64);
+    let point = |p: Vec2| -> Vec2 {
+        match op {
+            CanvasTransform::FlipH => Vec2::new(fw - p.x, p.y),
+            CanvasTransform::FlipV => Vec2::new(p.x, fh - p.y),
+            CanvasTransform::Rotate90(q) => match q.rem_euclid(4) {
+                0 => p,
+                1 => Vec2::new(fh - p.y, p.x),
+                2 => Vec2::new(fw - p.x, fh - p.y),
+                _ => Vec2::new(p.y, fw - p.x),
+            },
+            CanvasTransform::Scale(sw, sh) => Vec2::new(p.x * sw as f64 / fw, p.y * sh as f64 / fh),
+        }
+    };
+    let region = |r: &Region| -> Region {
+        let b = r.bounds();
+        let bits = Pixels {
+            width: b.w.max(0) as u32,
+            height: b.h.max(0) as u32,
+            data: r.bits().iter().map(|&on| on as u32).collect(),
+        };
+        let to = map_rect(b);
+        let out = match op {
+            CanvasTransform::FlipH => bits.flip_h(),
+            CanvasTransform::FlipV => bits.flip_v(),
+            CanvasTransform::Rotate90(q) => bits.rotate_quarters(q),
+            CanvasTransform::Scale(..) => {
+                bits.scale_nearest(to.w.max(0) as u32, to.h.max(0) as u32)
+            }
+        };
+        Region::from_bits(to, out.data.iter().map(|&v| v != 0).collect())
+            .unwrap_or_else(|| Region::rect(Rect::EMPTY))
+    };
+    let (flip, turn) = match op {
+        CanvasTransform::FlipH | CanvasTransform::FlipV => (true, 0.0),
+        CanvasTransform::Rotate90(q) => (false, q as f64 * 90.0),
+        CanvasTransform::Scale(..) => (false, 0.0),
+    };
+    for rig in doc.rigs_mut() {
+        rig.map(point, flip, turn, region);
     }
     doc.s.width = nw;
     doc.s.height = nh;

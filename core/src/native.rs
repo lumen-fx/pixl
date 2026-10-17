@@ -31,6 +31,11 @@
 //! - `CELS` which image each raster layer shows on each frame.
 //! - `MASK` layer masks.
 //! - `TAGS` frame tags, `SLCE` slices.
+//! - `RIGS` (since 1.1) skeleton layers: each one's place in the layer tree,
+//!   its layer properties and its rig (bones, bindings, the pose being
+//!   edited, the pose library, keyed and generated frames). Skeleton layers
+//!   are left out of `LAYR`, so a 1.0 reader skips them with a warning and
+//!   opens the rest.
 //!
 //! Compression is zlib (deflate) through `flate2`: pure Rust, already used by
 //! PNG and needed for Aseprite cels, so pixl carries one codec for all three.
@@ -50,12 +55,15 @@ use crate::document::{
 use crate::error::Error;
 use crate::geom::{Point, Rect};
 use crate::image::{Raster, TILE_AREA, Tile, TileSnap, TiledImage};
+use crate::rig::{
+    Binding, Bone, BoneId, BonePose, Easing, NamedPose, Pose, PoseKey, Region, Rig, RigFrame, Vec2,
+};
 
 /// The first 8 bytes of every `.pixl` file.
 pub const SIGNATURE: [u8; 8] = *b"\x89PXL\r\n\x1a\n";
 /// The format version this build writes. It reads every file of the same
 /// major version.
-pub const VERSION: (u16, u16) = (1, 0);
+pub const VERSION: (u16, u16) = (1, 1);
 
 const CRITICAL: u32 = 1;
 const COMPRESSED: u32 = 2;
@@ -313,6 +321,30 @@ fn same_pixels(a: &TileSnap, b: &TileSnap) -> bool {
 }
 
 fn write_layer(w: &mut Writer, l: &Layer) {
+    write_props(w, l);
+    match &l.kind {
+        LayerKind::Raster { .. } => w.u8(KIND_RASTER),
+        LayerKind::Group { children } => {
+            w.u8(KIND_GROUP);
+            let children: Vec<&Layer> = children.iter().filter(|c| !is_skeleton(c)).collect();
+            w.u32(children.len() as u32);
+            for c in children {
+                write_layer(w, c);
+            }
+        }
+        LayerKind::Reference { image } => {
+            w.u8(KIND_REFERENCE);
+            w.u32(image.0);
+        }
+        LayerKind::Skeleton { .. } => unreachable!("skeletons are written in RIGS"),
+    }
+}
+
+fn is_skeleton(l: &Layer) -> bool {
+    matches!(l.kind, LayerKind::Skeleton { .. })
+}
+
+fn write_props(w: &mut Writer, l: &Layer) {
     let p = &l.props;
     w.u32(l.id.0);
     string(w, &p.name);
@@ -335,20 +367,220 @@ fn write_layer(w: &mut Writer, l: &Layer) {
     if let Some(c) = p.color_tag {
         rgba(w, c);
     }
-    match &l.kind {
-        LayerKind::Raster { .. } => w.u8(KIND_RASTER),
-        LayerKind::Group { children } => {
-            w.u8(KIND_GROUP);
-            w.u32(children.len() as u32);
-            for c in children {
-                write_layer(w, c);
-            }
-        }
-        LayerKind::Reference { image } => {
-            w.u8(KIND_REFERENCE);
-            w.u32(image.0);
+}
+
+fn f64v(w: &mut Writer, v: f64) {
+    w.bytes(&v.to_le_bytes());
+}
+
+fn read_f64(r: &mut Reader) -> Result<f64, Error> {
+    let v = f64::from_le_bytes(r.array()?);
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(corrupt("a rig number is not finite"))
+    }
+}
+
+fn vec2(w: &mut Writer, v: Vec2) {
+    f64v(w, v.x);
+    f64v(w, v.y);
+}
+
+fn read_vec2(r: &mut Reader) -> Result<Vec2, Error> {
+    Ok(Vec2::new(read_f64(r)?, read_f64(r)?))
+}
+
+fn easing_code(e: Easing) -> u8 {
+    match e {
+        Easing::Linear => 0,
+        Easing::EaseIn => 1,
+        Easing::EaseOut => 2,
+        Easing::EaseInOut => 3,
+        Easing::Hold => 4,
+    }
+}
+
+fn write_pose(w: &mut Writer, pose: &Pose) {
+    let bones: Vec<(BoneId, BonePose)> = pose.iter().collect();
+    w.u32(bones.len() as u32);
+    for (id, p) in bones {
+        w.u32(id.0);
+        f64v(w, p.rotation);
+        vec2(w, p.offset);
+    }
+}
+
+fn read_pose(r: &mut Reader) -> Result<Pose, Error> {
+    let n = r.count(28)?;
+    let mut pose = Pose::default();
+    for _ in 0..n {
+        let id = BoneId(r.u32()?);
+        let rotation = read_f64(r)?;
+        let offset = read_vec2(r)?;
+        pose.set(id, BonePose { rotation, offset });
+    }
+    Ok(pose)
+}
+
+/// Where a skeleton layer sits: its parent group (0 for the root) and its
+/// index among the parent's children.
+fn skeleton_places<'a>(layers: &'a [Layer], parent: u32, out: &mut Vec<(u32, u32, &'a Layer)>) {
+    for (i, l) in layers.iter().enumerate() {
+        match &l.kind {
+            LayerKind::Skeleton { .. } => out.push((parent, i as u32, l)),
+            LayerKind::Group { children } => skeleton_places(children, l.id.0, out),
+            _ => {}
         }
     }
+}
+
+fn write_rig(w: &mut Writer, rig: &Rig) {
+    w.u32(rig.source_frame() as u32);
+    w.u32(rig.next_bone());
+    w.u32(rig.bones().len() as u32);
+    for b in rig.bones() {
+        w.u32(b.id.0);
+        string(w, &b.name);
+        w.u32(b.parent.map_or(0, |p| p.0));
+        vec2(w, b.head);
+        f64v(w, b.length);
+        f64v(w, b.angle);
+    }
+    w.u32(rig.bindings().len() as u32);
+    for b in rig.bindings() {
+        w.u32(b.layer.0);
+        w.u32(b.bone.0);
+        vec2(w, b.pivot);
+        match &b.region {
+            None => w.u8(0),
+            Some(region) => {
+                w.u8(1);
+                rect(w, region.bounds());
+                let mut packed = vec![0u8; region.bits().len().div_ceil(8)];
+                for (i, _) in region.bits().iter().enumerate().filter(|(_, on)| **on) {
+                    packed[i / 8] |= 1 << (i % 8);
+                }
+                w.bytes(&packed);
+            }
+        }
+    }
+    write_pose(w, &rig.pose);
+    w.u32(rig.library.len() as u32);
+    for p in &rig.library {
+        string(w, &p.name);
+        write_pose(w, &p.pose);
+    }
+    w.u32(rig.frames().len() as u32);
+    for f in rig.frames() {
+        w.u8(f.key.is_some() as u8 | ((f.generated as u8) << 1));
+        if let Some(k) = &f.key {
+            w.u8(easing_code(k.easing));
+            write_pose(w, &k.pose);
+        }
+    }
+}
+
+fn read_rig(r: &mut Reader) -> Result<Rig, Error> {
+    let source_frame = r.u32()? as usize;
+    let next_bone = r.u32()?;
+    let n = r.count(44)?;
+    let mut bones = Vec::with_capacity(n);
+    for _ in 0..n {
+        let id = BoneId(r.u32()?);
+        let name = read_string(r)?;
+        let parent = match r.u32()? {
+            0 => None,
+            p => Some(BoneId(p)),
+        };
+        let head = read_vec2(r)?;
+        let length = read_f64(r)?;
+        let angle = read_f64(r)?;
+        bones.push(Bone {
+            id,
+            name,
+            parent,
+            head,
+            length,
+            angle,
+        });
+    }
+    let n = r.count(25)?;
+    let mut bindings = Vec::with_capacity(n);
+    for _ in 0..n {
+        let layer = LayerId(r.u32()?);
+        let bone = BoneId(r.u32()?);
+        let pivot = read_vec2(r)?;
+        let region = match r.u8()? {
+            0 => None,
+            1 => {
+                let bounds = read_rect(r)?;
+                if bounds.w < 0
+                    || bounds.h < 0
+                    || bounds.w > MAX_SIZE as i32
+                    || bounds.h > MAX_SIZE as i32
+                {
+                    return Err(corrupt("a rig region has a bad size"));
+                }
+                let count = bounds.w as usize * bounds.h as usize;
+                let packed = r.take(count.div_ceil(8))?;
+                let bits = (0..count)
+                    .map(|i| packed[i / 8] & (1 << (i % 8)) != 0)
+                    .collect();
+                Some(Region::from_bits(bounds, bits).expect("sized to the bounds"))
+            }
+            k => return Err(corrupt(format!("unknown rig region kind {k}"))),
+        };
+        bindings.push(Binding {
+            layer,
+            region,
+            bone,
+            pivot,
+        });
+    }
+    let pose = read_pose(r)?;
+    let n = r.count(8)?;
+    let mut library = Vec::with_capacity(n);
+    for _ in 0..n {
+        let name = read_string(r)?;
+        let pose = read_pose(r)?;
+        library.push(NamedPose { name, pose });
+    }
+    let n = r.count(1)?;
+    let mut frames = Vec::with_capacity(n);
+    for _ in 0..n {
+        let flags = r.u8()?;
+        let key = if flags & 1 != 0 {
+            let easing = match r.u8()? {
+                0 => Easing::Linear,
+                1 => Easing::EaseIn,
+                2 => Easing::EaseOut,
+                3 => Easing::EaseInOut,
+                4 => Easing::Hold,
+                e => return Err(corrupt(format!("unknown easing {e}"))),
+            };
+            Some(PoseKey {
+                pose: read_pose(r)?,
+                easing,
+            })
+        } else {
+            None
+        };
+        frames.push(RigFrame {
+            key,
+            generated: flags & 2 != 0,
+        });
+    }
+    Rig::from_parts(
+        bones,
+        bindings,
+        pose,
+        library,
+        frames,
+        source_frame,
+        next_bone,
+    )
+    .map_err(corrupt)
 }
 
 /// Encodes a document as a `.pixl` file.
@@ -420,8 +652,9 @@ pub fn save(doc: &Document, opts: SaveOptions) -> Vec<u8> {
     }
 
     let mut w = Writer::new();
-    w.u32(s.layers.len() as u32);
-    for l in &s.layers {
+    let roots: Vec<&Layer> = s.layers.iter().filter(|l| !is_skeleton(l)).collect();
+    w.u32(roots.len() as u32);
+    for l in roots {
         write_layer(&mut w, l);
     }
     out.chunk(b"LAYR", true, w.buf);
@@ -484,6 +717,22 @@ pub fn save(doc: &Document, opts: SaveOptions) -> Vec<u8> {
     }
     out.chunk(b"SLCE", false, w.buf);
 
+    let mut places = Vec::new();
+    skeleton_places(&s.layers, 0, &mut places);
+    if !places.is_empty() {
+        let mut w = Writer::new();
+        w.u32(places.len() as u32);
+        for (parent, index, l) in places {
+            w.u32(parent);
+            w.u32(index);
+            write_props(&mut w, l);
+            if let LayerKind::Skeleton { rig } = &l.kind {
+                write_rig(&mut w, rig);
+            }
+        }
+        out.chunk(b"RIGS", false, w.buf);
+    }
+
     out.chunk(b"END ", true, Vec::new());
     out.out
 }
@@ -510,6 +759,7 @@ struct Parts {
     masks: Option<Vec<(LayerId, LayerMask)>>,
     tags: Option<Vec<Tag>>,
     slices: Option<Vec<Slice>>,
+    rigs: Option<Vec<(u32, u32, Layer)>>,
 }
 
 fn once<T>(slot: &mut Option<T>, value: T, tag: &str) -> Result<(), Error> {
@@ -623,6 +873,29 @@ fn read_layer(r: &mut Reader, depth: usize) -> Result<Layer, Error> {
     if depth > MAX_DEPTH {
         return Err(corrupt("layers nest too deep"));
     }
+    let (id, props) = read_props(r)?;
+    let kind = match r.u8()? {
+        KIND_RASTER => LayerKind::Raster {
+            cels: Vec::new(),
+            mask: None,
+        },
+        KIND_GROUP => {
+            let n = r.count(12)?;
+            let mut children = Vec::with_capacity(n);
+            for _ in 0..n {
+                children.push(read_layer(r, depth + 1)?);
+            }
+            LayerKind::Group { children }
+        }
+        KIND_REFERENCE => LayerKind::Reference {
+            image: ImageId(r.u32()?),
+        },
+        k => return Err(corrupt(format!("unknown layer kind {k}"))),
+    };
+    Ok(Layer { id, props, kind })
+}
+
+fn read_props(r: &mut Reader) -> Result<(LayerId, LayerProps), Error> {
     let id = LayerId(r.u32()?);
     let name = read_string(r)?;
     let flags = r.u8()?;
@@ -648,25 +921,7 @@ fn read_layer(r: &mut Reader, depth: usize) -> Result<Layer, Error> {
         color_tag,
         clip: flags & L_CLIP != 0,
     };
-    let kind = match r.u8()? {
-        KIND_RASTER => LayerKind::Raster {
-            cels: Vec::new(),
-            mask: None,
-        },
-        KIND_GROUP => {
-            let n = r.count(12)?;
-            let mut children = Vec::with_capacity(n);
-            for _ in 0..n {
-                children.push(read_layer(r, depth + 1)?);
-            }
-            LayerKind::Group { children }
-        }
-        KIND_REFERENCE => LayerKind::Reference {
-            image: ImageId(r.u32()?),
-        },
-        k => return Err(corrupt(format!("unknown layer kind {k}"))),
-    };
-    Ok(Layer { id, props, kind })
+    Ok((id, props))
 }
 
 fn read_chunk_payload(tag: &[u8; 4], r: &mut Reader, parts: &mut Parts) -> Result<(), Error> {
@@ -773,6 +1028,26 @@ fn read_chunk_payload(tag: &[u8; 4], r: &mut Reader, parts: &mut Parts) -> Resul
             }
             once(&mut parts.slices, slices, "SLCE")?;
         }
+        b"RIGS" => {
+            let n = r.count(20)?;
+            let mut rigs = Vec::with_capacity(n);
+            for _ in 0..n {
+                let parent = r.u32()?;
+                let index = r.u32()?;
+                let (id, props) = read_props(r)?;
+                let rig = read_rig(r)?;
+                rigs.push((
+                    parent,
+                    index,
+                    Layer {
+                        id,
+                        props,
+                        kind: LayerKind::Skeleton { rig: Box::new(rig) },
+                    },
+                ));
+            }
+            once(&mut parts.rigs, rigs, "RIGS")?;
+        }
         _ => unreachable!("only known tags reach the payload reader"),
     }
     if !r.is_empty() {
@@ -784,9 +1059,9 @@ fn read_chunk_payload(tag: &[u8; 4], r: &mut Reader, parts: &mut Parts) -> Resul
     Ok(())
 }
 
-const KNOWN: [&[u8; 4]; 11] = [
+const KNOWN: [&[u8; 4]; 12] = [
     b"HEAD", b"PLTE", b"FRMS", b"TILE", b"IMAG", b"LAYR", b"CELS", b"MASK", b"TAGS", b"SLCE",
-    b"END ",
+    b"RIGS", b"END ",
 ];
 
 /// Decodes a `.pixl` file. A truncated or corrupt file is an error, never a
@@ -932,12 +1207,42 @@ fn assemble(parts: Parts) -> Result<Document, Error> {
             match &mut l.kind {
                 LayerKind::Raster { cels, .. } => *cels = vec![None; frames],
                 LayerKind::Group { children } => visit(children, frames, f)?,
-                LayerKind::Reference { .. } => {}
+                LayerKind::Reference { .. } | LayerKind::Skeleton { .. } => {}
             }
         }
         Ok(())
     }
     visit(&mut s.layers, frames, &mut check)?;
+    let mut rigs = parts.rigs.unwrap_or_default();
+    rigs.sort_by_key(|(_, index, _)| *index);
+    for (parent, index, layer) in rigs {
+        check(&layer)?;
+        if let LayerKind::Skeleton { rig } = &layer.kind
+            && rig.frames().len() != frames
+        {
+            return Err(corrupt("a rig's frames do not match the document"));
+        }
+        let siblings = if parent == 0 {
+            &mut s.layers
+        } else {
+            fn group(layers: &mut [Layer], id: u32) -> Option<&mut Vec<Layer>> {
+                for l in layers {
+                    if let LayerKind::Group { children } = &mut l.kind {
+                        if l.id.0 == id {
+                            return Some(children);
+                        }
+                        if let Some(found) = group(children, id) {
+                            return Some(found);
+                        }
+                    }
+                }
+                None
+            }
+            group(&mut s.layers, parent).ok_or_else(|| corrupt("a skeleton's group is missing"))?
+        };
+        let at = (index as usize).min(siblings.len());
+        siblings.insert(at, layer);
+    }
     let max_layer = ids.last().map_or(0, |id| id.0);
     let max_image = images.keys().last().map_or(0, |id| id.0);
     s.next_layer = s.next_layer.max(max_layer.saturating_add(1));
@@ -1215,6 +1520,70 @@ mod tests {
             pivot: None,
             color: Rgba::BLACK,
         });
+        let skel = d
+            .add_layer(
+                NewLayer::Skeleton,
+                "rig",
+                Placement {
+                    parent: Some(g),
+                    index: Some(1),
+                },
+            )
+            .unwrap();
+        d.add_layer(NewLayer::Skeleton, "root rig", Placement::default())
+            .unwrap();
+        let rig = d.rig_mut(skel).unwrap();
+        let hip = rig
+            .add_bone("hip", None, Vec2::new(10.5, 20.0), Vec2::new(10.5, 30.25))
+            .unwrap();
+        let leg = rig
+            .add_bone(
+                "leg.L",
+                Some(hip),
+                Vec2::new(10.5, 30.25),
+                Vec2::new(4.0, 41.0),
+            )
+            .unwrap();
+        rig.bind(Binding {
+            layer: base,
+            region: Some(
+                Region::from_bits(
+                    Rect::new(3, 4, 3, 3),
+                    vec![true, false, true, false, true, false, true, true, false],
+                )
+                .unwrap(),
+            ),
+            bone: leg,
+            pivot: Vec2::new(4.5, 5.5),
+        })
+        .unwrap();
+        rig.bind(Binding {
+            layer: base,
+            region: None,
+            bone: hip,
+            pivot: Vec2::new(10.0, 20.0),
+        })
+        .unwrap();
+        let mut pose = Pose::default();
+        pose.set(
+            leg,
+            BonePose {
+                rotation: -33.5,
+                offset: Vec2::new(0.25, -1.0),
+            },
+        );
+        rig.pose = pose.clone();
+        rig.library.push(NamedPose {
+            name: "kick".into(),
+            pose: pose.clone(),
+        });
+        rig.set_source_frame(1).unwrap();
+        let f = rig.frame_mut(2).unwrap();
+        f.key = Some(PoseKey {
+            pose,
+            easing: Easing::EaseInOut,
+        });
+        f.generated = true;
         d.set_background(Background::Color(Rgba::opaque(4, 5, 6)));
         d.set_pixel_aspect(PixelAspect::Tall);
         if mode == ColorMode::Indexed {
@@ -1350,6 +1719,41 @@ mod tests {
             vec![LoadWarning::UnknownChunk { tag: "ANIM".into() }]
         );
         assert!(load(&with(chunk(b"ANIM", CRITICAL, b"x"))).is_err());
+    }
+
+    #[test]
+    fn older_readers_skip_skeletons() {
+        // A reader that does not know RIGS (as pixl 1.0) skips the chunk and
+        // opens the document without its skeleton layers.
+        let d = rich(ColorMode::Rgba);
+        let mut bytes = save(&d, SaveOptions::default());
+        let (_, flags, range) = chunks(&bytes)
+            .into_iter()
+            .find(|(tag, ..)| tag == b"RIGS")
+            .expect("a RIGS chunk");
+        assert_eq!(flags & CRITICAL, 0, "RIGS is optional");
+        bytes[range.start - 12..range.start - 8].copy_from_slice(b"RIGZ");
+        fix_crc(&mut bytes, range);
+        let loaded = load(&bytes).unwrap();
+        assert_eq!(
+            loaded.warnings,
+            vec![LoadWarning::UnknownChunk { tag: "RIGZ".into() }]
+        );
+        let mut without = d.clone();
+        let skeletons: Vec<LayerId> = d
+            .walk()
+            .into_iter()
+            .filter(|(_, l)| matches!(l.kind, LayerKind::Skeleton { .. }))
+            .map(|(_, l)| l.id)
+            .collect();
+        assert_eq!(skeletons.len(), 2);
+        for id in skeletons {
+            without.remove_layer(id).unwrap();
+        }
+        assert_eq!(loaded.document.walk(), without.walk());
+        // A document without skeletons writes no RIGS chunk at all.
+        let plain = save(&without, SaveOptions::default());
+        assert!(chunks(&plain).iter().all(|(tag, ..)| tag != b"RIGS"));
     }
 
     #[test]
