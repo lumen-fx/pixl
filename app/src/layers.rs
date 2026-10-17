@@ -309,8 +309,11 @@ struct Dragging {
 /// The layers panel's state.
 #[derive(Resource, Default)]
 pub struct LayerPanel {
-    /// The list's markup as last written.
+    /// The list's markup as last written, and what it was written from:
+    /// the document's generation and revision, the active layer, mask
+    /// editing and the folded groups.
     shown: Option<String>,
+    shown_for: Option<u64>,
     drag: Option<Dragging>,
     /// The layer a context menu or the properties dialog is about.
     about: Option<LayerId>,
@@ -421,15 +424,31 @@ pub fn show_layers(
     if editor.mask_edit && mask_of(&editor.doc, editor.layer).is_none() {
         editor.mask_edit = false;
     }
-    let markup = layers_markup(&editor, &tree);
     let mut changed = false;
-    if panel.shown.as_deref() != Some(markup.as_str())
+    let key = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (
+            editor.generation,
+            editor.revision,
+            editor.layer.0,
+            editor.mask_edit,
+        )
+            .hash(&mut h);
+        tree.collapsed.hash(&mut h);
+        h.finish()
+    };
+    let markup = (panel.shown_for != Some(key)).then(|| layers_markup(&editor, &tree));
+    if let Some(markup) = markup
         && let Some(node) = dom::get_by_id("layer-list")
     {
-        node.set_inner_markup(&markup);
-        panel.shown = Some(markup);
-        panel.marker = None;
-        changed = true;
+        panel.shown_for = Some(key);
+        if panel.shown.as_deref() != Some(markup.as_str()) {
+            node.set_inner_markup(&markup);
+            panel.shown = Some(markup);
+            panel.marker = None;
+            changed = true;
+        }
     }
     let want = panel.drag.and_then(|d| d.drop.filter(|_| d.moved));
     if panel.marker != want {

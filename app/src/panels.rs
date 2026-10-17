@@ -64,8 +64,12 @@ pub fn escape(text: &str) -> String {
 #[derive(Resource, Default)]
 pub struct Panels {
     palette: Option<String>,
-    history: Option<String>,
+    /// The history list as shown: its labels and the current entry.
+    history: Option<(Vec<String>, usize)>,
     history_len: Option<usize>,
+    /// The document state the palette and history were last brought up to
+    /// date with: generation, revision, undo and redo entries.
+    seen: Option<(u64, u64, usize, usize)>,
     colors: Option<(Rgba, Rgba)>,
     /// The foreground color as the channel sliders and the hex field last
     /// showed it.
@@ -94,26 +98,69 @@ fn palette_markup(editor: &Editor) -> String {
     out
 }
 
-fn history_markup(editor: &Editor) -> String {
-    let undo: Vec<&str> = editor.history.undo_labels().collect();
-    let redo: Vec<&str> = editor.history.redo_labels().collect();
+/// The history list's entries (the document as opened, then each edit,
+/// undone ones last) and the index of the current one.
+fn history_entries(editor: &Editor) -> (Vec<String>, usize) {
+    let current = editor.history.undo_labels().count();
+    let labels = std::iter::once("Opened")
+        .chain(editor.history.undo_labels())
+        .chain(editor.history.redo_labels())
+        .map(str::to_string)
+        .collect();
+    (labels, current)
+}
+
+fn history_class(k: usize, current: usize) -> &'static str {
+    match k.cmp(&current) {
+        std::cmp::Ordering::Less => "history-row",
+        std::cmp::Ordering::Equal => "history-row current",
+        std::cmp::Ordering::Greater => "history-row undone",
+    }
+}
+
+fn history_markup(labels: &[String], current: usize) -> String {
     let mut out = String::new();
-    let current = undo.len();
-    let entries = std::iter::once("Opened")
-        .chain(undo.iter().copied())
-        .chain(redo.iter().copied());
-    for (k, label) in entries.enumerate() {
-        let state = match k.cmp(&current) {
-            std::cmp::Ordering::Less => "",
-            std::cmp::Ordering::Equal => " current",
-            std::cmp::Ordering::Greater => " undone",
-        };
+    for (k, label) in labels.iter().enumerate() {
         out.push_str(&format!(
-            r#"<row id="history-{k}" class="history-row{state}"><label class="history-label" text="{}"/></row>"#,
+            r#"<row id="history-{k}" class="{}"><label class="history-label" text="{}"/></row>"#,
+            history_class(k, current),
             escape(label)
         ));
     }
     out
+}
+
+/// Brings the history list up to date: an undo or a redo moves the current
+/// entry by changing two rows' classes; a new edit writes the list again.
+fn show_history(panels: &mut Panels, entries: (Vec<String>, usize)) -> bool {
+    let (labels, current) = &entries;
+    match &panels.history {
+        Some((shown, was)) if shown == labels => {
+            if was == current {
+                return false;
+            }
+            for k in [*was, *current] {
+                if let Some(row) = dom::get_by_id(&format!("history-{k}")) {
+                    row.set_class(history_class(k, *current));
+                }
+            }
+            // Rows between the two change from done to undone or back.
+            let (a, b) = ((*was).min(*current), (*was).max(*current));
+            for k in a + 1..b {
+                if let Some(row) = dom::get_by_id(&format!("history-{k}")) {
+                    row.set_class(history_class(k, *current));
+                }
+            }
+        }
+        _ => {
+            let Some(node) = dom::get_by_id("history-list") else {
+                return false;
+            };
+            node.set_inner_markup(&history_markup(labels, *current));
+        }
+    }
+    panels.history = Some(entries);
+    true
 }
 
 /// Rewrites a panel's content when what it shows changed.
@@ -137,19 +184,28 @@ pub fn show_panels(
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mut changed = false;
-    changed |= refresh(
-        &mut panels.palette,
-        "palette-swatches",
-        palette_markup(&editor),
-    );
-    let entries = editor.history.undo_labels().count() + editor.history.redo_labels().count();
-    if refresh(&mut panels.history, "history-list", history_markup(&editor)) {
+    // The palette and the history change only with the document.
+    let undo = editor.history.undo_labels().count();
+    let entries = undo + editor.history.redo_labels().count();
+    let now = (editor.generation, editor.revision, undo, entries);
+    let current = panels.seen == Some(now);
+    if !current {
+        changed |= refresh(
+            &mut panels.palette,
+            "palette-swatches",
+            palette_markup(&editor),
+        );
+    }
+    if !current && show_history(&mut panels, history_entries(&editor)) {
         changed = true;
         // A new edit scrolls the list to its end, where the edit is.
         if panels.history_len.is_some_and(|n| entries > n) {
             signals.set("history_scroll", f64::from(u32::MAX));
         }
         panels.history_len = Some(entries);
+    }
+    if !current && panels.palette.is_some() && panels.history.is_some() {
+        panels.seen = Some(now);
     }
     if panels.colors != Some((editor.fg, editor.bg))
         && let (Some(fg), Some(bg)) = (dom::get_by_id("color-fg"), dom::get_by_id("color-bg"))

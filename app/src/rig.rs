@@ -82,6 +82,9 @@ struct Shown {
     parents: Option<String>,
     bindings: Option<String>,
     library: Option<String>,
+    /// The document generation and revision, the bone and the skeleton the
+    /// lists above were written for.
+    lists_for: Option<(u64, u64, Option<BoneId>, Option<LayerId>)>,
     thumbs: Option<(u64, u64, usize)>,
     canvas: Option<u64>,
     size: (f32, f32),
@@ -1265,17 +1268,31 @@ pub fn show_rig(
         crate::set_class(app, "rigging", ui.mode.is_some());
     }
     if let Some(rig) = rig {
-        let bound: Vec<BoneId> = rig.bindings().iter().map(|b| b.bone).collect();
-        changed |= refresh(
-            &mut ui.shown.bones,
-            "rig-bone-list",
-            bones_markup(rig, ui.bone, &bound),
-        );
-        changed |= refresh(
-            &mut ui.shown.parents,
-            "rig-parent-box",
-            parents_markup(rig, ui.bone),
-        );
+        // The lists change only with the document, the bone or the rig.
+        let lists = (editor.generation, editor.revision, ui.bone, ui.skeleton);
+        if ui.shown.lists_for != Some(lists) && dom::get_by_id("rig-bone-list").is_some() {
+            ui.shown.lists_for = Some(lists);
+            let bound: Vec<BoneId> = rig.bindings().iter().map(|b| b.bone).collect();
+            changed |= refresh(
+                &mut ui.shown.bones,
+                "rig-bone-list",
+                bones_markup(rig, ui.bone, &bound),
+            );
+            changed |= refresh(
+                &mut ui.shown.parents,
+                "rig-parent-box",
+                parents_markup(rig, ui.bone),
+            );
+            changed |= refresh(
+                &mut ui.shown.bindings,
+                "rig-binding-list",
+                bindings_markup(doc, rig, ui.bone),
+            );
+            if refresh(&mut ui.shown.library, "rig-library", library_markup(rig)) {
+                changed = true;
+                ui.shown.thumbs = None;
+            }
+        }
         let parent = ui.bone.and_then(|b| rig.bone(b)).map(|b| (b.id, b.parent));
         if let Some((b, p)) = parent
             && ui.shown.parent_for != parent
@@ -1284,15 +1301,7 @@ pub fn show_rig(
             ui.shown.parent_for = Some((b, p));
             changed = true;
         }
-        changed |= refresh(
-            &mut ui.shown.bindings,
-            "rig-binding-list",
-            bindings_markup(doc, rig, ui.bone),
-        );
-        if refresh(&mut ui.shown.library, "rig-library", library_markup(rig)) {
-            changed = true;
-            ui.shown.thumbs = None;
-        }
+
         if ui.shown.name_for != Some(ui.bone) {
             let name = ui
                 .bone
