@@ -10,7 +10,8 @@
 //! `side=N` and `layers=N` change the document from 4096 and 32, and
 //! `budget=MiB` the layer buffer budget from the performance setting's
 //! default. `log=FILE` writes every frame to a CSV file, as `pixl
-//! --perf-log` does.
+//! --perf-log` does, and `overlay` shows the performance overlay while it
+//! runs.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -182,6 +183,7 @@ fn main() {
     settings.performance.buffer_budget_mib =
         arg("budget", pixl::view::DEFAULT_BUFFER_BUDGET_MIB as usize) as u64;
     let budget = settings.performance.buffer_budget_mib;
+    settings.performance.show_fps = args.iter().any(|a| a == "overlay");
     let log = args.iter().find_map(|a| a.strip_prefix("log=")).map(|p| {
         pixl::perf::Perf::logging(
             pixl::perf::PerfLog::create(Path::new(p)).expect("the log file opens"),

@@ -356,8 +356,9 @@ measures what a user waits for: the progressive redraw after opening it,
 the time from a stroke to the frame that shows it on the top layer and on
 the bottom one, the frame after a pan and after a zoom step, hiding a
 layer, and exporting the frame as a PNG. `side=N` and `layers=N` change the
-document, `budget=MiB` the layer buffer memory, and `log=FILE` writes the
-per-frame CSV the `--perf-log` flag writes. Numbers move with the load on
+document, `budget=MiB` the layer buffer memory, `overlay` shows the
+performance overlay while it runs, and `log=FILE` writes the per-frame CSV
+the `--perf-log` flag writes. Numbers move with the load on
 the machine, so compare runs taken under the same load.
 
 `cargo bench -p pixl --bench customize -- gpu` (or `cpu`) times, on the
