@@ -73,6 +73,9 @@ pub struct Aids {
     /// The custom grid shows.
     pub grid: bool,
     pub grid_cell: (u32, u32),
+    /// The grid dialog set the cell; until it does, the cell follows the
+    /// canvas settings' custom grid.
+    pub grid_cell_chosen: bool,
     pub grid_offset: (i32, i32),
     /// The grid's lines run at 2:1 diagonals instead of across and down.
     pub isometric: bool,
@@ -101,6 +104,7 @@ impl Default for Aids {
             snap: false,
             grid: false,
             grid_cell: (16, 16),
+            grid_cell_chosen: false,
             grid_offset: (0, 0),
             isometric: false,
             slices: false,
@@ -189,6 +193,16 @@ pub fn read_aid_colors(
     }
 }
 
+/// Starts the custom grid at the cell the canvas settings give, until the
+/// grid dialog sets one.
+pub fn follow_grid_setting(settings: Res<crate::settings::Settings>, mut aids: ResMut<Aids>) {
+    let [w, h] = settings.canvas.custom_grid;
+    if !aids.grid_cell_chosen && aids.grid_cell != (w, h) {
+        aids.grid_cell = (w, h);
+        aids.revision += 1;
+    }
+}
+
 /// Runs the View menu's commands, the grid and slice dialogs, and keeps the
 /// view's snapping and the overlay in step with the aids.
 pub fn aids_commands(
@@ -263,6 +277,7 @@ pub fn aids_commands(
                 );
                 aids.isometric = signals.get::<bool>("grid_iso").unwrap_or(false);
                 aids.grid = true;
+                aids.grid_cell_chosen = true;
             }
             "grid-cancel" => signals.set("grid_open", false),
             "slice-ok" => {

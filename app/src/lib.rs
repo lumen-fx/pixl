@@ -222,6 +222,7 @@ pub fn editor(source: Source) -> App {
                         image_menu::image_commands,
                         adjust::filter_commands,
                         aids::read_aid_colors,
+                        aids::follow_grid_setting,
                         aids::aids_commands,
                         aids::aids_input,
                     )

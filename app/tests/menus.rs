@@ -372,6 +372,39 @@ fn snapping_puts_a_selection_on_the_grid() {
 }
 
 #[test]
+fn the_grid_starts_at_the_cell_the_canvas_settings_give() {
+    use lumenui::prelude::*;
+    use std::sync::{Arc, Mutex};
+    let mut settings = pixl::Settings::default();
+    settings.canvas.custom_grid = [8, 4];
+    let cells: Arc<Mutex<Vec<(u32, u32)>>> = Arc::default();
+    let seen = Arc::clone(&cells);
+    let app = editor_over(art()).insert_resource(settings).add_systems(
+        TickStage::Systems,
+        (move |aids: Res<pixl::aids::Aids>| seen.lock().unwrap().push(aids.grid_cell))
+            .after(pixl::aids::aids_commands),
+    );
+    let out = drive(
+        app,
+        vec![
+            Step::Menu("view-grid"),
+            Step::Wait,
+            Step::Menu("view-grid-settings"),
+            Step::Wait,
+            Step::Text("grid_w", "5"),
+            Step::Text("grid_h", "6"),
+            Step::Click("grid-ok"),
+            Step::Wait,
+        ],
+    );
+    let cells = cells.lock().unwrap();
+    // The settings' cell until the dialog sets another.
+    assert_eq!(cells.first(), Some(&(8, 4)), "{cells:?}");
+    assert_eq!(cells.last(), Some(&(5, 6)), "{cells:?}");
+    common::save(&out.frame, "menus-grid-from-settings");
+}
+
+#[test]
 fn a_slice_opens_its_dialog_and_takes_a_9_slice_center() {
     let mut d = art();
     d.slices_mut().push(pixl_core::Slice {
