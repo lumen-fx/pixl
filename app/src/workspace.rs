@@ -15,6 +15,7 @@ use lumenui::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::home::Home;
+use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::store::Store;
 
@@ -638,10 +639,17 @@ pub fn workspace_input(
     mut released: MessageReader<PointerReleased>,
     ids: Query<&LumenId>,
     parents: Query<&ChildOf>,
-    home: Res<Home>,
+    (home, keys): (Res<Home>, Res<KeyCommands>),
     mut signals: Signals,
 ) {
     let mut chosen: Vec<String> = menu.read().map(|m| m.id.clone()).collect();
+    // The Window menu's commands run from their keys too.
+    chosen.extend(
+        keys.pressed
+            .iter()
+            .filter(|(id, repeat)| !repeat && id.starts_with("window-"))
+            .map(|(id, _)| id.clone()),
+    );
     chosen.extend(
         clicks
             .read()

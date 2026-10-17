@@ -6,6 +6,7 @@ pub mod files;
 pub mod home;
 pub mod input;
 pub mod keymap;
+pub mod palette;
 pub mod panels;
 pub mod progressive;
 pub mod recents;
@@ -109,12 +110,16 @@ pub fn editor(source: Source) -> App {
         .insert_signal("themes_open", false)
         .insert_signal("th_name", "")
         .insert_signal("th_message", "")
+        .insert_resource(palette::Palette::default())
+        .insert_signal("cp_open", false)
+        .insert_signal("cp_query", "")
         .add_systems(
             TickStage::Systems,
             (
                 // What the user did this tick, in the order it applies.
                 (
                     keymap::read_keys,
+                    palette::palette_input,
                     settings_ui::settings_commands,
                     settings_ui::keys_page,
                     settings_ui::settings_form,
@@ -124,8 +129,7 @@ pub fn editor(source: Source) -> App {
                     view::measure_stage,
                     input::navigate,
                     files::file_commands,
-                    workspace::workspace_input,
-                    themes::theme_input,
+                    (workspace::workspace_input, themes::theme_input),
                     files::new_form,
                     panels::panel_clicks,
                     panels::history_keys,
@@ -144,8 +148,11 @@ pub fn editor(source: Source) -> App {
                     panels::show_panels,
                     files::autosave,
                     files::show_message,
-                    workspace::show_workspace,
-                    themes::show_themes,
+                    (
+                        workspace::show_workspace,
+                        themes::show_themes,
+                        palette::show_palette,
+                    ),
                     home::track_recents,
                     home::show_home,
                     tools::show_tool,

@@ -163,6 +163,7 @@
 
   <include src="parts/workspace.lmn"/>
   <include src="parts/themes.lmn"/>
+  <include src="parts/palette.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

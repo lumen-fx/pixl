@@ -242,6 +242,24 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("zoom-fit", "Fit to window", "View", Kind::Press),
     ("zoom-100", "Actual size", "View", Kind::Press),
     ("toggle-perf", "Performance overlay", "View", Kind::Press),
+    ("command-palette", "Command palette", "Window", Kind::Press),
+    (
+        "window-workspace",
+        "Panels and layouts",
+        "Window",
+        Kind::Press,
+    ),
+    ("window-layout-paint", "Paint layout", "Window", Kind::Press),
+    (
+        "window-layout-animate",
+        "Animate layout",
+        "Window",
+        Kind::Press,
+    ),
+    ("window-layout-rig", "Rig layout", "Window", Kind::Press),
+    ("window-layout-reset", "Reset layout", "Window", Kind::Press),
+    ("window-show-all", "Show all panels", "Window", Kind::Press),
+    ("window-themes", "Themes", "Window", Kind::Press),
     ("pan-drag", "Pan while dragging", "View", Kind::Hold),
     ("pan-up", "Move view up", "View", Kind::Hold),
     ("pan-left", "Move view left", "View", Kind::Hold),
@@ -330,6 +348,7 @@ fn pixl_default(id: &str) -> &'static [&'static str] {
         "undo" => &["Ctrl+Z"],
         "redo" => &["Ctrl+Shift+Z", "Ctrl+Y"],
         "swap-colors" => &["X"],
+        "command-palette" => &["Ctrl+Shift+P"],
         "settings" => &["Ctrl+,"],
         "zoom-in" => &["+", "="],
         "zoom-out" => &["-"],
@@ -555,6 +574,7 @@ const MODAL_SIGNALS: &[&str] = &[
     "sheet_import_open",
     "ws_open",
     "themes_open",
+    "cp_open",
 ];
 
 /// Turns this tick's key presses into commands, through the keymap the

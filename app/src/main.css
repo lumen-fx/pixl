@@ -2,6 +2,7 @@
 @import "parts/workspace.css";
 @import "parts/themes.css";
 @import "parts/settings.css";
+@import "parts/palette.css";
 
 /* The window's regions and how they share the space. */
 

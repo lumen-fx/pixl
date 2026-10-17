@@ -1,4 +1,6 @@
 <menu id="window-menu">
+  <menuitem id="window-palette" label="Command palette... (Ctrl+Shift+P)"/>
+  <separator/>
   <menuitem id="window-workspace" label="Panels and layouts..."/>
   <separator/>
   <menuitem id="window-layout-paint" label="Paint layout"/>

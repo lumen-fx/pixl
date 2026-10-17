@@ -70,6 +70,12 @@ Reset layout puts the current layout back as it was saved. The arrangement in
 use and the saved layouts are kept in `workspace.json` in pixl's data folder,
 so the window reopens as it was left.
 
+Ctrl+Shift+P opens the command palette: one search field over every command
+a key can run, every tool, the layouts, the themes and the recent documents.
+Typing narrows the list to the entries that have the typed letters in order,
+the arrow keys pick one and Enter runs it. Each entry shows its keys, so the
+palette also answers "what is the shortcut for this".
+
 The File menu makes a new project (Ctrl+N), opens and saves `.pixl`
 documents (Ctrl+O, Ctrl+S, Ctrl+Shift+S), and exports the current frame as a
 PNG (Ctrl+E) or the animation as a GIF. Open also reads Aseprite, PNG and GIF

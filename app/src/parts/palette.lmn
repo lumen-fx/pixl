@@ -1,0 +1,6 @@
+<dialog class="cp-dialog" open="cp_open">
+  <column class="cp-card">
+    <input id="cp-query" class="cp-query" autofocus="true" placeholder="Search commands, tools, layouts, themes and recent files" bind-text="cp_query" text=""/>
+    <scroll id="cp-list" class="cp-list"/>
+  </column>
+</dialog>

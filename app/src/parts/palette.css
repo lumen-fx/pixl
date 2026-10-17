@@ -1,0 +1,25 @@
+/* The command palette: a search field over the window's top, its results
+   below it. */
+
+.cp-dialog { justify: start; padding: 72 0 0 0; }
+.cp-card {
+  width: 560;
+  bg: var(--surface-2);
+  border: 1px solid var(--edge);
+  radius: var(--radius);
+  shadow: 0 10 30 #00000099;
+  padding: var(--space-3);
+  gap: var(--space-3);
+}
+.cp-query { height: 28; min-height: 28; }
+.cp-list { height: 360; }
+.cp-item { align: center; gap: var(--space-4); min-height: 24; padding: 0 var(--space-4); radius: var(--radius); }
+.cp-item:hover { bg: var(--surface-4); }
+.cp-item.selected { bg: var(--accent); }
+.cp-item.selected .cp-label { text-color: var(--on-accent); }
+.cp-item.selected .cp-keys { text-color: var(--on-accent); }
+.cp-item.selected .cp-group { text-color: var(--on-accent); }
+.cp-label { text-color: var(--text); }
+.cp-keys { text-color: var(--text-dim); font-size: var(--font-size-small); }
+.cp-group { width: 64; text-align: end; text-color: var(--text-faint); font-size: var(--font-size-small); }
+.cp-empty { text-color: var(--text-dim); padding: var(--space-4); }

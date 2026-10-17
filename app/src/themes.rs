@@ -21,6 +21,7 @@ use pixl_core::Rgba;
 use pixl_core::native::write_atomic;
 
 use crate::home::Home;
+use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::settings::{Settings, Theme, UI_SCALES, UiFont};
 use crate::store::Store;
@@ -378,11 +379,14 @@ pub fn theme_input(
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
     ids: Query<&LumenId>,
-    home: Res<Home>,
+    (home, keys): (Res<Home>, Res<KeyCommands>),
     mut commands: Commands,
     mut signals: Signals,
 ) {
     let mut chosen: Vec<String> = menu.read().map(|m| m.id.clone()).collect();
+    if keys.ran("window-themes", false) {
+        chosen.push("window-themes".to_string());
+    }
     chosen.extend(
         clicks
             .read()
