@@ -156,6 +156,7 @@
   </row>
 
   <include src="parts/workspace.lmn"/>
+  <include src="parts/themes.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

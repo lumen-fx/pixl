@@ -548,6 +548,7 @@ const MODAL_SIGNALS: &[&str] = &[
     "sheet_export_open",
     "sheet_import_open",
     "ws_open",
+    "themes_open",
 ];
 
 /// Turns this tick's key presses into commands, through the keymap the

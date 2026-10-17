@@ -1,0 +1,92 @@
+<dialog open="themes_open">
+  <column class="dialog-card th-card">
+    <label class="dialog-title" text="Themes"/>
+    <row class="th-main">
+      <column class="th-themes">
+        <label class="ws-section" text="Themes"/>
+        <scroll id="th-list" class="th-list"/>
+        <row class="dialog-row">
+          <button id="th-import" text="Import..."/>
+          <button id="th-export" text="Export..."/>
+        </row>
+      </column>
+      <column class="th-tokens">
+        <label class="ws-section" text="Tokens"/>
+        <scroll class="th-token-list">
+          <column class="th-token-body">
+          <row class="th-row"><label class="th-label" text="UI font"/><dropdown id="th-font" class="th-choice" bind-value="th_font"><option value="Pixel"/><option value="Plain"/></dropdown></row>
+          <row class="th-row"><label class="th-label" text="UI scale"/><dropdown id="th-scale" class="th-choice" bind-value="th_scale"><option value="100%"/><option value="125%"/><option value="150%"/><option value="200%"/></dropdown></row>
+          <label class="th-group" text="Surfaces"/>
+          <row class="th-row"><label class="th-label" text="Window"/><input id="th-surface-0" class="th-color" type="color" alpha="true" bind-value="th_surface_0"/></row>
+          <row class="th-row"><label class="th-label" text="Fields and bars"/><input id="th-surface-1" class="th-color" type="color" alpha="true" bind-value="th_surface_1"/></row>
+          <row class="th-row"><label class="th-label" text="Panels"/><input id="th-surface-2" class="th-color" type="color" alpha="true" bind-value="th_surface_2"/></row>
+          <row class="th-row"><label class="th-label" text="Headers and buttons"/><input id="th-surface-3" class="th-color" type="color" alpha="true" bind-value="th_surface_3"/></row>
+          <row class="th-row"><label class="th-label" text="Hover"/><input id="th-surface-4" class="th-color" type="color" alpha="true" bind-value="th_surface_4"/></row>
+          <row class="th-row"><label class="th-label" text="Scrollbars"/><input id="th-surface-5" class="th-color" type="color" alpha="true" bind-value="th_surface_5"/></row>
+          <row class="th-row"><label class="th-label" text="Edges"/><input id="th-edge" class="th-color" type="color" alpha="true" bind-value="th_edge"/></row>
+          <row class="th-row"><label class="th-label" text="Soft edges"/><input id="th-edge-soft" class="th-color" type="color" alpha="true" bind-value="th_edge_soft"/></row>
+          <label class="th-group" text="Text"/>
+          <row class="th-row"><label class="th-label" text="Text"/><input id="th-text" class="th-color" type="color" alpha="true" bind-value="th_text"/></row>
+          <row class="th-row"><label class="th-label" text="Dim text"/><input id="th-text-dim" class="th-color" type="color" alpha="true" bind-value="th_text_dim"/></row>
+          <row class="th-row"><label class="th-label" text="Faint text"/><input id="th-text-faint" class="th-color" type="color" alpha="true" bind-value="th_text_faint"/></row>
+          <label class="th-group" text="Accent"/>
+          <row class="th-row"><label class="th-label" text="Accent"/><input id="th-accent" class="th-color" type="color" alpha="true" bind-value="th_accent"/></row>
+          <row class="th-row"><label class="th-label" text="Accent hover"/><input id="th-accent-hover" class="th-color" type="color" alpha="true" bind-value="th_accent_hover"/></row>
+          <row class="th-row"><label class="th-label" text="Accent pressed"/><input id="th-accent-press" class="th-color" type="color" alpha="true" bind-value="th_accent_press"/></row>
+          <row class="th-row"><label class="th-label" text="Accent tint"/><input id="th-accent-soft" class="th-color" type="color" alpha="true" bind-value="th_accent_soft"/></row>
+          <row class="th-row"><label class="th-label" text="Text on accent"/><input id="th-on-accent" class="th-color" type="color" alpha="true" bind-value="th_on_accent"/></row>
+          <label class="th-group" text="Canvas"/>
+          <row class="th-row"><label class="th-label" text="Canvas background"/><input id="th-canvas-bg" class="th-color" type="color" alpha="true" bind-value="th_canvas_bg"/></row>
+          <row class="th-row"><label class="th-label" text="Checkerboard light"/><input id="th-checker-a" class="th-color" type="color" alpha="true" bind-value="th_checker_a"/></row>
+          <row class="th-row"><label class="th-label" text="Checkerboard dark"/><input id="th-checker-b" class="th-color" type="color" alpha="true" bind-value="th_checker_b"/></row>
+          <row class="th-row"><label class="th-label" text="Pixel grid"/><input id="th-pixel-grid" class="th-color" type="color" alpha="true" bind-value="th_pixel_grid"/></row>
+          <row class="th-row"><label class="th-label" text="Selection outline"/><input id="th-marquee-a" class="th-color" type="color" alpha="true" bind-value="th_marquee_a"/></row>
+          <row class="th-row"><label class="th-label" text="Selection outline, second"/><input id="th-marquee-b" class="th-color" type="color" alpha="true" bind-value="th_marquee_b"/></row>
+          <row class="th-row"><label class="th-label" text="Shape preview"/><input id="th-preview" class="th-color" type="color" alpha="true" bind-value="th_preview"/></row>
+          </column>
+        </scroll>
+      </column>
+      <column class="th-side">
+        <label class="ws-section" text="Preview"/>
+        <column id="tp-window" class="tp-window">
+          <column id="tp-panel" class="tp-panel">
+            <row id="tp-header" class="tp-header"><label id="tp-title" class="tp-title" text="Layers"/></row>
+            <column class="tp-body">
+              <label id="tp-text" class="tp-text" text="Text"/>
+              <label id="tp-dim" class="tp-text" text="Dim text"/>
+              <label id="tp-faint" class="tp-text" text="Faint text"/>
+              <row class="tp-buttons">
+                <tile id="tp-button" class="tp-button"><label id="tp-button-text" text="Button"/></tile>
+                <tile id="tp-accent" class="tp-button"><label id="tp-accent-text" text="Accent"/></tile>
+              </row>
+              <tile id="tp-tint" class="tp-tint"><label id="tp-tint-text" text="Active row"/></tile>
+            </column>
+          </column>
+          <tile id="tp-canvas" class="tp-canvas">
+            <row class="tp-checks"><tile id="tp-c0" class="tp-check"/><tile id="tp-c1" class="tp-check"/><tile id="tp-c2" class="tp-check"/><tile id="tp-c3" class="tp-check"/></row>
+            <row class="tp-checks"><tile id="tp-c4" class="tp-check"/><tile id="tp-c5" class="tp-check"/><tile id="tp-c6" class="tp-check"/><tile id="tp-c7" class="tp-check"/></row>
+            <tile id="tp-grid" class="tp-grid"/>
+            <tile id="tp-sel" class="tp-sel"/>
+            <tile id="tp-shape" class="tp-shape"/>
+          </tile>
+        </column>
+        <label class="ws-section" text="Save as"/>
+        <row class="dialog-row">
+          <input id="th-name" class="th-name" placeholder="Theme name" bind-text="th_name" text=""/>
+          <button id="th-save" text="Save"/>
+        </row>
+        <row class="dialog-row">
+          <button id="th-revert" text="Revert"/>
+          <button id="th-delete" text="Delete"/>
+        </row>
+        <label class="dialog-text th-message" bind-text="th_message" text=""/>
+      </column>
+    </row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="th-close" class="primary" default="true" text="Done"/>
+    </row>
+  </column>
+</dialog>
+
+<tile id="token-probes" class="probe"><tile id="tok-surface-0"/><tile id="tok-surface-1"/><tile id="tok-surface-2"/><tile id="tok-surface-3"/><tile id="tok-surface-4"/><tile id="tok-surface-5"/><tile id="tok-edge"/><tile id="tok-edge-soft"/><tile id="tok-text"/><tile id="tok-text-dim"/><tile id="tok-text-faint"/><tile id="tok-accent"/><tile id="tok-accent-hover"/><tile id="tok-accent-press"/><tile id="tok-accent-soft"/><tile id="tok-on-accent"/><tile id="tok-canvas-bg"/><tile id="tok-checker-a"/><tile id="tok-checker-b"/><tile id="tok-pixel-grid"/><tile id="tok-marquee-a"/><tile id="tok-marquee-b"/><tile id="tok-preview"/></tile>

@@ -1,0 +1,165 @@
+/* Two more built-in token sets beside dark and light, and the theme
+   editor. Each set gives every color token; a user theme starts from one of
+   the four and overrides tokens of its own. */
+
+/* High contrast: black and white with a yellow accent and hard edges. */
+.pixl.contrast {
+  --surface-0: #000000;
+  --surface-1: #000000;
+  --surface-2: #0a0a0a;
+  --surface-3: #1c1c1c;
+  --surface-4: #3a3a3a;
+  --surface-5: #ffffff;
+  --edge: #ffffff;
+  --edge-soft: #8a8a8a;
+  --text: #ffffff;
+  --text-dim: #f0f0f0;
+  --text-faint: #c8c8c8;
+  --accent: #ffd400;
+  --accent-hover: #ffe24d;
+  --accent-press: #d9b400;
+  --accent-soft: #ffd40055;
+  --on-accent: #000000;
+  --checker-a: #4a4a4a;
+  --checker-b: #2a2a2a;
+  --pixel-grid: #ffffff40;
+  --marquee-a: #ffd400;
+  --marquee-b: #000000;
+  --preview: #ffd400;
+  --icon-pencil: url("assets/icons/text-dark/pencil.png");
+  --icon-pencil-on: url("assets/icons/on-accent-dark/pencil.png");
+  --icon-eraser: url("assets/icons/text-dark/eraser.png");
+  --icon-eraser-on: url("assets/icons/on-accent-dark/eraser.png");
+  --icon-line: url("assets/icons/text-dark/line.png");
+  --icon-line-on: url("assets/icons/on-accent-dark/line.png");
+  --icon-rect: url("assets/icons/text-dark/rect.png");
+  --icon-rect-on: url("assets/icons/on-accent-dark/rect.png");
+  --icon-ellipse: url("assets/icons/text-dark/ellipse.png");
+  --icon-ellipse-on: url("assets/icons/on-accent-dark/ellipse.png");
+  --icon-bucket: url("assets/icons/text-dark/bucket.png");
+  --icon-bucket-on: url("assets/icons/on-accent-dark/bucket.png");
+  --icon-eyedropper: url("assets/icons/text-dark/eyedropper.png");
+  --icon-eyedropper-on: url("assets/icons/on-accent-dark/eyedropper.png");
+  --icon-select: url("assets/icons/text-dark/select.png");
+  --icon-select-on: url("assets/icons/on-accent-dark/select.png");
+  --icon-move: url("assets/icons/text-dark/move.png");
+  --icon-move-on: url("assets/icons/on-accent-dark/move.png");
+}
+
+/* Retro: the four greens of a handheld's screen. */
+.pixl.retro {
+  --surface-0: #0f380f;
+  --surface-1: #1d4a1d;
+  --surface-2: #26562a;
+  --surface-3: #306230;
+  --surface-4: #3f7a3a;
+  --surface-5: #5f8f2e;
+  --edge: #081f08;
+  --edge-soft: #3a6b34;
+  --text: #c4e06a;
+  --text-dim: #9bbc0f;
+  --text-faint: #6f9a24;
+  --accent: #9bbc0f;
+  --accent-hover: #b5d43a;
+  --accent-press: #8bac0f;
+  --accent-soft: #9bbc0f33;
+  --on-accent: #0f380f;
+  --checker-a: #8bac0f;
+  --checker-b: #7a9a0e;
+  --pixel-grid: #0f380f4d;
+  --marquee-a: #0f380f;
+  --marquee-b: #9bbc0f;
+  --preview: #306230;
+  --icon-pencil: url("assets/icons/text-dark/pencil.png");
+  --icon-pencil-on: url("assets/icons/on-accent-dark/pencil.png");
+  --icon-eraser: url("assets/icons/text-dark/eraser.png");
+  --icon-eraser-on: url("assets/icons/on-accent-dark/eraser.png");
+  --icon-line: url("assets/icons/text-dark/line.png");
+  --icon-line-on: url("assets/icons/on-accent-dark/line.png");
+  --icon-rect: url("assets/icons/text-dark/rect.png");
+  --icon-rect-on: url("assets/icons/on-accent-dark/rect.png");
+  --icon-ellipse: url("assets/icons/text-dark/ellipse.png");
+  --icon-ellipse-on: url("assets/icons/on-accent-dark/ellipse.png");
+  --icon-bucket: url("assets/icons/text-dark/bucket.png");
+  --icon-bucket-on: url("assets/icons/on-accent-dark/bucket.png");
+  --icon-eyedropper: url("assets/icons/text-dark/eyedropper.png");
+  --icon-eyedropper-on: url("assets/icons/on-accent-dark/eyedropper.png");
+  --icon-select: url("assets/icons/text-dark/select.png");
+  --icon-select-on: url("assets/icons/on-accent-dark/select.png");
+  --icon-move: url("assets/icons/text-dark/move.png");
+  --icon-move-on: url("assets/icons/on-accent-dark/move.png");
+}
+
+/* -- The theme editor ------------------------------------------------------- */
+
+.th-card { min-width: 940; }
+.th-main { gap: 16; }
+.th-themes { width: 200; gap: var(--space-3); }
+.th-list { height: 420; bg: var(--surface-1); border: 1px solid var(--edge); }
+.th-theme { align: center; padding: 0 var(--space-3); min-height: 24; border-bottom: 1px solid var(--edge-soft); }
+.th-theme:hover { bg: var(--surface-3); }
+.th-theme.current { bg: var(--accent-soft); }
+.th-theme-kind { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.th-tokens { grow: 1; min-width: 0; gap: var(--space-3); }
+.th-token-list { height: 470; bg: var(--surface-1); border: 1px solid var(--edge); }
+.th-token-body { padding: var(--space-3); gap: var(--space-2); }
+.th-group { text-color: var(--text-dim); font-size: var(--font-size-small); padding: var(--space-3) 0 0 0; }
+.th-row { align: center; gap: var(--space-4); }
+.th-label { grow: 1; }
+.th-color { width: 120; }
+.th-choice { width: 120; }
+.th-side { width: 260; gap: var(--space-3); }
+.th-name { grow: 1; min-width: 0; }
+.th-message { min-height: 16; }
+
+/* The preview draws with the tokens as the editor has them; until the
+   editor writes its values here it shows the theme in use. */
+.tp-window { bg: var(--surface-0); padding: 10; gap: 10; border: 1px solid var(--edge); }
+.tp-panel { bg: var(--surface-2); border: 1px solid var(--edge); }
+.tp-header { bg: var(--surface-3); height: var(--header-h); align: center; padding: 0 var(--space-4); border-bottom: 1px solid var(--edge); }
+.tp-title { text-color: var(--text-dim); font-size: var(--font-size-small); }
+.tp-body { padding: var(--space-4); gap: var(--space-2); }
+#tp-text { text-color: var(--text); }
+#tp-dim { text-color: var(--text-dim); }
+#tp-faint { text-color: var(--text-faint); }
+.tp-buttons { gap: var(--space-3); }
+.tp-button { height: var(--control-h); padding: 0 var(--space-4); align: center; justify: center; radius: var(--radius); }
+#tp-button { bg: var(--surface-3); border: 1px solid var(--edge); }
+#tp-button-text { text-color: var(--text); }
+#tp-accent { bg: var(--accent); border: 1px solid var(--accent-press); }
+#tp-accent-text { text-color: var(--on-accent); }
+.tp-tint { height: 22; align: center; padding: 0 var(--space-3); bg: var(--accent-soft); }
+#tp-tint-text { text-color: var(--text); }
+.tp-canvas { height: 96; bg: var(--canvas-bg); padding: 12; }
+.tp-checks { height: 18; }
+.tp-check { width: 18; height: 18; }
+#tp-c0, #tp-c2, #tp-c5, #tp-c7 { bg: var(--checker-a); }
+#tp-c1, #tp-c3, #tp-c4, #tp-c6 { bg: var(--checker-b); }
+.tp-grid { position: absolute; inset: 12 auto auto 30; width: 1; height: 36; bg: var(--pixel-grid); }
+.tp-sel { position: absolute; inset: 14 auto auto 100; width: 50; height: 30; border: 1px solid var(--marquee-a); }
+.tp-shape { position: absolute; inset: 20 auto auto 170; width: 40; height: 2; bg: var(--preview); }
+
+/* Each editable token, read back by the editor. */
+#tok-surface-0 { bg: var(--surface-0); }
+#tok-surface-1 { bg: var(--surface-1); }
+#tok-surface-2 { bg: var(--surface-2); }
+#tok-surface-3 { bg: var(--surface-3); }
+#tok-surface-4 { bg: var(--surface-4); }
+#tok-surface-5 { bg: var(--surface-5); }
+#tok-edge { bg: var(--edge); }
+#tok-edge-soft { bg: var(--edge-soft); }
+#tok-text { bg: var(--text); }
+#tok-text-dim { bg: var(--text-dim); }
+#tok-text-faint { bg: var(--text-faint); }
+#tok-accent { bg: var(--accent); }
+#tok-accent-hover { bg: var(--accent-hover); }
+#tok-accent-press { bg: var(--accent-press); }
+#tok-accent-soft { bg: var(--accent-soft); }
+#tok-on-accent { bg: var(--on-accent); }
+#tok-canvas-bg { bg: var(--canvas-bg); }
+#tok-checker-a { bg: var(--checker-a); }
+#tok-checker-b { bg: var(--checker-b); }
+#tok-pixel-grid { bg: var(--pixel-grid); }
+#tok-marquee-a { bg: var(--marquee-a); }
+#tok-marquee-b { bg: var(--marquee-b); }
+#tok-preview { bg: var(--preview); }

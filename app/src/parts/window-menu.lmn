@@ -7,4 +7,6 @@
   <separator/>
   <menuitem id="window-layout-reset" label="Reset layout"/>
   <menuitem id="window-show-all" label="Show all panels"/>
+  <separator/>
+  <menuitem id="window-themes" label="Themes..."/>
 </menu>

@@ -82,8 +82,16 @@ it every 30 seconds, and opening a document whose recovery copy is newer
 offers to recover it.
 
 The editor has its own theme, written entirely in CSS over its own tokens: a
-dark set of neutral greys so the colors in the art read true, and a light set
-built from the same tokens. The UI font is Pixelify Sans by Stefie Justprince,
+dark set of neutral greys so the colors in the art read true, and light, high
+contrast and retro sets built from the same tokens. Window > Themes picks a
+set and edits its color tokens (surfaces, text, accent, canvas background,
+checkerboard, grid and selection colors) with a preview beside them, along
+with the UI font and scale, and saves the result as a theme of the user's
+own. A theme is a `.pixltheme` file of plain CSS custom properties, kept in
+the `themes` folder of pixl's data folder; Import and Export share one. The
+editor's preview follows each edit; the rest of the window takes a user
+theme's colors once Lumen applies custom properties set from code
+(lumen-fx/lumen#531). The UI font is Pixelify Sans by Stefie Justprince,
 under the SIL Open Font License (`app/assets/fonts/OFL.txt`); a setting in the
 menu row switches the UI to the platform's sans-serif instead. The tool
 icons are pixl's own, drawn in `app/assets/icons/draw.py` in the theme's ink

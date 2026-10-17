@@ -142,12 +142,43 @@ impl Default for CanvasSettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The built-in token sets. A user theme starts from one of them and
+/// overrides some of its tokens.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
     #[default]
     Dark,
     Light,
+    Contrast,
+    Retro,
+}
+
+impl Theme {
+    pub const ALL: [Theme; 4] = [Theme::Dark, Theme::Light, Theme::Contrast, Theme::Retro];
+
+    /// The class on the root element that selects the set.
+    pub fn class(self) -> &'static str {
+        match self {
+            Theme::Dark => "dark",
+            Theme::Light => "light",
+            Theme::Contrast => "contrast",
+            Theme::Retro => "retro",
+        }
+    }
+
+    pub fn from_class(class: &str) -> Option<Theme> {
+        Theme::ALL.into_iter().find(|t| t.class() == class)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Theme::Dark => "Dark",
+            Theme::Light => "Light",
+            Theme::Contrast => "High contrast",
+            Theme::Retro => "Retro",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -165,6 +196,8 @@ pub const UI_SCALES: [u32; 4] = [100, 125, 150, 200];
 #[serde(default)]
 pub struct InterfaceSettings {
     pub theme: Theme,
+    /// The user theme over the built-in set, by name; see `themes`.
+    pub user_theme: Option<String>,
     pub font: UiFont,
     /// One of [`UI_SCALES`].
     pub scale: u32,
@@ -175,6 +208,7 @@ impl Default for InterfaceSettings {
     fn default() -> Self {
         Self {
             theme: Theme::Dark,
+            user_theme: None,
             font: UiFont::Pixel,
             scale: 100,
             tooltips: true,
@@ -356,7 +390,7 @@ impl Settings {
     /// The look these settings give the window.
     pub fn look(&self) -> Look {
         Look {
-            light: self.interface.theme == Theme::Light,
+            theme: self.interface.theme,
             plain_font: self.interface.font == UiFont::Plain,
             scale: self.interface.scale,
             tooltips: self.interface.tooltips,
@@ -448,7 +482,7 @@ pub fn save_settings(
 /// tooltips show.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Look {
-    pub light: bool,
+    pub theme: Theme,
     pub plain_font: bool,
     /// The UI scale in percent, one of [`UI_SCALES`].
     pub scale: u32,
@@ -466,7 +500,8 @@ impl Look {
     /// start screen shows.
     pub fn classes(self, home: bool) -> String {
         let mut classes = String::from("pixl");
-        classes.push_str(if self.light { " light" } else { " dark" });
+        classes.push(' ');
+        classes.push_str(self.theme.class());
         if self.plain_font {
             classes.push_str(" font-plain");
         }
@@ -489,7 +524,11 @@ impl Look {
             root.set_class(&self.classes(home));
         }
         if let Some(button) = dom::get_by_id("toggle-theme") {
-            button.set_text(if self.light { "Dark" } else { "Light" });
+            button.set_text(if self.theme == Theme::Light {
+                "Dark"
+            } else {
+                "Light"
+            });
         }
         if let Some(button) = dom::get_by_id("toggle-font") {
             button.set_text(if self.plain_font {
@@ -513,9 +552,10 @@ pub fn look_switches(
         match ids.get(click.entity).map(|id| id.0.as_str()) {
             Ok("toggle-theme") => {
                 i.theme = match i.theme {
-                    Theme::Dark => Theme::Light,
                     Theme::Light => Theme::Dark,
-                }
+                    _ => Theme::Light,
+                };
+                i.user_theme = None;
             }
             Ok("toggle-font") => {
                 i.font = match i.font {
@@ -618,7 +658,7 @@ mod tests {
     #[test]
     fn the_look_names_its_classes() {
         let look = Look {
-            light: true,
+            theme: Theme::Light,
             plain_font: true,
             scale: 150,
             tooltips: false,

@@ -11,6 +11,7 @@ pub mod progressive;
 pub mod recents;
 pub mod settings;
 pub mod store;
+pub mod themes;
 pub mod tools;
 pub mod view;
 pub mod workspace;
@@ -26,6 +27,7 @@ pub use editor::{Editor, Tool};
 pub use home::Home;
 pub use recents::Recents;
 pub use settings::{Look, Settings, SettingsStore};
+pub use themes::Themes;
 pub use workspace::Workspace;
 
 /// The largest document side the view shows: one canvas buffer per layer,
@@ -46,6 +48,7 @@ pub fn app(file: Option<PathBuf>) -> App {
     .insert_resource(settings)
     .insert_resource(store)
     .insert_resource(Workspace::user())
+    .insert_resource(Themes::user())
 }
 
 /// `app` (an [`editor`]) starting on the start screen over `recents`, or on
@@ -99,6 +102,10 @@ pub fn editor(source: Source) -> App {
         .insert_signal("ws_open", false)
         .insert_signal("ws_name", "")
         .insert_signal("ws_message", "")
+        .insert_resource(Themes::in_memory())
+        .insert_signal("themes_open", false)
+        .insert_signal("th_name", "")
+        .insert_signal("th_message", "")
         .add_systems(
             TickStage::Systems,
             (
@@ -112,6 +119,7 @@ pub fn editor(source: Source) -> App {
                     input::navigate,
                     files::file_commands,
                     workspace::workspace_input,
+                    themes::theme_input,
                     files::new_form,
                     panels::panel_clicks,
                     panels::history_keys,
@@ -131,6 +139,7 @@ pub fn editor(source: Source) -> App {
                     files::autosave,
                     files::show_message,
                     workspace::show_workspace,
+                    themes::show_themes,
                     home::track_recents,
                     home::show_home,
                     tools::show_tool,

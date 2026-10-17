@@ -236,6 +236,12 @@ pub struct ViewColors {
 }
 
 impl ViewColors {
+    /// Reads the colors again, as after a change of look: a theme's tokens
+    /// changed.
+    pub fn reread(&mut self) {
+        self.read_for = None;
+    }
+
     fn complete(&self) -> bool {
         self.checker_a.is_some()
             && self.checker_b.is_some()

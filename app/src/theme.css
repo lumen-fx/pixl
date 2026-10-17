@@ -1,7 +1,8 @@
 /* pixl's own theme. Every visual value lives in a token here; the rules below
    and in main.css read the tokens, and the editor's Rust code reads its few
    colors (checkerboard, grid, selection) from the probe elements at the end.
-   The dark set is the default; class "light" on the root swaps the set. */
+   The dark set is the default; class "light" on the root swaps the set, and
+   parts/themes.css adds "contrast" and "retro". */
 
 @font-face {
   font-family: "Pixelify Sans";
@@ -31,6 +32,7 @@
   --toolbar-w: 38;
   --swatch: 16;
   --scrollbar: 6;
+  --canvas-bg: var(--surface-0);
 }
 
 /* The plain-font setting: the platform sans-serif at a denser size. */
@@ -306,7 +308,7 @@ dropdown { height: var(--control-h); min-width: 90; }
 .icon-move { bg: var(--icon-move); }
 .tool.active .icon-move { bg: var(--icon-move-on); }
 
-#stage { bg: var(--surface-0); }
+#stage { bg: var(--canvas-bg); }
 
 .dock {
   bg: var(--edge);
