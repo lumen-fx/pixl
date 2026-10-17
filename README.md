@@ -48,7 +48,8 @@ worker threads and show tile by tile as they finish.
 F3 shows the performance overlay over the canvas: frames per second, the
 frame time (average, 95th percentile and longest over the last three
 seconds) with a graph of it, the time from the last stroke to the screen,
-the editor's own work and the compositing in the last frame, the tiles it
+the tick's work in the last frame (the editor's systems, Lumen's styling and
+layout), the editor's own part of it and the compositing, the tiles it
 wrote, the layer buffers and their memory, the document's tiles and the
 undo history in memory, an estimate of the GPU memory, the worker threads
 and their queue, and the renderer. Lumen does not tell an app when a frame
@@ -344,9 +345,9 @@ gradient, palette and indexed conversion, free transform resampling and
 selection grow and border on a 4096x4096 document of 32 layers.
 
 `pixl --perf-log frames.csv` writes one row per frame to a CSV file: the
-frame's start, its time, the editor's work and compositing, the tiles
-written, the layer buffers and their memory, the worker queue and the time
-to the screen of the last stroke.
+frame's start, its time, the tick's work, the editor's systems' part of it,
+the compositing, the tiles written, the layer buffers and their memory, the
+worker queue and the time to the screen of the last stroke.
 
 ### Performance bench
 
@@ -359,11 +360,13 @@ The view bench opens a 4096x4096 document of 32 layers with no window and
 measures what a user waits for: the progressive redraw after opening it,
 the time from a stroke to the frame that shows it on the top layer and on
 the bottom one, the frame after a pan and after a zoom step, hiding a
-layer, and exporting the frame as a PNG. `side=N` and `layers=N` change the
-document, `budget=MiB` the layer buffer memory, `overlay` shows the
-performance overlay while it runs, and `log=FILE` writes the per-frame CSV
-the `--perf-log` flag writes. Numbers move with the load on
-the machine, so compare runs taken under the same load.
+layer, and exporting the frame as a PNG; and what a tick costs when nothing
+changes, the editor's systems alone and the whole tick. `side=N` and
+`layers=N` change the document, `budget=MiB` the layer buffer memory,
+`overlay` shows the performance overlay while it runs, `log=FILE` writes the
+per-frame CSV the `--perf-log` flag writes, and `systems` lists what each of
+the editor's systems cost a tick in each part of the run. Numbers move with
+the load on the machine, so compare runs taken under the same load.
 
 `cargo bench -p pixl --bench playback -- gpu` (or `cpu`) times stepping to
 the next frame, with the onion skin and without, until the frame first shows

@@ -244,7 +244,7 @@ impl OnionSettings {
 }
 
 /// A selection of cels: the frames and rows between two corners.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CelSelection {
     pub anchor: (LayerId, usize),
     pub focus: (LayerId, usize),
@@ -298,11 +298,9 @@ pub struct Timeline {
     /// The tag dialog's name, and the ticks left to write it into the
     /// field, which has focus once the dialog shows (lumen-fx/lumen#536).
     tag_name: (String, u8),
-    /// What the grid showed when it was last written.
+    /// What the grid was last brought up to date with, and what it shows.
     grid: Option<u64>,
-    names: Option<String>,
-    /// The frame the grid's highlight is on.
-    current: Option<usize>,
+    shown: Option<GridModel>,
     /// The controls' values as last shown.
     controls: Option<Controls>,
 }
@@ -322,8 +320,7 @@ impl Default for Timeline {
             tag_color: None,
             tag_name: (String::new(), 0),
             grid: None,
-            names: None,
-            current: None,
+            shown: None,
             controls: None,
         }
     }
@@ -1135,11 +1132,7 @@ fn mark_tag_color(color: Rgba) {
             continue;
         };
         let c = node.computed_style_of("bg").as_deref().and_then(parse_hex);
-        if c == Some(color) {
-            node.add_class("chosen");
-        } else {
-            node.remove_class("chosen");
-        }
+        crate::set_class(node, "chosen", c == Some(color));
     }
 }
 
@@ -1431,16 +1424,82 @@ fn lanes(tags: &[Tag]) -> Vec<Vec<usize>> {
     lanes
 }
 
-fn grid_markup(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> (String, String) {
-    let doc = &editor.doc;
+/// A cel's marks, as bits of its class list.
+mod mark {
+    pub const ON: u16 = 1;
+    pub const OFF: u16 = 1 << 1;
+    pub const LINK_L: u16 = 1 << 2;
+    pub const LINK_R: u16 = 1 << 3;
+    pub const GROUP: u16 = 1 << 4;
+    pub const REFERENCE: u16 = 1 << 5;
+    pub const SKELETON: u16 = 1 << 6;
+    pub const SEL: u16 = 1 << 7;
+    pub const CUR: u16 = 1 << 8;
+    pub const ACTIVE: u16 = 1 << 9;
+    pub const HIDDEN: u16 = 1 << 10;
+}
+
+/// What the grid shows. Its shape (the tags, the rows and the number of
+/// frames) takes new markup to change; the marks of a cel, a frame number or
+/// a layer name change by setting that one element's classes, so a stroke,
+/// a step to another frame or a new selection restyles only what changed.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GridModel {
+    /// The tag lanes' markup, and each row's layer, depth and name.
+    shape: (String, Vec<(u32, usize, String)>, usize),
+    frames: Vec<u16>,
+    names: Vec<u16>,
+    /// A row per layer, a mark set per frame.
+    cells: Vec<Vec<u16>>,
+}
+
+fn cel_class(m: u16) -> String {
+    use mark::*;
+    let mut c = String::from("cel");
+    for (bit, name) in [
+        (ON, " on"),
+        (OFF, " off"),
+        (LINK_L, " link-l"),
+        (LINK_R, " link-r"),
+        (GROUP, " group"),
+        (REFERENCE, " reference"),
+        (SKELETON, " skeleton"),
+        (SEL, " sel"),
+        (CUR, " cur"),
+    ] {
+        if m & bit != 0 {
+            c.push_str(name);
+        }
+    }
+    c
+}
+
+fn frame_class(m: u16) -> String {
+    let mut c = String::from("tl-frame");
+    if m & mark::SEL != 0 {
+        c.push_str(" sel");
+    }
+    if m & mark::CUR != 0 {
+        c.push_str(" cur");
+    }
+    c
+}
+
+fn name_class(depth: usize, m: u16) -> String {
+    let mut c = format!("tl-name depth-{}", depth.min(4));
+    if m & mark::ACTIVE != 0 {
+        c.push_str(" active");
+    }
+    if m & mark::HIDDEN != 0 {
+        c.push_str(" hidden");
+    }
+    c
+}
+
+fn tags_markup(doc: &Document) -> String {
     let n = doc.frame_count();
-    let rows = rows(doc, tree);
-    let order: Vec<LayerId> = rows.iter().map(|(_, l)| l.id).collect();
     let mut grid = String::new();
-    let mut names = String::new();
-    // Tags, a row per lane.
     for (k, lane) in lanes(doc.tags()).into_iter().enumerate() {
-        names.push_str(r#"<row class="tl-spacer"/>"#);
         grid.push_str(&format!(r#"<row id="tl-lane-{k}" class="tl-row tags">"#));
         let mut f = 0;
         while f < n {
@@ -1471,98 +1530,157 @@ fn grid_markup(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> (String, Str
         }
         grid.push_str("</row>");
     }
-    // Frame numbers.
+    grid
+}
+
+/// What the grid shows of the document, the selection and the current frame.
+pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel {
+    use mark::*;
+    let doc = &editor.doc;
+    let n = doc.frame_count();
+    let rows = rows(doc, tree);
     let (sa, sb) = tl.frames(editor);
+    // The selected rows, top first, as positions in `rows`.
+    let pos = |id: LayerId| rows.iter().position(|(_, l)| l.id == id);
+    let sel_rows = tl.selection.and_then(|s| {
+        let (a, b) = (pos(s.anchor.0)?, pos(s.focus.0)?);
+        Some(a.min(b)..=a.max(b))
+    });
     let columns = tl
         .selection
-        .is_some_and(|s| order.len() <= 1 || s.anchor.0 != s.focus.0 || sa != sb);
-    names.push_str(r#"<row class="tl-spacer"/>"#);
-    grid.push_str(r#"<row class="tl-row frames">"#);
-    for f in 0..n {
-        let sel = if columns && (sa..=sb).contains(&f) {
-            " sel"
-        } else {
-            ""
-        };
-        let cur = if f == editor.frame { " cur" } else { "" };
-        grid.push_str(&format!(
-            r#"<tile id="tl-frame-{f}" class="tl-frame{sel}{cur}"><label class="tl-frame-num" text="{}"/></tile>"#,
-            f + 1
-        ));
-    }
-    grid.push_str("</row>");
-    // A row per layer.
-    for (depth, layer) in &rows {
-        let id = layer.id.0;
-        let active = if layer.id == editor.layer {
-            " active"
-        } else {
-            ""
-        };
-        let hidden = if layer.props.visible { "" } else { " hidden" };
-        names.push_str(&format!(
-            r#"<row id="tl-layer-{id}" class="tl-name depth-{}{active}{hidden}"><label class="tl-name-text" text="{}"/></row>"#,
-            depth.min(&4),
-            escape(&layer.props.name)
-        ));
-        grid.push_str(r#"<row class="tl-row">"#);
-        for f in 0..n {
-            let sel = if tl.is_selected(editor, &order, layer.id, f) {
-                " sel"
-            } else {
-                ""
-            };
-            let class = match &layer.kind {
-                LayerKind::Raster { cels, .. } => {
-                    let image = |f: usize| cels.get(f).copied().flatten().map(|c| c.image);
-                    match image(f) {
-                        Some(img) => {
-                            let mut c = String::from("cel on");
-                            if f > 0 && image(f - 1) == Some(img) {
-                                c.push_str(" link-l");
+        .is_some_and(|s| rows.len() <= 1 || s.anchor.0 != s.focus.0 || sa != sb);
+    let frames = (0..n)
+        .map(|f| {
+            let mut m = 0;
+            if columns && (sa..=sb).contains(&f) {
+                m |= SEL;
+            }
+            if f == editor.frame {
+                m |= CUR;
+            }
+            m
+        })
+        .collect();
+    let mut names = Vec::with_capacity(rows.len());
+    let mut cells = Vec::with_capacity(rows.len());
+    for (r, (_, layer)) in rows.iter().enumerate() {
+        let mut nm = 0;
+        if layer.id == editor.layer {
+            nm |= ACTIVE;
+        }
+        if !layer.props.visible {
+            nm |= HIDDEN;
+        }
+        names.push(nm);
+        let selected = tl.selection.is_some() && sel_rows.as_ref().is_some_and(|s| s.contains(&r));
+        let row = (0..n)
+            .map(|f| {
+                let mut m = match &layer.kind {
+                    LayerKind::Raster { cels, .. } => {
+                        let image = |f: usize| cels.get(f).copied().flatten().map(|c| c.image);
+                        match image(f) {
+                            Some(img) => {
+                                let mut m = ON;
+                                if f > 0 && image(f - 1) == Some(img) {
+                                    m |= LINK_L;
+                                }
+                                if image(f + 1) == Some(img) {
+                                    m |= LINK_R;
+                                }
+                                m
                             }
-                            if image(f + 1) == Some(img) {
-                                c.push_str(" link-r");
-                            }
-                            c
+                            None => OFF,
                         }
-                        None => "cel off".to_string(),
                     }
+                    LayerKind::Group { .. } => GROUP,
+                    LayerKind::Reference { .. } => REFERENCE,
+                    LayerKind::Skeleton { .. } => SKELETON,
+                };
+                if selected && (sa..=sb).contains(&f) {
+                    m |= SEL;
                 }
-                LayerKind::Group { .. } => "cel group".to_string(),
-                LayerKind::Reference { .. } => "cel reference".to_string(),
-                LayerKind::Skeleton { .. } => "cel skeleton".to_string(),
-            };
-            let cur = if f == editor.frame { " cur" } else { "" };
+                if f == editor.frame {
+                    m |= CUR;
+                }
+                m
+            })
+            .collect();
+        cells.push(row);
+    }
+    let shape = (
+        tags_markup(doc),
+        rows.iter()
+            .map(|(d, l)| (l.id.0, *d, l.props.name.clone()))
+            .collect(),
+        n,
+    );
+    GridModel {
+        shape,
+        frames,
+        names,
+        cells,
+    }
+}
+
+impl GridModel {
+    /// The grid's markup and the layer names' markup.
+    pub fn markup(&self) -> (String, String) {
+        let (tags, rows, n) = &self.shape;
+        let lanes = tags.matches("tl-lane-").count();
+        let mut names = r#"<row class="tl-spacer"/>"#.repeat(lanes);
+        let mut grid = tags.clone();
+        names.push_str(r#"<row class="tl-spacer"/>"#);
+        grid.push_str(r#"<row class="tl-row frames">"#);
+        for f in 0..*n {
             grid.push_str(&format!(
-                r#"<tile id="cel-{id}-{f}" class="{class}{sel}{cur}"><tile class="cel-dot"/></tile>"#
+                r#"<tile id="tl-frame-{f}" class="{}"><label class="tl-frame-num" text="{}"/></tile>"#,
+                frame_class(self.frames[f]),
+                f + 1
             ));
         }
         grid.push_str("</row>");
+        for (r, (id, depth, name)) in rows.iter().enumerate() {
+            names.push_str(&format!(
+                r#"<row id="tl-layer-{id}" class="{}"><label class="tl-name-text" text="{}"/></row>"#,
+                name_class(*depth, self.names[r]),
+                escape(name)
+            ));
+            grid.push_str(r#"<row class="tl-row">"#);
+            for f in 0..*n {
+                grid.push_str(&format!(
+                    r#"<tile id="cel-{id}-{f}" class="{}"><tile class="cel-dot"/></tile>"#,
+                    cel_class(self.cells[r][f])
+                ));
+            }
+            grid.push_str("</row>");
+        }
+        (grid, names)
     }
-    (grid, names)
-}
 
-/// Moves the current frame's highlight from one column to another.
-fn highlight(editor: &Editor, tree: &LayerTree, from: Option<usize>, to: usize) {
-    let rows = rows(&editor.doc, tree);
-    let mark = |frame: usize, on: bool| {
-        let ids = std::iter::once(format!("tl-frame-{frame}"))
-            .chain(rows.iter().map(|(_, l)| format!("cel-{}-{frame}", l.id.0)));
-        for id in ids {
-            if let Some(node) = dom::get_by_id(&id) {
-                if on {
-                    node.add_class("cur");
-                } else {
-                    node.remove_class("cur");
+    /// The elements whose classes differ from `old`'s, with their classes,
+    /// when the two have the same shape.
+    pub fn changes(&self, old: &GridModel) -> Option<Vec<(String, String)>> {
+        if self.shape != old.shape {
+            return None;
+        }
+        let mut out = Vec::new();
+        for (f, (a, b)) in self.frames.iter().zip(&old.frames).enumerate() {
+            if a != b {
+                out.push((format!("tl-frame-{f}"), frame_class(*a)));
+            }
+        }
+        for (r, (id, depth, _)) in self.shape.1.iter().enumerate() {
+            if self.names[r] != old.names[r] {
+                out.push((format!("tl-layer-{id}"), name_class(*depth, self.names[r])));
+            }
+            for (f, (a, b)) in self.cells[r].iter().zip(&old.cells[r]).enumerate() {
+                if a != b {
+                    out.push((format!("cel-{id}-{f}"), cel_class(*a)));
                 }
             }
         }
-    };
-    if let Some(f) = from.filter(|f| *f != to) {
-        mark(f, false);
+        Some(out)
     }
-    mark(to, true);
 }
 
 /// Keeps the timeline showing the document, the selection and playback.
@@ -1575,35 +1693,45 @@ pub fn show_timeline(
 ) {
     let tl = &mut *timeline;
     let mut changed = false;
-    // The grid is rebuilt when what it shows changed; a move to another
-    // frame alone moves the highlight.
+    // The grid is looked at again when what it shows may have changed, and
+    // only the elements whose marks differ are written.
     let key = {
         let mut h = DefaultHasher::new();
-        (editor.generation, editor.revision, editor.layer.0).hash(&mut h);
+        (
+            editor.generation,
+            editor.revision,
+            editor.layer.0,
+            editor.frame,
+        )
+            .hash(&mut h);
         editor.doc.frame_count().hash(&mut h);
-        format!("{:?}", tl.selection).hash(&mut h);
+        tl.selection.hash(&mut h);
         tree.collapsed.hash(&mut h);
         h.finish()
     };
-    let mut rebuilt = false;
     if tl.grid != Some(key)
         && let (Some(grid_node), Some(names_node)) =
             (dom::get_by_id("tl-grid"), dom::get_by_id("tl-names"))
     {
-        let (grid, names) = grid_markup(&editor, tl, &tree);
-        grid_node.set_inner_markup(&grid);
-        if tl.names.as_deref() != Some(names.as_str()) {
-            names_node.set_inner_markup(&names);
-            tl.names = Some(names);
+        let model = grid_model(&editor, tl, &tree);
+        match tl.shown.as_ref().and_then(|old| model.changes(old)) {
+            Some(edits) => {
+                for (id, class) in &edits {
+                    if let Some(node) = dom::get_by_id(id) {
+                        node.set_class(class);
+                    }
+                }
+                changed |= !edits.is_empty();
+            }
+            None => {
+                let (grid, names) = model.markup();
+                grid_node.set_inner_markup(&grid);
+                names_node.set_inner_markup(&names);
+                changed = true;
+            }
         }
+        tl.shown = Some(model);
         tl.grid = Some(key);
-        tl.current = Some(editor.frame);
-        rebuilt = true;
-    }
-    if tl.current != Some(editor.frame) {
-        highlight(&editor, &tree, tl.current, editor.frame);
-        tl.current = Some(editor.frame);
-        changed = true;
     }
     let n = editor.doc.frame_count();
     set_if_changed(
@@ -1652,7 +1780,7 @@ pub fn show_timeline(
         tl.controls = Some(now);
         changed = true;
     }
-    if changed || rebuilt {
+    if changed {
         crate::repaint_soon(&wake);
     }
 }
@@ -1789,5 +1917,65 @@ mod tests {
         assert_eq!(Spot::parse("tl-tag-1-5"), Some(Spot::Tag(1, 5)));
         assert_eq!(Spot::parse("tl-layer-7"), Some(Spot::Layer(LayerId(7))));
         assert_eq!(Spot::parse("tl-play"), None);
+    }
+
+    #[test]
+    fn a_stroke_on_a_cel_with_pixels_writes_nothing() {
+        let mut e = editor(3);
+        let tl = Timeline::default();
+        let tree = LayerTree::default();
+        let layer = e.layer;
+        let t = e.doc.target(layer, 0).unwrap();
+        t.raster
+            .fill_rect_raw(&pixl_core::Rect::new(0, 0, 1, 1), Rgba::BLACK.to_u32());
+        let before = grid_model(&e, &tl, &tree);
+        let t = e.doc.target(layer, 0).unwrap();
+        t.raster
+            .fill_rect_raw(&pixl_core::Rect::new(1, 1, 1, 1), Rgba::BLACK.to_u32());
+        e.touch_pixels();
+        let after = grid_model(&e, &tl, &tree);
+        assert_eq!(after.changes(&before), Some(Vec::new()));
+    }
+
+    #[test]
+    fn a_step_to_another_frame_writes_the_two_columns() {
+        let mut e = editor(3);
+        let tl = Timeline::default();
+        let tree = LayerTree::default();
+        let before = grid_model(&e, &tl, &tree);
+        e.frame = 2;
+        let after = grid_model(&e, &tl, &tree);
+        let mut ids: Vec<String> = after
+            .changes(&before)
+            .expect("the same shape")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        ids.sort();
+        let l = e.layer.0;
+        assert_eq!(
+            ids,
+            [
+                format!("cel-{l}-0"),
+                format!("cel-{l}-2"),
+                "tl-frame-0".into(),
+                "tl-frame-2".into()
+            ]
+        );
+        let (grid, _) = after.markup();
+        assert!(grid.contains(&format!(r#"id="cel-{l}-2" class="cel off cur""#)));
+    }
+
+    #[test]
+    fn a_new_frame_or_layer_takes_new_markup() {
+        let mut e = editor(2);
+        let tl = Timeline::default();
+        let tree = LayerTree::default();
+        let before = grid_model(&e, &tl, &tree);
+        e.doc.insert_frame(2, 100).unwrap();
+        assert_eq!(grid_model(&e, &tl, &tree).changes(&before), None);
+        let before = grid_model(&e, &tl, &tree);
+        e.add_layer();
+        assert_eq!(grid_model(&e, &tl, &tree).changes(&before), None);
     }
 }

@@ -84,6 +84,8 @@ fn the_theme_switch_turns_a_color_back_to_the_theme() {
         editor_over(doc()).insert_resource(settings),
         vec![
             Step::Wait,
+            Step::Ctrl(",", false),
+            Step::Wait,
             Step::Flag("set_background_theme", true),
             Step::Wait,
         ],
@@ -215,6 +217,8 @@ fn a_new_buffer_budget_plans_the_layers_again() {
     drive(
         app,
         vec![
+            Step::Wait,
+            Step::Ctrl(",", false),
             Step::Wait,
             Step::Text("set_buffer_budget", "128"),
             Step::Wait,

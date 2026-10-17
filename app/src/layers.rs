@@ -572,11 +572,7 @@ fn mark_tag_choice(picked: Option<Rgba>) {
             continue;
         };
         let this = if i == 0 { None } else { tag_choice(i) };
-        if this == picked {
-            node.add_class("chosen");
-        } else {
-            node.remove_class("chosen");
-        }
+        crate::set_class(node, "chosen", this == picked);
     }
 }
 

@@ -861,11 +861,7 @@ pub fn show_tool(
     let tool = editor.tool;
     for t in Tool::ALL {
         if let Some(button) = dom::get_by_id(t.button_id()) {
-            if t == tool {
-                button.add_class("active");
-            } else {
-                button.remove_class("active");
-            }
+            crate::set_class(button, "active", t == tool);
         }
     }
     use Tool::*;

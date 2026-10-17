@@ -1258,19 +1258,11 @@ pub fn show_rig(
         ("rig-ik", ui.ik),
     ] {
         if let Some(n) = dom::get_by_id(id) {
-            if on {
-                n.add_class("active");
-            } else {
-                n.remove_class("active");
-            }
+            crate::set_class(n, "active", on);
         }
     }
     if let Some(app) = dom::get_by_id("app") {
-        if ui.mode.is_some() {
-            app.add_class("rigging");
-        } else {
-            app.remove_class("rigging");
-        }
+        crate::set_class(app, "rigging", ui.mode.is_some());
     }
     if let Some(rig) = rig {
         let bound: Vec<BoneId> = rig.bindings().iter().map(|b| b.bone).collect();
@@ -1396,6 +1388,28 @@ fn color(c: Rgba) -> lumenui_canvas::Rgba {
     )
 }
 
+/// Feeds what the bones' drawing depends on to `h`.
+fn hash_bones(
+    h: &mut impl std::hash::Hasher,
+    editor: &Editor,
+    ui: &RigUi,
+    view: &View,
+    colors: &ViewColors,
+) {
+    use std::hash::Hash;
+    view.revision.hash(h);
+    colors.revision.hash(h);
+    editor.generation.hash(h);
+    editor.revision.hash(h);
+    ui.mode.map(|m| m as u8).hash(h);
+    ui.bone.hash(h);
+    ui.skeleton.hash(h);
+    format!("{:?}", ui.pose).hash(h);
+    if let Some(Drag::NewBone { head, tail, .. }) = &ui.drag {
+        format!("{head:?}{tail:?}").hash(h);
+    }
+}
+
 /// Draws the bones on the `rig` canvas when what it shows changed.
 fn draw_bones(
     editor: &Editor,
@@ -1404,24 +1418,21 @@ fn draw_bones(
     colors: &ViewColors,
     rig: Option<&Rig>,
 ) -> bool {
-    use std::hash::{Hash, Hasher};
+    use std::hash::Hasher;
     let size = (view.stage.1.x, view.stage.1.y);
     if size.0 <= 0.0 || size.1 <= 0.0 {
         return false;
     }
+    // Bones show while the panel works on them, or with the skeleton layer
+    // active. With none to show the canvas is cleared once, not on every
+    // change of the view or the document.
+    let active_layer = Some(editor.layer) == ui.skeleton;
+    let showing = rig.is_some() && (ui.mode.is_some() || active_layer);
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    view.revision.hash(&mut h);
-    colors.revision.hash(&mut h);
-    editor.generation.hash(&mut h);
-    editor.revision.hash(&mut h);
-    ui.mode.map(|m| m as u8).hash(&mut h);
-    ui.bone.hash(&mut h);
-    ui.skeleton.hash(&mut h);
-    format!("{:?}", ui.pose).hash(&mut h);
-    if let Some(Drag::NewBone { head, tail, .. }) = &ui.drag {
-        format!("{head:?}{tail:?}").hash(&mut h);
+    if showing {
+        hash_bones(&mut h, editor, ui, view, colors);
     }
-    let key = h.finish();
+    let key = if showing { h.finish() | 1 } else { 0 };
     let ctx = Context2d::new("rig");
     if ui.shown.size != size {
         ctx.resize(size.0, size.1);
@@ -1433,15 +1444,12 @@ fn draw_bones(
     }
     ui.shown.canvas = Some(key);
     ctx.clear();
+    if !showing {
+        return true;
+    }
     let (Some(rig), Some(c)) = (rig, bone_colors()) else {
         return true;
     };
-    // Bones show while the panel works on them, or with the skeleton layer
-    // active.
-    let active_layer = Some(editor.layer) == ui.skeleton;
-    if ui.mode.is_none() && !active_layer {
-        return true;
-    }
     let bones = shown_bones(rig, ui);
     let z = view.zoom;
     let width = (z * 0.6).clamp(3.0, 10.0);
@@ -1605,7 +1613,11 @@ pub fn install(app: App) -> App {
         .insert_signal("rig_to", "1")
         .add_systems(
             TickStage::Systems,
-            (rig_clicks, rig_controls, use_rig)
+            (
+                crate::perf::timed("rig::rig_clicks", rig_clicks),
+                crate::perf::timed("rig::rig_controls", rig_controls),
+                crate::perf::timed("rig::use_rig", use_rig),
+            )
                 .chain()
                 .after(crate::panels::panel_clicks)
                 .after(crate::tools::pick_tool)
@@ -1617,7 +1629,7 @@ pub fn install(app: App) -> App {
         )
         .add_systems(
             TickStage::Systems,
-            show_rig
+            crate::perf::timed("rig::show_rig", show_rig)
                 .after(crate::view::draw_stage)
                 .before(signals::apply_text_bindings)
                 .before(signals::apply_checked_bindings)

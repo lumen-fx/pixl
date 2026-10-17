@@ -686,11 +686,7 @@ pub fn new_form(
     }
     for (w, h) in PRESETS {
         if let Some(button) = dom::get_by_id(&preset_id(*w, *h)) {
-            if now.0 == format!("{w}x{h}") {
-                button.add_class("active");
-            } else {
-                button.remove_class("active");
-            }
+            crate::set_class(button, "active", now.0 == format!("{w}x{h}"));
         }
     }
     let color = now.1 == "Color";

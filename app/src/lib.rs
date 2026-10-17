@@ -101,6 +101,7 @@ pub fn editor(source: Source) -> App {
         .insert_resource(keymap::KeyCommands::default())
         .insert_resource(settings_ui::SettingsDialog::default())
         .insert_resource(perf::Perf::default())
+        .insert_resource(perf::SystemTimes::default())
         .insert_resource(sheets::Sheets::default())
         .insert_signal("sheet_export_open", false)
         .insert_signal("sheet_import_open", false)
@@ -194,7 +195,7 @@ pub fn editor(source: Source) -> App {
                 // What the user did this tick, in the order it applies:
                 // the keys, settings and windows first,
                 (
-                    (
+                    timed!(
                         perf::tick_begin,
                         keymap::read_keys,
                         palette::palette_input,
@@ -213,19 +214,20 @@ pub fn editor(source: Source) -> App {
                         exports::export_input,
                         files::new_form,
                     )
-                        .chain(),
+                    .chain(),
                     // The Select, Image, Filter and View menus.
-                    (
+                    timed!(
                         menus::collect,
                         select::select_commands,
                         image_menu::image_commands,
                         adjust::filter_commands,
+                        aids::read_aid_colors,
                         aids::aids_commands,
                         aids::aids_input,
                     )
-                        .chain(),
+                    .chain(),
                     // then the panels and the tools.
-                    (
+                    timed!(
                         layers::layer_input,
                         panels::panel_clicks,
                         panels::history_keys,
@@ -241,43 +243,45 @@ pub fn editor(source: Source) -> App {
                         transform_tool::use_transform,
                         perf::note_stroke,
                     )
-                        .chain(),
+                    .chain(),
                 )
                     .chain(),
                 // Then what the window shows of it.
                 (
-                    timeline::playback,
-                    timeline::onion_to_view,
-                    perf::composite_begin,
-                    view::sync_layers,
-                    view::draw_stage,
-                    perf::composite_end,
-                    aids::draw_rulers,
-                    timeline::show_timeline,
-                    preview::draw_preview,
-                    tools::track_pointer,
-                    panels::show_panels,
-                    layers::show_layers,
-                    files::autosave,
-                    files::show_message,
-                    (
+                    timed!(
+                        timeline::playback,
+                        timeline::onion_to_view,
+                        perf::composite_begin,
+                        view::sync_layers,
+                        view::draw_stage,
+                        perf::composite_end,
+                        aids::draw_rulers,
+                        timeline::show_timeline,
+                        preview::draw_preview,
+                        tools::track_pointer,
+                        panels::show_panels,
+                        layers::show_layers,
+                        files::autosave,
+                        files::show_message,
+                    )
+                    .chain(),
+                    timed!(
                         workspace::show_workspace,
                         themes::show_themes,
                         palette::show_palette,
                         exports::show_exports,
                     ),
-                    home::track_recents,
-                    home::show_home,
-                    (tools::show_tool, toolbox::show_toolbox).chain(),
-                    tools::stage_cursor,
-                    (
+                    timed!(home::track_recents, home::show_home).chain(),
+                    timed!(tools::show_tool, toolbox::show_toolbox).chain(),
+                    timed!(tools::stage_cursor),
+                    timed!(
                         settings::save_settings,
                         settings_ui::pressure_preview,
                         settings_ui::menu_labels,
                         perf::show_perf,
                         sheets::sheet_forms,
                     )
-                        .chain(),
+                    .chain(),
                 )
                     .chain(),
             )
@@ -298,6 +302,19 @@ pub fn editor(source: Source) -> App {
     let app = rig::install(app);
     let app = presets::install(app, presets::Presets::in_memory());
     toolbar::install(app, toolbar::Toolbar::in_memory())
+}
+
+/// Puts `class` on `node` or takes it off. A class edit restyles the node
+/// and everything under it, so the node is touched only when the class
+/// changes.
+pub fn set_class(node: dom::Node, class: &str, on: bool) {
+    if node.has_class(class) != on {
+        if on {
+            node.add_class(class);
+        } else {
+            node.remove_class(class);
+        }
+    }
 }
 
 /// Asks for another tick soon. A system that edits the DOM or a signal after

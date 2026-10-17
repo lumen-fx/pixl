@@ -463,8 +463,12 @@ pub struct SettingsDialog {
     /// Per control, the value it was last given and the value the setting
     /// had then.
     shown: HashMap<&'static str, (Val, Val)>,
-    /// The shortcut list as last written.
+    /// The shortcut list as last written, and the keymap and catching
+    /// command it was written for.
     keys_markup: Option<String>,
+    keys_for: Option<(Keymap, Option<String>)>,
+    /// What the Performance page says of the renderer.
+    renderer: Option<String>,
     /// The pressure curve as last drawn.
     curve_drawn: Option<(f64, u32, u32, bool)>,
 }
@@ -544,11 +548,7 @@ pub fn settings_commands(
             changed = true;
         }
         if let Some(b) = dom::get_by_id(&format!("settings-page-{page}")) {
-            if on {
-                b.add_class("active");
-            } else {
-                b.remove_class("active");
-            }
+            crate::set_class(b, "active", on);
         }
     }
     if changed {
@@ -581,6 +581,11 @@ pub fn settings_form(
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
+    // The controls are brought up to date while the dialog shows; what
+    // changed while it was closed reaches them when it opens.
+    if signals.get::<bool>("settings_open") != Some(true) {
+        return;
+    }
     let fields = fields();
     let stage = dom::get_by_id("stage")
         .and_then(|n| n.computed_style_of("bg"))
@@ -634,7 +639,8 @@ pub fn settings_form(
         format!("{curve}.0")
     };
     crate::tools::set_if_changed(&mut signals, "set_pressure_curve_text", curve);
-    crate::tools::set_if_changed(&mut signals, "set_renderer", renderer_text());
+    let renderer = dialog.renderer.get_or_insert_with(renderer_text).clone();
+    crate::tools::set_if_changed(&mut signals, "set_renderer", renderer);
     let workers = format!("0 uses one per core; {} running.", layers.workers());
     crate::tools::set_if_changed(&mut signals, "set_workers_hint", workers);
     if wrote {
@@ -808,13 +814,20 @@ pub fn keys_page(
         signals.set("keys_message", m);
         crate::repaint_soon(&wake);
     }
-    let markup = keys_markup(&map, dialog.capturing.as_deref());
-    if dialog.keys_markup.as_deref() != Some(markup.as_str())
-        && let Some(list) = dom::get_by_id("keys-list")
-    {
-        list.set_inner_markup(&markup);
-        dialog.keys_markup = Some(markup);
-        crate::repaint_soon(&wake);
+    // The list is written again when the keymap or the command catching
+    // a key changes.
+    let current = dialog
+        .keys_for
+        .as_ref()
+        .is_some_and(|(m, c)| *m == *map && *c == dialog.capturing);
+    if !current && let Some(list) = dom::get_by_id("keys-list") {
+        let markup = keys_markup(&map, dialog.capturing.as_deref());
+        if dialog.keys_markup.as_deref() != Some(markup.as_str()) {
+            list.set_inner_markup(&markup);
+            dialog.keys_markup = Some(markup);
+            crate::repaint_soon(&wake);
+        }
+        dialog.keys_for = Some((map.clone(), dialog.capturing.clone()));
     }
 }
 
@@ -906,16 +919,15 @@ const MENU_COMMANDS: &[(&str, &str)] = &[
 ];
 
 /// Writes each menu item's shortcut after its name, from the keymap, so a
-/// rebound key shows in the menus.
+/// rebound key shows in the menus. It looks at the menus once per keymap:
+/// the bar in the window holds its menus' items from the start, numbered
+/// `menubar-0` up, and a bar the platform draws holds none of them.
 pub fn menu_labels(map: Res<Keymap>, mut shown: Local<Option<Keymap>>) {
     if shown.as_ref() == Some(&*map) {
         return;
     }
-    let items = dom::query(".menu-item").collect();
-    if items.is_empty() {
-        return;
-    }
-    for item in items {
+    let menus = (0..).map_while(|i| dom::get_by_id(&format!("menubar-{i}")));
+    for item in menus.flat_map(|m| m.children()) {
         let Some(text) = item.text() else {
             continue;
         };

@@ -869,7 +869,7 @@ pub fn install(app: App, presets: Presets) -> App {
         .insert_signal("tp_title", "Tool presets")
         .add_systems(
             TickStage::Systems,
-            presets_input
+            crate::perf::timed("presets::presets_input", presets_input)
                 .after(crate::toolbox::toolbox_options)
                 .before(crate::toolbox::use_toolbox)
                 .after(ClickSet::Producers)
@@ -877,7 +877,7 @@ pub fn install(app: App, presets: Presets) -> App {
         )
         .add_systems(
             TickStage::Systems,
-            show_presets
+            crate::perf::timed("presets::show_presets", show_presets)
                 .after(crate::toolbox::use_toolbox)
                 .after(crate::tools::use_tools)
                 .before(signals::apply_text_bindings)

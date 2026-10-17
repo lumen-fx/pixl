@@ -159,6 +159,36 @@ fn text_number(signals: &Signals, name: &str, default: i64) -> i64 {
         .map_or(default, |v| v.round() as i64)
 }
 
+/// Reads the colors the aids draw with from the theme's probes: for a few
+/// ticks after the look changes, since the new classes take a tick to land
+/// and another to cascade, and not again until it changes, since each read
+/// runs the cascade for its probe.
+pub fn read_aid_colors(
+    look: Res<crate::settings::Look>,
+    mut aids: ResMut<Aids>,
+    mut read_for: Local<Option<(crate::settings::Look, u8)>>,
+) {
+    let settle = match *read_for {
+        Some((l, n)) if l == *look => n,
+        _ => 0,
+    };
+    if settle <= 4 || aids.colors.guide.is_none() {
+        *read_for = Some((*look, settle.saturating_add(1)));
+        let colors = AidColors {
+            guide: probe("probe-guide"),
+            slice: probe("probe-slice"),
+            axis: probe("probe-axis"),
+            grid: probe("probe-custom-grid"),
+            ruler: probe("probe-ruler"),
+            ruler_ink: probe("probe-ruler-ink"),
+        };
+        if colors != aids.colors {
+            aids.colors = colors;
+            aids.revision += 1;
+        }
+    }
+}
+
 /// Runs the View menu's commands, the grid and slice dialogs, and keeps the
 /// view's snapping and the overlay in step with the aids.
 pub fn aids_commands(
@@ -172,18 +202,6 @@ pub fn aids_commands(
 ) {
     let editor = &mut *editor;
     let aids = &mut *aids;
-    let colors = AidColors {
-        guide: probe("probe-guide"),
-        slice: probe("probe-slice"),
-        axis: probe("probe-axis"),
-        grid: probe("probe-custom-grid"),
-        ruler: probe("probe-ruler"),
-        ruler_ink: probe("probe-ruler-ink"),
-    };
-    if colors != aids.colors {
-        aids.colors = colors;
-        aids.revision += 1;
-    }
     let mut changed = false;
     for id in &chosen.0 {
         changed = true;

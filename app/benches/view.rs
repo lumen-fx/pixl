@@ -12,21 +12,31 @@
 //! default. `log=FILE` writes every frame to a CSV file, as `pixl
 //! --perf-log` does, and `overlay` shows the performance overlay while it
 //! runs.
+//!
+//! `systems` prints what each of the editor's systems cost in each phase,
+//! and `gate` checks the run against the limits in `benches/gate.json` and
+//! fails when one is passed, naming the systems that cost the most.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use lumenui::glam::Vec2;
+use lumenui::lumen_core::components::LumenTag;
 use lumenui::lumen_core::input::{PointerButton, PointerData, PointerMoved, PointerPressed};
 use lumenui::lumen_core::render_world::SurfaceCapture;
 use lumenui::prelude::*;
 use pixl::Editor;
+use pixl::perf::SystemTimes;
 use pixl::view::{Layers, View};
 use pixl_core::{BlendMode, ColorMode, Document, NewLayer, Placement, Rect, Rgba};
 
 const STROKES: usize = 40;
+
+/// Ticks with nothing to do, timed after the document has opened.
+const IDLE_TICKS: usize = 120;
 
 /// Every layer covered: one flat color per 64x64 tile, four blend modes.
 fn document(side: u32, layers: usize) -> Document {
@@ -102,6 +112,7 @@ fn app_dir(backend: &str) -> PathBuf {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Phase {
     Opening,
+    Idle { n: usize },
     Stroke { layer_top: bool, n: usize },
     Hiding,
     Pan { n: usize },
@@ -110,8 +121,36 @@ enum Phase {
     Done,
 }
 
+impl Phase {
+    fn name(self) -> &'static str {
+        match self {
+            Phase::Opening => "open",
+            Phase::Idle { .. } => "idle",
+            Phase::Stroke {
+                layer_top: true, ..
+            } => "stroke, top layer",
+            Phase::Stroke { .. } => "stroke, bottom layer",
+            Phase::Hiding => "hide a layer",
+            Phase::Pan { .. } => "pan",
+            Phase::Zoom { .. } => "zoom step",
+            Phase::Export | Phase::Done => "export",
+        }
+    }
+}
+
+/// Per phase, per system: total time and ticks.
+type PhaseSystems = BTreeMap<&'static str, BTreeMap<&'static str, (Duration, u64)>>;
+
 #[derive(Default)]
 struct Results {
+    /// Idle ticks: the editor's systems, and the whole tick.
+    idle_systems: Vec<Duration>,
+    idle_ticks: Vec<Duration>,
+    systems: PhaseSystems,
+    /// Ticks per phase.
+    ticks: BTreeMap<&'static str, u64>,
+    /// Elements in the document's tree.
+    elements: usize,
     open: Option<(Duration, Duration, Duration, usize)>,
     hide: Option<(Duration, Duration, Duration, usize)>,
     top: Vec<Duration>,
@@ -215,13 +254,32 @@ fn main() {
     .add_systems(
         TickStage::Systems,
         (move |mut phase: Local<Option<Phase>>,
+               mut last: Local<Option<(Phase, Instant)>>,
                mut editor: ResMut<Editor>,
                mut view: ResMut<View>,
                layers: Res<Layers>,
+               times: Res<SystemTimes>,
+               elements: Query<(), With<LumenTag>>,
                mut down: MessageWriter<PointerPressed>,
                mut moved: MessageWriter<PointerMoved>| {
             let p = phase.get_or_insert(Phase::Opening);
             let mut results = out.lock().unwrap();
+            // The last tick's systems count toward the phase it ran in.
+            let now = Instant::now();
+            if let Some((was, at)) = *last {
+                let bucket = results.systems.entry(was.name()).or_default();
+                for (name, t) in &times.last {
+                    let e = bucket.entry(name).or_default();
+                    e.0 += *t;
+                    e.1 += 1;
+                }
+                *results.ticks.entry(was.name()).or_default() += 1;
+                if matches!(was, Phase::Idle { n } if n >= 10) {
+                    results.idle_systems.push(times.last_total());
+                    results.idle_ticks.push(now - at);
+                }
+            }
+            *last = Some((*p, now));
             let stage_mid = view.stage.0 + view.stage.1 / 2.0;
             match *p {
                 Phase::Opening => {
@@ -233,11 +291,20 @@ fn main() {
                             .iter()
                             .any(|i| matches!(i.source, pixl::view::ItemSource::Flat(_)));
                         results.buffers = Some((layers.buffer_stats().0, flat));
-                        *p = Phase::Stroke {
+                        results.elements = elements.iter().count();
+                        *p = Phase::Idle { n: 0 };
+                    }
+                }
+                Phase::Idle { n } => {
+                    // The first few ticks still settle what opening left.
+                    *p = if n == IDLE_TICKS {
+                        Phase::Stroke {
                             layer_top: true,
                             n: 0,
-                        };
-                    }
+                        }
+                    } else {
+                        Phase::Idle { n: n + 1 }
+                    };
                 }
                 Phase::Stroke { layer_top, n } => {
                     if watch.started.lock().unwrap().is_some() {
@@ -378,6 +445,7 @@ fn main() {
 
     let r = results.lock().unwrap();
     let ms = |d: Duration| format!("{:.1} ms", d.as_secs_f64() * 1000.0);
+    let fine = |d: Duration| format!("{:.2} ms", d.as_secs_f64() * 1000.0);
     println!("renderer: {backend}, {side}x{side}, {layers} layers, buffer budget {budget} MiB");
     if let Some((buffers, flat)) = r.buffers {
         println!(
@@ -428,6 +496,30 @@ fn main() {
     if let Some((t, bytes)) = r.export {
         println!("export PNG: {} ({} KiB)", ms(t), bytes / 1024);
     }
+    if !r.idle_ticks.is_empty() {
+        println!(
+            "idle tick: editor systems median {} / p95 {}, whole tick median {} / p95 {} over {}",
+            fine(percentile(&r.idle_systems, 0.5)),
+            fine(percentile(&r.idle_systems, 0.95)),
+            fine(percentile(&r.idle_ticks, 0.5)),
+            fine(percentile(&r.idle_ticks, 0.95)),
+            r.idle_ticks.len()
+        );
+    }
+    println!("elements in the tree: {}", r.elements);
+    if args.iter().any(|a| a == "systems") {
+        for (phase, systems) in &r.systems {
+            let ticks = r.ticks.get(phase).copied().unwrap_or(1).max(1);
+            let total: Duration = systems.values().map(|(t, _)| *t).sum();
+            println!(
+                "{phase}: the editor's systems {} a tick over {ticks} ticks",
+                fine(total / ticks as u32)
+            );
+            for (name, t) in heaviest(systems, 8) {
+                println!("  {name}: {} a tick", fine(t / ticks as u32));
+            }
+        }
+    }
     if let Some((t, bytes)) = r.sheet {
         println!(
             "export sprite sheet, packed and trimmed: {} ({} KiB)",
@@ -446,4 +538,16 @@ impl Plugin for BenchCapture {
         app.world.insert_resource(self.0.clone());
         app.render_world.insert_resource(self.0);
     }
+}
+
+/// The `n` systems that cost the most in a phase, with their total time.
+fn heaviest(
+    systems: &BTreeMap<&'static str, (Duration, u64)>,
+    n: usize,
+) -> Vec<(&'static str, Duration)> {
+    let mut v: Vec<(&'static str, Duration)> =
+        systems.iter().map(|(name, (t, _))| (*name, *t)).collect();
+    v.sort_by_key(|s| std::cmp::Reverse(s.1));
+    v.truncate(n);
+    v
 }

@@ -565,14 +565,14 @@ pub fn install(app: App, bar: Toolbar) -> App {
         .insert_signal("tb_open", false)
         .add_systems(
             TickStage::Systems,
-            toolbar_input
+            crate::perf::timed("toolbar::toolbar_input", toolbar_input)
                 .after(crate::tools::pick_tool)
                 .before(crate::tools::use_tools)
                 .after(ClickSet::Producers),
         )
         .add_systems(
             TickStage::Systems,
-            show_toolbar
+            crate::perf::timed("toolbar::show_toolbar", show_toolbar)
                 .after(crate::tools::show_tool)
                 .before(signals::apply_text_bindings)
                 .before(CanvasSet::Encode),

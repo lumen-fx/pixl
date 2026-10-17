@@ -16,6 +16,9 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use lumenui::ecs::system::{
+    CombinatorSystem, Combine, In, IntoSystem, RunSystemError, System, SystemIn,
+};
 use lumenui::lumen_core::components::Transform;
 use lumenui::lumen_core::render_world::FrameDirty;
 use lumenui::lumen_core::tick::{Tick, WakeDeadline};
@@ -50,9 +53,12 @@ pub struct FrameRecord {
     /// From its tick's start to the next frame's; `None` until that frame,
     /// and for a frame after idle time.
     pub time: Option<Duration>,
-    /// The editor's own work in the tick: from the first of its systems to
-    /// the end of the tick's main-world stages.
+    /// The tick's work: from the first of the editor's systems to the end
+    /// of the tick's main-world stages, Lumen's style, layout and the rest
+    /// included.
     pub work: Duration,
+    /// The editor's own systems' part of it.
+    pub systems: Duration,
     /// Bringing the layer buffers up to date and drawing the stage.
     pub composite: Duration,
     /// Tiles written into layer buffers.
@@ -178,6 +184,87 @@ pub fn summarize(times: &[Duration]) -> Option<(Duration, Duration, Duration)> {
     Some((avg, p95, *sorted.last().expect("not empty")))
 }
 
+/// What each of the editor's systems cost: the tick in progress, the last
+/// tick, and every tick since the start. Each system the editor adds runs
+/// through [`timed`], which adds its time here.
+#[derive(Resource, Default)]
+pub struct SystemTimes {
+    current: Vec<(&'static str, Duration)>,
+    /// The systems that ran in the last tick, in the order they ran.
+    pub last: Vec<(&'static str, Duration)>,
+    /// Per system: total time, ticks it ran and its longest run.
+    pub totals: std::collections::BTreeMap<&'static str, (Duration, u64, Duration)>,
+}
+
+impl SystemTimes {
+    fn add(&mut self, name: &'static str, time: Duration) {
+        self.current.push((name, time));
+        let t = self.totals.entry(name).or_default();
+        t.0 += time;
+        t.1 += 1;
+        t.2 = t.2.max(time);
+    }
+
+    /// The editor's systems' time in the last tick.
+    pub fn last_total(&self) -> Duration {
+        self.last.iter().map(|(_, t)| *t).sum()
+    }
+
+    fn roll(&mut self) {
+        self.last = std::mem::take(&mut self.current);
+    }
+}
+
+/// Runs a system and then adds its time to [`SystemTimes`].
+pub struct Timing;
+
+impl<A, B> Combine<A, B> for Timing
+where
+    A: System<In = (), Out = ()>,
+    B: System<In = In<Duration>, Out = ()>,
+{
+    type In = ();
+    type Out = ();
+
+    fn combine<T>(
+        _input: (),
+        data: &mut T,
+        a: impl FnOnce(SystemIn<'_, A>, &mut T) -> std::result::Result<(), RunSystemError>,
+        b: impl FnOnce(SystemIn<'_, B>, &mut T) -> std::result::Result<(), RunSystemError>,
+    ) -> std::result::Result<(), RunSystemError> {
+        let start = Instant::now();
+        let ran = a((), data);
+        b(start.elapsed(), data)?;
+        ran
+    }
+}
+
+/// `system`, timed under `name` into [`SystemTimes`]. It keeps the
+/// system's own sets, so ordering against the plain system still holds.
+pub fn timed<M>(
+    name: &'static str,
+    system: impl IntoSystem<(), (), M>,
+) -> impl System<In = (), Out = ()> {
+    let a = IntoSystem::into_system(system);
+    let b = IntoSystem::into_system(
+        move |In(time): In<Duration>, times: Option<ResMut<SystemTimes>>| {
+            if let Some(mut times) = times {
+                times.add(name, time);
+            }
+        },
+    );
+    let label = a.name();
+    CombinatorSystem::<Timing, _, _>::new(a, b, label)
+}
+
+/// Each system given, [`timed`] under its path.
+#[macro_export]
+macro_rules! timed {
+    ($($system:path),* $(,)?) => {
+        ($($crate::perf::timed(stringify!($system), $system),)*)
+    };
+}
+
 /// The per-frame CSV file `--perf-log` writes.
 pub struct PerfLog {
     out: BufWriter<File>,
@@ -185,8 +272,7 @@ pub struct PerfLog {
 }
 
 /// The CSV header of a performance log.
-pub const LOG_HEADER: &str =
-    "frame,start_ms,frame_ms,work_ms,composite_ms,tiles,buffers,buffer_mib,queued,stroke_ms";
+pub const LOG_HEADER: &str = "frame,start_ms,frame_ms,work_ms,systems_ms,composite_ms,tiles,buffers,buffer_mib,queued,stroke_ms";
 
 impl PerfLog {
     pub fn create(path: &Path) -> std::io::Result<PerfLog> {
@@ -282,7 +368,12 @@ pub fn tick_end(
     layers: Res<Layers>,
     settings: Res<Settings>,
     wake: Option<Res<WakeDeadline>>,
+    times: Option<ResMut<SystemTimes>>,
 ) {
+    let own = times.map_or(Duration::ZERO, |mut t| {
+        t.roll();
+        t.last_total()
+    });
     let (Some(start), Some(systems)) = (perf.tick_start, perf.systems_start) else {
         return;
     };
@@ -303,6 +394,7 @@ pub fn tick_end(
         start,
         time: None,
         work: systems.elapsed(),
+        systems: own,
         composite: perf.composite,
         tiles,
     };
@@ -327,11 +419,12 @@ pub fn tick_end(
             .and_then(|f| f.time)
             .map_or(String::new(), |d| format!("{:.3}", ms(d)));
         let line = format!(
-            "{},{:.3},{},{:.3},{:.3},{},{},{:.1},{},{}",
+            "{},{:.3},{},{:.3},{:.3},{:.3},{},{},{:.1},{},{}",
             perf.count,
             ms(start.saturating_duration_since(perf.started)),
             previous,
             ms(record.work),
+            ms(record.systems),
             ms(record.composite),
             tiles,
             buffers,
@@ -396,8 +489,9 @@ pub fn overlay_lines(perf: &Perf, layers: &Layers, renderer: &str, now: Instant)
     });
     let last = perf.frames.back();
     lines.push(format!(
-        "work {:.1} ms  composite {:.1} ms  tiles {}",
+        "work {:.1} ms  editor {:.1} ms  composite {:.1} ms  tiles {}",
         last.map_or(0.0, |f| ms(f.work)),
+        last.map_or(0.0, |f| ms(f.systems)),
         last.map_or(0.0, |f| ms(f.composite)),
         last.map_or(0, |f| f.tiles),
     ));
@@ -545,6 +639,7 @@ mod tests {
             start: t0 + Duration::from_millis(ms),
             time: None,
             work: Duration::ZERO,
+            systems: Duration::ZERO,
             composite: Duration::ZERO,
             tiles: 0,
         }
