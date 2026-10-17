@@ -32,11 +32,12 @@
         <if signal="ex_is_sheet" mode="hide">
           <row class="dialog-row">
             <label class="field-label" text="Sheet"/>
-            <dropdown id="ex-sheet" class="ex-choice" bind-value="ex_sheet"><option value="One row"/><option value="One column"/><option value="Grid"/></dropdown>
+            <dropdown id="ex-sheet" class="ex-choice" bind-value="ex_sheet"><option value="One row"/><option value="One column"/><option value="Grid"/><option value="Packed"/></dropdown>
             <label class="option-label" text="Columns"/>
             <input id="ex-columns" class="ex-number" type="number" min="1" max="4096" bind-text="ex_columns" text="8"/>
             <label class="option-label" text="Padding"/>
             <input id="ex-padding" class="ex-number" type="number" min="0" max="256" bind-text="ex_padding" text="0"/>
+            <checkbox id="ex-trim" label="Trim" bind-checked="ex_trim"/>
           </row>
         </if>
         <row class="dialog-row"><label class="field-label" text="File"/><input id="ex-path" class="ex-wide" bind-text="ex_path" text=""/></row>

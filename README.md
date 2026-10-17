@@ -142,7 +142,8 @@ palette lists the brushes and presets as well.
 File > Export presets keeps named export settings: the format (PNG frames,
 an animated GIF, or a sprite sheet with its Aseprite-shape JSON), the scale,
 which frames (all, the current one, one tag, or each tag), which layers (the
-visible ones merged, or each layer alone), the sheet's layout, and the file
+visible ones merged, or each layer alone), the sheet's layout (a row, a
+column, a grid, or packed, with or without trimming), and the file
 to write, relative to the document's folder, where `{name}`, `{tag}`,
 `{frame}`, `{layer}` and `{scale}` fill in. File > Export all (Ctrl+Alt+E)
 runs every preset marked for it on the open document, in the background, and

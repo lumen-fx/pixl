@@ -119,16 +119,24 @@ pub enum Sheet {
     Horizontal,
     Vertical,
     Grid,
+    /// As small an image as the frames fit in.
+    Packed,
 }
 
 impl Sheet {
-    pub const ALL: [Sheet; 3] = [Sheet::Horizontal, Sheet::Vertical, Sheet::Grid];
+    pub const ALL: [Sheet; 4] = [
+        Sheet::Horizontal,
+        Sheet::Vertical,
+        Sheet::Grid,
+        Sheet::Packed,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Sheet::Horizontal => "One row",
             Sheet::Vertical => "One column",
             Sheet::Grid => "Grid",
+            Sheet::Packed => "Packed",
         }
     }
 }
@@ -148,6 +156,8 @@ pub struct Preset {
     pub columns: u32,
     /// Transparent pixels between sheet frames.
     pub padding: u32,
+    /// Crop each sheet frame to its pixels.
+    pub trim: bool,
     /// Where the files go, relative to the document's folder. Tokens:
     /// `{name}` the document's name, `{tag}`, `{frame}` (numbered from 0,
     /// padded to the last frame's digits), `{layer}` and `{scale}`.
@@ -167,6 +177,7 @@ impl Default for Preset {
             sheet: Sheet::Horizontal,
             columns: 8,
             padding: 0,
+            trim: false,
             path: "{name}-{frame}.png".to_string(),
             in_all: true,
         }
@@ -380,9 +391,11 @@ pub fn run_job(doc: &Document, preset: &Preset, job: &Job) -> std::result::Resul
                         Sheet::Grid => SheetLayout::Grid {
                             columns: preset.columns.max(1),
                         },
+                        Sheet::Packed => SheetLayout::Packed,
                     },
                     frames: Some(job.frames.clone()),
                     padding: preset.padding,
+                    trim: preset.trim,
                     scale,
                     title,
                     image_name,
@@ -535,6 +548,7 @@ fn fill_fields(signals: &mut Signals, p: &Preset) {
     signals.set("ex_sheet", p.sheet.label().to_string());
     signals.set("ex_columns", p.columns.to_string());
     signals.set("ex_padding", p.padding.to_string());
+    signals.set("ex_trim", p.trim);
     signals.set("ex_path", p.path.clone());
     signals.set("ex_in_all", p.in_all);
     signals.set("ex_is_sheet", p.format == Format::Sheet);
@@ -575,6 +589,7 @@ fn read_fields(signals: &Signals, base: &Preset) -> Preset {
             .unwrap_or(base.sheet),
         columns: number("ex_columns", base.columns, 4096).max(1),
         padding: number("ex_padding", base.padding, 256),
+        trim: signals.get::<bool>("ex_trim").unwrap_or(base.trim),
         path: {
             let p = text("ex_path").trim().to_string();
             if p.is_empty() { base.path.clone() } else { p }
@@ -874,6 +889,30 @@ mod tests {
         assert!(
             json.contains("\"image\": \"hero.png\"") || json.contains("\"image\":\"hero.png\"")
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_packed_trimmed_sheet_is_as_small_as_its_pixels() {
+        let dir = std::env::temp_dir().join(format!("pixl-exports-packed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut d = Document::new(16, 16, ColorMode::Rgba).unwrap();
+        let layer = d.layers()[0].id;
+        let t = d.target(layer, 0).unwrap();
+        t.raster
+            .fill_rect_raw(&pixl_core::Rect::new(2, 2, 3, 2), Rgba::BLACK.to_u32());
+        let preset = Preset {
+            format: Format::Sheet,
+            sheet: Sheet::Packed,
+            trim: true,
+            frames: Frames::Current,
+            path: "{name}".to_string(),
+            ..Preset::default()
+        };
+        let jobs = plan(&d, "dot", 0, &preset, &dir);
+        run_job(&d, &preset, &jobs[0]).unwrap();
+        let png = std::fs::read(dir.join("dot.png")).unwrap();
+        assert_eq!(pixl_core::io::decode_png(&png).unwrap().size(), (3, 2));
         let _ = std::fs::remove_dir_all(dir);
     }
 
