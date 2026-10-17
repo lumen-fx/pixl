@@ -35,7 +35,7 @@ use pixl_core::{
 
 use crate::editor::{Editor, Touched};
 use crate::progressive::{self, Pool};
-use crate::settings::Look;
+use crate::settings::{CanvasSettings, Look, PerformanceSettings, Settings};
 
 /// The zoom levels the wheel and the zoom keys step through, as scale
 /// factors (1.0 is 100 percent).
@@ -67,15 +67,6 @@ pub const ZOOM_STEPS: [f64; 26] = [
     56.0,
     64.0,
 ];
-
-/// The smallest zoom that shows the pixel grid.
-pub const GRID_FROM_ZOOM: f64 = 8.0;
-
-/// Screen pixels per checkerboard cell.
-const CHECKER_CELL: f64 = 8.0;
-
-/// Dirty tiles a tick rewrites itself; more go to the workers.
-const SYNC_TILES: usize = 24;
 
 /// Time a tick spends writing finished tiles into buffers.
 const DRAIN_BUDGET: Duration = Duration::from_millis(6);
@@ -237,8 +228,8 @@ pub struct ViewColors {
     pub marquee_a: Option<Rgba>,
     pub marquee_b: Option<Rgba>,
     pub preview: Option<Rgba>,
-    /// The look these were read under.
-    read_for: Option<Look>,
+    /// The look and the canvas settings these were read under.
+    read_for: Option<(Look, [Option<String>; 3])>,
     /// Ticks since the look changed; the cascade lands a tick or two later.
     settle: u32,
     pub revision: u64,
@@ -273,10 +264,18 @@ fn probe(id: &str) -> Option<Rgba> {
         .and_then(parse_hex)
 }
 
-/// Re-reads the view colors after the look changes.
-pub fn read_view_colors(look: Res<Look>, mut colors: ResMut<ViewColors>) {
-    if colors.read_for != Some(*look) {
-        colors.read_for = Some(*look);
+/// Re-reads the view colors after the look changes. A color the canvas
+/// settings name takes the place of the theme's.
+pub fn read_view_colors(look: Res<Look>, settings: Res<Settings>, mut colors: ResMut<ViewColors>) {
+    let c = &settings.canvas;
+    let overrides = [
+        c.checker_a.clone(),
+        c.checker_b.clone(),
+        c.grid_color.clone(),
+    ];
+    let key = (*look, overrides);
+    if colors.read_for.as_ref() != Some(&key) {
+        colors.read_for = Some(key);
         colors.settle = 0;
     }
     // Read for a few ticks after a change, since the new classes take a
@@ -285,10 +284,12 @@ pub fn read_view_colors(look: Res<Look>, mut colors: ResMut<ViewColors>) {
         return;
     }
     colors.settle += 1;
+    let pick =
+        |set: &Option<String>, id: &str| set.as_deref().and_then(parse_hex).or_else(|| probe(id));
     let read = ViewColors {
-        checker_a: probe("probe-checker-a"),
-        checker_b: probe("probe-checker-b"),
-        grid: probe("probe-grid"),
+        checker_a: pick(&c.checker_a, "probe-checker-a"),
+        checker_b: pick(&c.checker_b, "probe-checker-b"),
+        grid: pick(&c.grid_color, "probe-grid"),
         marquee_a: probe("probe-marquee-a"),
         marquee_b: probe("probe-marquee-b"),
         preview: probe("probe-preview"),
@@ -426,16 +427,22 @@ fn classify(roots: &[pixl_core::Layer], i: usize) -> Class {
     }
 }
 
-/// The most buffer pixels the view hands Lumen's renderer: two buffers of
-/// 4096x4096. Lumen's GPU renderer drops pixel buffers past about that much
-/// image area (lumen-fx/lumen#521), so past it the bottom layers are
-/// flattened by pixl-core into one buffer instead.
-pub const BUFFER_PIXEL_BUDGET: u64 = 2 * 4096 * 4096;
+/// The layer buffer memory the view hands Lumen's renderer unless the
+/// performance settings say otherwise, in MiB: sixteen buffers of
+/// 4096x4096. Past it the bottom layers are flattened by pixl-core into one
+/// buffer, which costs a CPU composite of that buffer on every stroke
+/// below the top layers.
+pub const DEFAULT_BUFFER_BUDGET_MIB: u64 = 1024;
 
-/// The buffers that show `frame` of `doc`, bottom first, within
-/// [`BUFFER_PIXEL_BUDGET`].
+/// The buffer pixels `mib` of RGBA8 buffer memory holds.
+pub fn budget_pixels(mib: u64) -> u64 {
+    mib.saturating_mul(1024 * 1024) / 4
+}
+
+/// The buffers that show `frame` of `doc`, bottom first, within the
+/// default budget.
 pub fn plan(doc: &Document, frame: usize) -> Vec<PlanItem> {
-    plan_within(doc, frame, BUFFER_PIXEL_BUDGET)
+    plan_within(doc, frame, budget_pixels(DEFAULT_BUFFER_BUDGET_MIB))
 }
 
 /// [`plan`] with a buffer pixel budget of `budget`.
@@ -696,6 +703,13 @@ pub struct Layers {
     /// Set when a buffer could not be made, such as a document past the
     /// canvas size cap.
     pub error: Option<String>,
+    /// The most buffer pixels the plan hands the renderer.
+    pub budget: u64,
+    /// Dirty tiles a tick rewrites itself; more go to the workers.
+    pub sync_tiles: usize,
+    /// The worker count the performance settings asked for; 0 is one per
+    /// core.
+    workers_asked: usize,
 }
 
 impl Default for Layers {
@@ -710,11 +724,56 @@ impl Default for Layers {
             art_dirty: true,
             rewrites: Vec::new(),
             error: None,
+            budget: budget_pixels(DEFAULT_BUFFER_BUDGET_MIB),
+            sync_tiles: 24,
+            workers_asked: 0,
         }
     }
 }
 
 impl Layers {
+    /// Follows the performance settings: the buffer budget (a change
+    /// re-plans the buffers), the progressive threshold and the worker
+    /// count. The workers are replaced only while they are idle, so no
+    /// rewrite in flight is lost.
+    pub fn apply(&mut self, perf: &PerformanceSettings) {
+        let budget = budget_pixels(perf.buffer_budget_mib);
+        if budget != self.budget {
+            self.budget = budget;
+            // Re-plan on the next sync.
+            self.seen_revision = 0;
+        }
+        self.sync_tiles = perf.progressive_tiles.max(1);
+        if perf.worker_threads != self.workers_asked && self.pending() == 0 {
+            self.workers_asked = perf.worker_threads;
+            self.pool = if perf.worker_threads == 0 {
+                Pool::new()
+            } else {
+                Pool::with_workers(perf.worker_threads)
+            };
+        }
+    }
+
+    /// The worker threads large redraws run on.
+    pub fn workers(&self) -> usize {
+        self.pool.worker_count()
+    }
+
+    /// Tiles waiting for a worker.
+    pub fn queued(&self) -> usize {
+        self.pool.queued()
+    }
+
+    /// The buffers the art canvas draws, and their memory in bytes.
+    pub fn buffer_stats(&self) -> (usize, u64) {
+        let bytes = self
+            .items
+            .iter()
+            .map(|i| u64::from(i.buffer.width()) * u64::from(i.buffer.height()) * 4)
+            .sum();
+        (self.items.len(), bytes)
+    }
+
     /// The plan the buffers currently follow.
     pub fn current_plan(&self) -> Vec<PlanItem> {
         self.items.iter().map(|i| i.plan.clone()).collect()
@@ -768,7 +827,7 @@ impl Layers {
             self.sync_pixels(doc, ids, frame);
             return;
         }
-        let wanted = plan(doc, frame);
+        let wanted = plan_within(doc, frame, self.budget);
 
         // Keep the buffers whose source is still wanted, in the new order.
         let mut old: Vec<Option<Item>> = self.items.drain(..).map(Some).collect();
@@ -931,7 +990,7 @@ impl Layers {
             }
         };
         let item = &mut self.items[i];
-        if rects.len() <= SYNC_TILES {
+        if rects.len() <= self.sync_tiles {
             // Render the tiles side by side, then write them in order.
             let stamp = self.pool.stamp();
             let rendered: Vec<Vec<u8>> = if rects.len() > 1 {
@@ -1076,6 +1135,9 @@ pub struct Drawn {
     checker_colors: u64,
     doc_size: (u32, u32),
     background: Option<Background>,
+    /// The canvas settings the checkerboard, the grid and the stage were
+    /// drawn with.
+    canvas: Option<CanvasSettings>,
 }
 
 /// Measures the stage and fits the document into it when asked.
@@ -1104,9 +1166,11 @@ pub fn measure_stage(
 pub fn sync_layers(
     mut editor: ResMut<Editor>,
     view: Res<View>,
+    settings: Res<Settings>,
     mut layers: ResMut<Layers>,
     wake: Option<Res<WakeDeadline>>,
 ) {
+    layers.apply(&settings.performance);
     let mid = view.to_doc(view.middle());
     let touched = if editor.revision == layers.seen_revision {
         Touched::Layers(Vec::new())
@@ -1130,12 +1194,33 @@ pub fn draw_stage(
     view: Res<View>,
     colors: Res<ViewColors>,
     preview: Res<Preview>,
+    settings: Res<Settings>,
     mut layers: ResMut<Layers>,
     mut drawn: ResMut<Drawn>,
 ) {
     let size = (view.stage.1.x, view.stage.1.y);
     if size.0 <= 0.0 || size.1 <= 0.0 {
         return;
+    }
+    let canvas = &settings.canvas;
+    let canvas_changed = drawn.canvas.as_ref() != Some(canvas);
+    if canvas_changed {
+        // The color around the document is the user's choice, so it rides
+        // on the element; with none the theme's shows.
+        if let Some(stage) = dom::get_by_id("stage") {
+            match canvas.background.as_deref().and_then(parse_hex) {
+                Some(c) => {
+                    stage.set_style("bg", &crate::tools::hex(c));
+                }
+                None => {
+                    stage.remove_style("bg");
+                }
+            }
+        }
+        // A new cell size needs a new pattern.
+        if drawn.canvas.as_ref().map(|c| c.checker_size) != Some(canvas.checker_size) {
+            drawn.checker = None;
+        }
     }
     let checker = Context2d::new("checker");
     let art = Context2d::new("art");
@@ -1149,11 +1234,14 @@ pub fn draw_stage(
     }
     let doc = &editor.doc;
     let doc_size = (doc.width(), doc.height());
-    let view_changed = drawn.view != view.revision || resized || drawn.doc_size != doc_size;
+    let view_changed =
+        drawn.view != view.revision || resized || drawn.doc_size != doc_size || canvas_changed;
+    let cell = f64::from(canvas.checker_size.max(1));
+    let grid_from = canvas.grid_from_zoom / 100.0;
 
     if view_changed || drawn.colors != colors.revision || drawn.background != Some(doc.background())
     {
-        draw_checker(&checker, &mut drawn, &view, &colors, doc_size);
+        draw_checker(&checker, &mut drawn, &view, &colors, doc_size, cell);
     }
     if view_changed || layers.art_dirty {
         layers.draw(&art, doc, &view);
@@ -1165,7 +1253,9 @@ pub fn draw_stage(
         || drawn.preview != preview.revision
         || drawn.selection != selection
     {
-        draw_overlay(&overlay, &view, &colors, &preview, selection, doc_size);
+        draw_overlay(
+            &overlay, &view, &colors, &preview, selection, doc_size, grid_from,
+        );
         drawn.preview = preview.revision;
         drawn.selection = selection;
     }
@@ -1173,6 +1263,9 @@ pub fn draw_stage(
     drawn.colors = colors.revision;
     drawn.doc_size = doc_size;
     drawn.background = Some(doc.background());
+    if canvas_changed {
+        drawn.canvas = Some(canvas.clone());
+    }
 }
 
 /// The checkerboard where the document is, anchored to its corner.
@@ -1182,6 +1275,7 @@ fn draw_checker(
     view: &View,
     colors: &ViewColors,
     doc: (u32, u32),
+    cell: f64,
 ) {
     ctx.clear();
     let (Some(a), Some(b)) = (colors.checker_a, colors.checker_b) else {
@@ -1198,11 +1292,11 @@ fn draw_checker(
     }
     // Two cells of the pattern repeat, so start on an even cell at or left
     // of the visible edge.
-    let pair = 2.0 * CHECKER_CELL;
+    let pair = 2.0 * cell;
     let sx = dx + ((x0 - dx) / pair).floor() * pair;
     let sy = dy + ((y0 - dy) / pair).floor() * pair;
-    let cols = ((x1 - sx) / CHECKER_CELL).ceil() as u32 + 2;
-    let rows = ((y1 - sy) / CHECKER_CELL).ceil() as u32 + 2;
+    let cols = ((x1 - sx) / cell).ceil() as u32 + 2;
+    let rows = ((y1 - sy) / cell).ceil() as u32 + 2;
     let stale = match &drawn.checker {
         Some((_, c, r)) => *c < cols || *r < rows || drawn.checker_colors != colors.revision,
         None => true,
@@ -1235,13 +1329,7 @@ fn draw_checker(
     ctx.begin_path();
     ctx.rect(x0, y0, x1 - x0, y1 - y0);
     ctx.clip();
-    ctx.draw_buffer_scaled(
-        buf,
-        sx,
-        sy,
-        f64::from(*c) * CHECKER_CELL,
-        f64::from(*r) * CHECKER_CELL,
-    );
+    ctx.draw_buffer_scaled(buf, sx, sy, f64::from(*c) * cell, f64::from(*r) * cell);
     ctx.restore();
 }
 
@@ -1253,6 +1341,7 @@ fn draw_overlay(
     preview: &Preview,
     selection: Option<Rect>,
     doc: (u32, u32),
+    grid_from: f64,
 ) {
     ctx.clear();
     let z = view.zoom;
@@ -1267,7 +1356,7 @@ fn draw_overlay(
             }
         }
     }
-    if z >= GRID_FROM_ZOOM
+    if z >= grid_from - 1e-9
         && let Some(grid) = colors.grid
     {
         let visible = view.visible_pixels(doc.0, doc.1);

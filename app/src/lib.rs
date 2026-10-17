@@ -5,6 +5,7 @@ pub mod editor;
 pub mod files;
 pub mod home;
 pub mod input;
+pub mod keymap;
 pub mod panels;
 pub mod progressive;
 pub mod recents;
@@ -22,7 +23,7 @@ use lumenui_canvas::{CanvasPlugin, CanvasSet};
 pub use editor::{Editor, Tool};
 pub use home::Home;
 pub use recents::Recents;
-pub use settings::Look;
+pub use settings::{Look, Settings, SettingsStore};
 
 /// The largest document side the view shows: one canvas buffer per layer,
 /// within the canvas module's per-buffer pixel cap.
@@ -33,11 +34,14 @@ pub const MAX_VIEW_SIDE: u32 = 8192;
 /// a release build) and the user's recent documents: `file` opens in the
 /// editor, and with no file the start screen shows.
 pub fn app(file: Option<PathBuf>) -> App {
+    let (settings, store) = SettingsStore::user();
     starting(
         editor(lumen_source!("src/main.lmn", "src/main.css")),
         Recents::user(),
         file,
     )
+    .insert_resource(settings)
+    .insert_resource(store)
 }
 
 /// `app` (an [`editor`]) starting on the start screen over `recents`, or on
@@ -51,7 +55,8 @@ pub fn starting(app: App, recents: Recents, file: Option<PathBuf>) -> App {
 }
 
 /// The editor over another copy of the UI sources, open on a blank
-/// document with no start screen and a recent list kept in memory. A
+/// document with no start screen, default settings and a recent list kept
+/// in memory. A
 /// directory source reads `lumen.toml` beside its `src/`, which is how a
 /// test runs the editor with its own settings.
 pub fn editor(source: Source) -> App {
@@ -61,6 +66,10 @@ pub fn editor(source: Source) -> App {
         // A buffer per layer: room for many, each up to the largest side.
         .add_plugin(CanvasPlugin::with_caps(1 << 20, side * side, 4096))
         .insert_resource(Look::default())
+        .insert_resource(Settings::default())
+        .insert_resource(SettingsStore::default())
+        .insert_resource(keymap::Keymap::default())
+        .insert_resource(keymap::KeyCommands::default())
         .insert_resource(Editor::blank())
         .insert_resource(view::View::default())
         .insert_resource(view::ViewColors::default())
@@ -87,6 +96,7 @@ pub fn editor(source: Source) -> App {
             (
                 // What the user did this tick, in the order it applies.
                 (
+                    keymap::read_keys,
                     settings::look_switches,
                     settings::show_look,
                     view::read_view_colors,
@@ -115,6 +125,7 @@ pub fn editor(source: Source) -> App {
                     home::show_home,
                     tools::show_tool,
                     tools::stage_cursor,
+                    settings::save_settings,
                 )
                     .chain(),
             )

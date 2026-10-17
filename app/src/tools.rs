@@ -19,7 +19,9 @@ use pixl_core::{
 
 use crate::editor::{Editor, Tool};
 use crate::home::Home;
-use crate::input::{KeyInput, Navigation, Pointer, PointerInput, key_char};
+use crate::input::{Navigation, Pointer, PointerInput};
+use crate::keymap::KeyCommands;
+use crate::settings::{PenSettings, Settings};
 use crate::view::{Preview, View};
 
 /// A gesture in progress, from the press that started it to the release.
@@ -90,8 +92,9 @@ enum Line {
     /// One brush for the whole stroke, through pixl-core's stroke, which
     /// drops L-shaped corners when pixel-perfect is on.
     Steady(PencilStroke),
-    /// A brush sized by pen pressure at each point.
-    Pressure { size: u32 },
+    /// A brush sized by pen pressure at each point, through the pen
+    /// settings' curve.
+    Pressure { size: u32, pen: PenSettings },
 }
 
 /// The brush of a size: square up to two pixels, round from three.
@@ -103,9 +106,11 @@ pub fn brush(size: u32) -> Brush {
     }
 }
 
-/// The brush size a pen press of `pressure` paints with.
-pub fn pressure_size(size: u32, pressure: f32) -> u32 {
-    ((size as f32 * pressure.clamp(0.0, 1.0)).round() as u32).clamp(1, size.max(1))
+/// The brush size a pen press of `pressure` paints with, for a tool size
+/// of `size`: the pen settings map pressure to a share of it.
+pub fn pressure_size(size: u32, pressure: f32, pen: &PenSettings) -> u32 {
+    let px = (f64::from(size) * pen.scale(pressure)).round();
+    (px.max(1.0) as u32).min(size.max(1) * 4)
 }
 
 /// The color a button paints: the foreground for the primary button, the
@@ -201,26 +206,10 @@ pub fn color_at(editor: &Editor, p: Point) -> Option<Rgba> {
         .copied()
 }
 
-/// Picks the tool for a key, the way the tool bar's tooltips say.
-pub fn tool_for_key(key: &str, shift: bool) -> Option<Tool> {
-    Some(match key {
-        "b" => Tool::Pencil,
-        "e" => Tool::Eraser,
-        "l" => Tool::Line,
-        "u" if shift => Tool::Ellipse,
-        "u" => Tool::Rectangle,
-        "g" => Tool::Bucket,
-        "i" => Tool::Eyedropper,
-        "m" => Tool::Select,
-        "v" => Tool::Move,
-        _ => return None,
-    })
-}
-
 /// Picks tools from their keys and their tool bar buttons.
 pub fn pick_tool(
     mut editor: ResMut<Editor>,
-    mut keys: KeyInput,
+    keys: Res<KeyCommands>,
     mut clicks: MessageReader<ClickEvent>,
     ids: Query<&LumenId>,
     gesture: Res<Gesture>,
@@ -235,19 +224,18 @@ pub fn pick_tool(
         }
     }
     // The start screen keeps the editor's keys until a document shows.
-    let typing = keys.typing() || home.open;
-    for k in keys.pressed.read() {
-        if typing || k.repeat || k.modifiers.ctrl || k.modifiers.alt || k.modifiers.super_ {
-            continue;
-        }
-        if let Some(c) = key_char(&k.key)
-            && let Some(tool) = tool_for_key(&c, k.modifiers.shift)
-        {
-            picked = Some(tool);
-        }
-        if key_char(&k.key).as_deref() == Some("x") {
-            let editor = &mut *editor;
-            std::mem::swap(&mut editor.fg, &mut editor.bg);
+    if !home.open {
+        for (id, repeat) in &keys.pressed {
+            if *repeat {
+                continue;
+            }
+            if let Some(tool) = Tool::from_button_id(id) {
+                picked = Some(tool);
+            }
+            if id == "swap-colors" {
+                let editor = &mut *editor;
+                std::mem::swap(&mut editor.fg, &mut editor.bg);
+            }
         }
     }
     if let Some(tool) = picked
@@ -275,6 +263,7 @@ pub fn use_tools(
     mut preview: ResMut<Preview>,
     place: Place,
     mut pointer: PointerInput,
+    settings: Res<Settings>,
 ) {
     let (view, nav) = (&place.view, &place.nav);
     let shift = place.modifiers.0.shift;
@@ -315,6 +304,7 @@ pub fn use_tools(
                     eraser_end,
                     shift,
                     alt,
+                    pen: settings.pen.clone(),
                 };
                 gesture.0 = begin(&mut editor, &mut preview, press);
             }
@@ -359,6 +349,7 @@ struct Press {
     eraser_end: bool,
     shift: bool,
     alt: bool,
+    pen: PenSettings,
 }
 
 /// Starts a gesture.
@@ -370,6 +361,7 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
         eraser_end,
         shift,
         alt,
+        pen,
     } = press;
     let tool = if eraser_end {
         Tool::Eraser
@@ -394,9 +386,9 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                     .begin(&editor.doc, tool.label(), Scope::Images(vec![image]));
             tx.watch(&editor.doc, image);
             let size = editor.options.size;
-            let pen = data.kind == PointerKind::Pen && editor.options.pressure_size && size > 1;
-            let line = if pen {
-                Line::Pressure { size }
+            let pressure = data.kind == PointerKind::Pen && pen.pressure && size > 1;
+            let line = if pressure {
+                Line::Pressure { size, pen }
             } else {
                 // The stroke reads the canvas's symmetry to know how many
                 // copies it draws.
@@ -543,8 +535,8 @@ fn stroke_to(editor: &mut Editor, session: &mut Session, p: Point, pressure: f32
     let mut canvas = Canvas::new(target, ctx);
     match line {
         Line::Steady(stroke) => stroke.add(&mut canvas, p),
-        Line::Pressure { size } => {
-            let b = brush(pressure_size(*size, pressure));
+        Line::Pressure { size, pen } => {
+            let b = brush(pressure_size(*size, pressure, pen));
             paint::line(&mut canvas, *last, p, &b, ink);
         }
     }
@@ -894,11 +886,18 @@ pub fn show_tool(
 /// control.
 pub fn tool_options(
     mut editor: ResMut<Editor>,
+    mut settings: ResMut<Settings>,
     mut synced: Local<Option<crate::editor::ToolOptions>>,
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mut o = editor.options;
+    // The options bar's pressure switch is the pen setting.
+    if synced.is_none_or(|s| s.pressure_size == o.pressure_size)
+        && o.pressure_size != settings.pen.pressure
+    {
+        o.pressure_size = settings.pen.pressure;
+    }
     if let Some(last) = *synced {
         let num = |s: &Signals, name: &str| s.get::<f64>(name);
         if let Some(v) = num(&signals, "opt_size") {
@@ -930,6 +929,9 @@ pub fn tool_options(
     if o != editor.options {
         editor.options = o;
     }
+    if settings.pen.pressure != o.pressure_size {
+        settings.pen.pressure = o.pressure_size;
+    }
     if *synced != Some(o) {
         signals.set("opt_size", f64::from(o.size));
         signals.set("opt_size_text", format!("{} px", o.size));
@@ -959,17 +961,29 @@ mod tests {
 
     #[test]
     fn keys_pick_tools() {
-        assert_eq!(tool_for_key("b", false), Some(Tool::Pencil));
-        assert_eq!(tool_for_key("u", false), Some(Tool::Rectangle));
-        assert_eq!(tool_for_key("u", true), Some(Tool::Ellipse));
-        assert_eq!(tool_for_key("q", false), None);
+        let map = crate::keymap::Keymap::default();
+        let ran = |t: &str| map.commands_for(&crate::keymap::Chord::parse(t).unwrap());
+        assert_eq!(ran("B"), ["tool-pencil"]);
+        assert_eq!(ran("U"), ["tool-rect"]);
+        assert_eq!(ran("Shift+U"), ["tool-ellipse"]);
+        assert!(ran("Q").is_empty());
+        // Every tool has a key, and its tooltip names it.
+        for tool in Tool::ALL {
+            assert!(!map.chords(tool.button_id()).is_empty(), "{tool:?}");
+        }
     }
 
     #[test]
     fn pressure_scales_the_brush_but_never_below_one_pixel() {
-        assert_eq!(pressure_size(8, 1.0), 8);
-        assert_eq!(pressure_size(8, 0.5), 4);
-        assert_eq!(pressure_size(8, 0.0), 1);
+        let pen = PenSettings::default();
+        assert_eq!(pressure_size(8, 1.0, &pen), 8);
+        assert_eq!(pressure_size(8, 0.5, &pen), 4);
+        assert_eq!(pressure_size(8, 0.0, &pen), 1);
+        let firm = PenSettings {
+            curve: 2.0,
+            ..PenSettings::default()
+        };
+        assert_eq!(pressure_size(8, 0.5, &firm), 2);
     }
 
     #[test]

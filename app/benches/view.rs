@@ -280,6 +280,7 @@ fn main() {
                 Phase::Done => {}
             }
         })
+        .before(pixl::keymap::read_keys)
         .before(pixl::input::navigate),
     )
     .add_plugin(BenchCapture(world_capture))

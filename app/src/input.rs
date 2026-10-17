@@ -5,14 +5,16 @@ use std::time::{Duration, Instant};
 use lumenui::ecs::system::SystemParam;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
-    Key, ModifiersState, MouseWheel, NamedKey, PointerButton, PointerData, PointerMoved,
-    PointerPressed, PointerReleased, WindowFocused,
+    ModifiersState, MouseWheel, PointerButton, PointerData, PointerMoved, PointerPressed,
+    PointerReleased,
 };
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 
 use crate::editor::Editor;
 use crate::home::Home;
+use crate::keymap::KeyCommands;
+use crate::settings::{Settings, WheelMode};
 use crate::view::View;
 
 /// One pointer event, in the order it happened.
@@ -62,21 +64,6 @@ impl PointerInput<'_, '_> {
     /// This tick's pointer events, in the order they happened.
     pub fn events(&mut self) -> Vec<Pointer> {
         pointer_events(&mut self.pressed, &mut self.moved, &mut self.released)
-    }
-}
-
-/// The key messages of a tick, and whether a text field has the keys.
-#[derive(SystemParam)]
-pub struct KeyInput<'w, 's> {
-    pub pressed: MessageReader<'w, 's, KeyPressed>,
-    pub released: MessageReader<'w, 's, KeyReleased>,
-    focused: Query<'w, 's, (), (With<Focused>, With<TextInput>)>,
-}
-
-impl KeyInput<'_, '_> {
-    /// Whether keyboard focus is in a text field, where keys type text.
-    pub fn typing(&self) -> bool {
-        !self.focused.is_empty()
     }
 }
 
@@ -156,21 +143,27 @@ impl PanKeys {
         self.up || self.left || self.down || self.right
     }
 
-    /// The flag of the key `c` (lowercase), if it is a pan key.
-    fn flag(&mut self, c: &str) -> Option<&mut bool> {
-        match c {
-            "w" => Some(&mut self.up),
-            "a" => Some(&mut self.left),
-            "s" => Some(&mut self.down),
-            "d" => Some(&mut self.right),
-            _ => None,
+    /// The pan keys the keymap says are held.
+    pub fn held(keys: &KeyCommands) -> Self {
+        Self {
+            up: keys.holds("pan-up"),
+            left: keys.holds("pan-left"),
+            down: keys.holds("pan-down"),
+            right: keys.holds("pan-right"),
         }
     }
 
     /// How far the view moves, in screen pixels, while these keys are held
-    /// for `dt`. The camera moves the way the key points, so the document
-    /// moves the other way: W shows more of what is above.
+    /// for `dt` at the default speeds. The camera moves the way the key
+    /// points, so the document moves the other way: W shows more of what is
+    /// above.
     pub fn offset(self, dt: Duration, fast: bool) -> (f64, f64) {
+        self.offset_at(dt, fast, KEY_PAN_SPEED, KEY_PAN_FAST)
+    }
+
+    /// [`Self::offset`] at `speed` screen pixels per second, `faster` times
+    /// that with Shift held.
+    pub fn offset_at(self, dt: Duration, fast: bool, speed: f64, faster: f64) -> (f64, f64) {
         let axis = |neg: bool, pos: bool| f64::from(i8::from(neg) - i8::from(pos));
         let (x, y) = (axis(self.left, self.right), axis(self.up, self.down));
         if x == 0.0 && y == 0.0 {
@@ -178,7 +171,7 @@ impl PanKeys {
         }
         // Diagonals move at the same speed as the axes.
         let len = (x * x + y * y).sqrt();
-        let speed = KEY_PAN_SPEED * if fast { KEY_PAN_FAST } else { 1.0 };
+        let speed = speed * if fast { faster } else { 1.0 };
         let d = speed * dt.min(KEY_PAN_MAX_STEP).as_secs_f64() / len;
         (x * d, y * d)
     }
@@ -199,11 +192,26 @@ pub struct Navigation {
     /// The part of a pixel the key pan has moved and the view not yet: the
     /// view moves in whole pixels.
     keys_carry: (f64, f64),
+    /// The part of a zoom step the wheel has turned and the view not yet.
+    wheel_carry: f64,
 }
 
 impl Navigation {
-    /// Moves `view` for the pan keys held since the last call, at `now`.
+    /// Moves `view` for the pan keys held since the last call, at `now`,
+    /// at the default speeds.
     pub fn key_pan(&mut self, view: &mut View, now: Instant, fast: bool) {
+        self.key_pan_at(view, now, fast, KEY_PAN_SPEED, KEY_PAN_FAST);
+    }
+
+    /// [`Self::key_pan`] at the speeds the navigation settings give.
+    pub fn key_pan_at(
+        &mut self,
+        view: &mut View,
+        now: Instant,
+        fast: bool,
+        speed: f64,
+        faster: f64,
+    ) {
         if !self.keys.any() {
             self.keys_moved = None;
             self.keys_carry = (0.0, 0.0);
@@ -212,7 +220,9 @@ impl Navigation {
         let Some(last) = self.keys_moved.replace(now) else {
             return;
         };
-        let (dx, dy) = self.keys.offset(now.saturating_duration_since(last), fast);
+        let (dx, dy) =
+            self.keys
+                .offset_at(now.saturating_duration_since(last), fast, speed, faster);
         let (cx, cy) = (self.keys_carry.0 + dx, self.keys_carry.1 + dy);
         let (wx, wy) = (cx.trunc(), cy.trunc());
         self.keys_carry = (cx - wx, cy - wy);
@@ -222,105 +232,92 @@ impl Navigation {
     }
 }
 
-/// The character a key press carries, lowercased, if any.
-pub fn key_char(key: &Key) -> Option<String> {
-    match key {
-        Key::Character(c) => Some(c.to_lowercase()),
-        Key::Named(_) => None,
-    }
-}
-
 /// Zooms with the wheel and the zoom keys, pans with a middle-button drag,
-/// a drag while the space bar is held, or W, A, S and D held down. Returns,
-/// through the [`Navigation`] resource, whether a pan holds the pointer so
-/// the tools leave it alone.
+/// a drag while the pan key (the space bar) is held, the wheel when the
+/// navigation settings make it pan, or the pan keys (W, A, S and D) held
+/// down. Returns, through the [`Navigation`] resource, whether a pan holds
+/// the pointer so the tools leave it alone.
 #[allow(clippy::too_many_arguments)]
 pub fn navigate(
     mut view: ResMut<View>,
     mut nav: ResMut<Navigation>,
     editor: Res<Editor>,
+    settings: Res<Settings>,
     mut wheel: MessageReader<MouseWheel>,
-    mut keys: KeyInput,
+    keys: Res<KeyCommands>,
     mut pointer: PointerInput,
     modifiers: Res<ModifiersState>,
-    mut focus: MessageReader<WindowFocused>,
     home: Res<Home>,
     wake: Option<Res<WakeDeadline>>,
     mut status: Signals,
 ) {
+    let s = &settings.navigation;
+    let held = modifiers.0;
     for w in wheel.read() {
-        if !view.contains(w.position) || w.delta.y == 0.0 {
+        if home.open || !view.contains(w.position) {
             continue;
         }
-        let anchor = view.stage_point(w.position);
-        let zoom = view.step(w.delta.y < 0.0);
-        view.zoom_at(zoom, anchor);
+        let flip = if s.invert_wheel { -1.0 } else { 1.0 };
+        let (dx, dy) = (f64::from(w.delta.x) * flip, f64::from(w.delta.y) * flip);
+        let zooms = match s.wheel {
+            WheelMode::Zoom => dy != 0.0,
+            WheelMode::Pan => held.ctrl || held.super_,
+        };
+        if zooms {
+            let anchor = if s.zoom_to_cursor {
+                view.stage_point(w.position)
+            } else {
+                view.middle()
+            };
+            nav.wheel_zoom(&mut view, dy, s.wheel_zoom_speed, anchor);
+        }
+        // A scroll the wheel does not zoom with pans; with Shift a vertical
+        // wheel pans sideways.
+        let (px, py) = match (zooms, held.shift) {
+            (true, _) => (if s.wheel == WheelMode::Zoom { dx } else { 0.0 }, 0.0),
+            (false, true) => (dx + dy, 0.0),
+            (false, false) => (dx, dy),
+        };
+        if px != 0.0 || py != 0.0 {
+            view.pan(-px * s.pan_speed, -py * s.pan_speed);
+        }
     }
     if home.open {
         // The canvas is not there: what was meant for it is dropped.
-        wheel.clear();
-        keys.pressed.clear();
-        keys.released.clear();
         pointer.events();
         nav.keys = PanKeys::default();
         nav.panning = None;
         nav.space_held = false;
         return;
     }
-    let text = keys.typing();
-    // Keys that go to a text field, or to another window, no longer move
-    // the view: their release may never arrive here.
-    if text || focus.read().any(|f| !f.focused) {
-        nav.keys = PanKeys::default();
-    }
-    let held = modifiers.0;
-    for k in keys.pressed.read() {
-        if text {
-            continue;
-        }
-        if k.key == Key::Named(NamedKey::Space) {
-            nav.space_held = true;
-            continue;
-        }
-        let m = k.modifiers;
-        if m.ctrl || m.super_ || m.alt || held.ctrl || held.super_ || held.alt {
-            continue;
-        }
-        if let Some(c) = key_char(&k.key)
-            && let Some(held) = nav.keys.flag(&c)
-        {
-            *held = true;
-            continue;
-        }
+    nav.space_held = keys.holds("pan-drag");
+    nav.keys = PanKeys::held(&keys);
+    for (id, _) in &keys.pressed {
         let anchor = nav
             .hover
-            .filter(|h| view.contains(*h))
+            .filter(|h| view.contains(*h) && s.zoom_to_cursor)
             .map_or_else(|| view.middle(), |h| view.stage_point(h));
-        match key_char(&k.key).as_deref() {
-            Some("+" | "=") => {
+        match id.as_str() {
+            "zoom-in" => {
                 let z = view.step(true);
                 view.zoom_at(z, anchor);
             }
-            Some("-") => {
+            "zoom-out" => {
                 let z = view.step(false);
                 view.zoom_at(z, anchor);
             }
-            Some("0") => view.fit(editor.doc.width(), editor.doc.height()),
-            Some("1") => view.zoom_at(1.0, anchor),
+            "zoom-fit" => view.fit(editor.doc.width(), editor.doc.height()),
+            "zoom-100" => view.zoom_at(1.0, anchor),
             _ => {}
         }
     }
-    for k in keys.released.read() {
-        if k.key == Key::Named(NamedKey::Space) {
-            nav.space_held = false;
-        }
-        if let Some(c) = key_char(&k.key)
-            && let Some(held) = nav.keys.flag(&c)
-        {
-            *held = false;
-        }
-    }
-    nav.key_pan(&mut view, Instant::now(), modifiers.0.shift);
+    nav.key_pan_at(
+        &mut view,
+        Instant::now(),
+        held.shift,
+        s.key_pan_speed,
+        s.key_pan_fast,
+    );
     if nav.keys.any() {
         // Keep ticking while a pan key is down, so the view keeps moving.
         crate::repaint_soon(&wake);
@@ -352,6 +349,29 @@ pub fn navigate(
     let zoom = format!("{}%", (view.zoom * 100.0 * 10.0).round() / 10.0);
     if status.get::<String>("status_zoom").as_deref() != Some(zoom.as_str()) {
         status.set("status_zoom", zoom);
+    }
+}
+
+/// The wheel distance of one notch, in logical pixels: the window turns a
+/// line of wheel travel into this many.
+pub const WHEEL_NOTCH: f64 = 32.0;
+
+impl Navigation {
+    /// Zooms `view` by a wheel scroll of `dy` pixels: one zoom step per
+    /// notch at a `speed` of 1, smaller scrolls (a trackpad's) adding up
+    /// until they make a step.
+    pub fn wheel_zoom(&mut self, view: &mut View, dy: f64, speed: f64, anchor: (f64, f64)) {
+        // Turning back starts fresh, so the view answers at once.
+        if self.wheel_carry * dy < 0.0 {
+            self.wheel_carry = 0.0;
+        }
+        self.wheel_carry += dy * speed / WHEEL_NOTCH;
+        while self.wheel_carry.abs() >= 0.999 {
+            let inward = self.wheel_carry < 0.0;
+            let z = view.step(inward);
+            view.zoom_at(z, anchor);
+            self.wheel_carry -= self.wheel_carry.signum();
+        }
     }
 }
 

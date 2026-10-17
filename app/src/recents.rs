@@ -17,8 +17,12 @@ use serde_json::{Value, json};
 /// The id pixl keeps its user data under, whatever directory it runs from.
 pub const APP_ID: &str = "pixl";
 
-/// How many documents the list keeps.
+/// How many documents the list keeps unless the files settings say
+/// otherwise.
 pub const MAX_RECENTS: usize = 30;
+
+/// The most documents a saved list is read with, whatever the setting.
+const READ_AT_MOST: usize = 200;
 
 /// The longest side of a thumbnail. A larger document is sampled down by a
 /// whole step, so its pixels stay square.
@@ -54,6 +58,8 @@ pub struct Recents {
     /// memory only.
     dir: Option<PathBuf>,
     pub entries: Vec<Recent>,
+    /// How many documents the list keeps and shows.
+    pub limit: usize,
     /// Bumped on every change, including a thumbnail that finished drawing.
     pub revision: u64,
     /// Thumbnails being drawn.
@@ -77,6 +83,7 @@ impl Recents {
         Self {
             dir: Some(dir),
             entries,
+            limit: MAX_RECENTS,
             revision: 1,
             work: Vec::new(),
         }
@@ -85,9 +92,15 @@ impl Recents {
     /// A list that is never written anywhere.
     pub fn in_memory() -> Self {
         Self {
+            limit: MAX_RECENTS,
             revision: 1,
             ..Self::default()
         }
+    }
+
+    /// The entries the start screen shows: the newest [`Self::limit`].
+    pub fn shown(&self) -> &[Recent] {
+        &self.entries[..self.entries.len().min(self.limit.max(1))]
     }
 
     /// The thumbnail file of `entry`, when it has one on disk.
@@ -140,7 +153,10 @@ impl Recents {
             }
         }
         self.entries.insert(0, entry);
-        for dropped in self.entries.split_off(self.entries.len().min(MAX_RECENTS)) {
+        for dropped in self
+            .entries
+            .split_off(self.entries.len().min(self.limit.max(1)))
+        {
             if let Some(t) = self.thumb_path(&dropped) {
                 let _ = std::fs::remove_file(t);
             }
@@ -232,7 +248,7 @@ fn parse(v: &Value) -> Vec<Recent> {
                 thumb: e.get("thumb").and_then(Value::as_str).map(str::to_string),
             })
         })
-        .take(MAX_RECENTS)
+        .take(READ_AT_MOST)
         .collect()
 }
 

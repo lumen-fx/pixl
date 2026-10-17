@@ -3,9 +3,7 @@
 //! come back as click messages on the ids the markup carries.
 
 use lumenui::ecs::query::Added;
-use lumenui::lumen_core::input::{
-    EditCommitted, ModifiersState, PointerButton, PointerPressed, PointerReleased,
-};
+use lumenui::lumen_core::input::{EditCommitted, PointerButton, PointerPressed, PointerReleased};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::history::Transaction;
@@ -13,7 +11,7 @@ use pixl_core::{BlendMode, LayerId, LayerKind, Rgba, Scope};
 
 use crate::editor::Editor;
 use crate::home::Home;
-use crate::input::{KeyInput, key_char};
+use crate::keymap::KeyCommands;
 use crate::tools::{hex, set_if_changed};
 use crate::view::parse_hex;
 
@@ -463,39 +461,26 @@ pub fn color_controls(
     }
 }
 
-/// Undo and redo from the keyboard: Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y.
+/// Undo and redo from the keyboard, with the keys the keymap gives them
+/// (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y by default). A held key repeats.
 pub fn history_keys(
     mut editor: ResMut<Editor>,
     mut panels: ResMut<Panels>,
-    mut keys: KeyInput,
-    modifiers: Res<ModifiersState>,
+    keys: Res<KeyCommands>,
     home: Res<Home>,
 ) {
     // The start screen keeps the editor's keys until a document shows.
-    let typing = keys.typing() || home.open;
+    if home.open {
+        return;
+    }
     let editor = &mut *editor;
-    for k in keys.pressed.read() {
-        let command = k.modifiers.ctrl || k.modifiers.super_ || modifiers.0.ctrl;
-        if typing || !command {
-            continue;
-        }
-        // With Ctrl held a platform may report the control character
-        // instead of the letter.
-        let name = key_char(&k.key).map(|c| match c.as_str() {
-            "\x1a" => "z".to_string(),
-            "\x19" => "y".to_string(),
-            _ => c,
-        });
-        match name.as_deref() {
-            Some("z") if k.modifiers.shift => {
-                close_edit(editor, &mut panels);
-                editor.redo();
-            }
-            Some("z") => {
+    for (id, _) in &keys.pressed {
+        match id.as_str() {
+            "undo" => {
                 close_edit(editor, &mut panels);
                 editor.undo();
             }
-            Some("y") => {
+            "redo" => {
                 close_edit(editor, &mut panels);
                 editor.redo();
             }

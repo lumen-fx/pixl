@@ -283,6 +283,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     Step::Wait => {}
                 }
             })
+            .before(pixl::keymap::read_keys)
             .before(pixl::input::navigate)
             .before(pixl::panels::panel_clicks)
             .before(pixl::files::file_commands),

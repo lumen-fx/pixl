@@ -3,13 +3,13 @@
 //! autosave recovery copy pixl-core keeps beside a saved document.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use lumenui::ecs::change_detection::Mut;
 use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::ecs::system::SystemParam;
 use lumenui::ecs::world::World;
-use lumenui::lumen_core::input::{MenuClicked, ModifiersState};
+use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::gif::{GifOptions, export_gif, import_gif};
@@ -19,12 +19,10 @@ use pixl_core::{Background, ColorMode, Document, aseprite};
 
 use crate::editor::Editor;
 use crate::home::Home;
-use crate::input::{KeyInput, key_char};
+use crate::keymap::KeyCommands;
 use crate::recents::Recents;
+use crate::settings::Settings;
 use crate::view::parse_hex;
-
-/// How often a modified document with a file writes its recovery copy.
-pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(30);
 
 /// Something that replaces the document, waiting for the user to agree to
 /// lose unsaved changes.
@@ -43,14 +41,28 @@ pub enum Replace {
 }
 
 /// File work in progress.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct Files {
+    /// Whether opening a document offers its newer recovery copy; the
+    /// files settings turn recovery copies off.
+    pub offer_recovery: bool,
     /// A replacement waiting on the discard question.
     pub confirming: Option<Replace>,
     /// The document whose newer recovery copy is on offer.
     pub recovery: Option<PathBuf>,
     /// When the recovery copy was last written, and for which revision.
     last_autosave: Option<(Instant, u64)>,
+}
+
+impl Default for Files {
+    fn default() -> Self {
+        Self {
+            offer_recovery: true,
+            confirming: None,
+            recovery: None,
+            last_autosave: None,
+        }
+    }
 }
 
 /// The file kinds the dialogs offer.
@@ -131,7 +143,7 @@ pub fn open_path(editor: &mut Editor, files: &mut Files, path: &Path) {
                 editor.imported_from = Some(path.to_path_buf());
             }
             editor.message = (!opened.warnings.is_empty()).then(|| opened.warnings.join("; "));
-            files.recovery = native
+            files.recovery = (native && files.offer_recovery)
                 .then(|| native::find_recovery(path))
                 .flatten()
                 .map(|_| path.to_path_buf());
@@ -417,8 +429,7 @@ pub struct FileInput<'w, 's> {
     clicks: MessageReader<'w, 's, ClickEvent>,
     ids: Query<'w, 's, &'static LumenId>,
     parents: Query<'w, 's, &'static ChildOf>,
-    keys: KeyInput<'w, 's>,
-    modifiers: Res<'w, ModifiersState>,
+    keys: Res<'w, KeyCommands>,
 }
 
 impl FileInput<'_, '_> {
@@ -433,34 +444,33 @@ impl FileInput<'_, '_> {
         }
     }
 
-    /// The ids of the commands chosen this tick.
+    /// The ids of the commands chosen this tick. A shortcut runs the
+    /// command of the menu item with its id.
     fn chosen(&mut self) -> Vec<String> {
         let mut chosen: Vec<String> = self.menu.read().map(|m| m.id.clone()).collect();
         let clicked: Vec<Entity> = self.clicks.read().map(|c| c.entity).collect();
         chosen.extend(clicked.into_iter().filter_map(|e| self.id_of(e)));
-        let typing = self.keys.typing();
-        for k in self.keys.pressed.read() {
-            let ctrl = k.modifiers.ctrl || k.modifiers.super_ || self.modifiers.0.ctrl;
-            if typing || !ctrl || k.repeat {
-                continue;
-            }
-            let shift = k.modifiers.shift;
-            // With Ctrl held a platform may report the control character
-            // instead of the letter.
-            let id = match key_char(&k.key).as_deref() {
-                Some("n" | "\x0e") => "file-new",
-                Some("o" | "\x0f") => "file-open",
-                Some("s" | "\x13") if shift => "file-save-as",
-                Some("s" | "\x13") => "file-save",
-                Some("e" | "\x05") => "file-export-png",
-                Some("w" | "\x17") => "file-close",
-                _ => continue,
-            };
-            chosen.push(id.to_string());
-        }
+        chosen.extend(
+            self.keys
+                .pressed
+                .iter()
+                .filter(|(id, repeat)| !repeat && FILE_COMMANDS.contains(&id.as_str()))
+                .map(|(id, _)| id.clone()),
+        );
         chosen
     }
 }
+
+/// The file commands this system carries out when their key is pressed.
+const FILE_COMMANDS: &[&str] = &[
+    "file-new",
+    "file-open",
+    "file-save",
+    "file-save-as",
+    "file-export-png",
+    "file-export-gif",
+    "file-close",
+];
 
 /// The commands the start screen takes; the editor's others wait until a
 /// document is open.
@@ -673,10 +683,21 @@ pub fn new_form(
     *shown = Some(now);
 }
 
-/// Writes the recovery copy of a modified document that has a file, every
-/// [`AUTOSAVE_EVERY`]. An untitled document has nowhere beside it to keep
-/// one.
-pub fn autosave(editor: Res<Editor>, mut files: ResMut<Files>, wake: Option<Res<WakeDeadline>>) {
+/// Writes the recovery copy of a modified document that has a file, as
+/// often as the files settings say, unless they turn recovery copies off.
+/// An untitled document has nowhere beside it to keep one.
+pub fn autosave(
+    editor: Res<Editor>,
+    mut files: ResMut<Files>,
+    settings: Res<Settings>,
+    wake: Option<Res<WakeDeadline>>,
+) {
+    if files.offer_recovery != settings.files.recovery {
+        files.offer_recovery = settings.files.recovery;
+    }
+    let Some(every) = settings.autosave_every() else {
+        return;
+    };
     let Some(path) = editor.path.as_ref() else {
         return;
     };
@@ -686,14 +707,14 @@ pub fn autosave(editor: Res<Editor>, mut files: ResMut<Files>, wake: Option<Res<
     let now = Instant::now();
     match files.last_autosave {
         None => files.last_autosave = Some((now, editor.saved_revision)),
-        Some((at, revision)) if revision != editor.revision && now - at >= AUTOSAVE_EVERY => {
+        Some((at, revision)) if revision != editor.revision && now - at >= every => {
             if native::write_recovery(&editor.doc, path).is_ok() {
                 files.last_autosave = Some((now, editor.revision));
             }
         }
         Some((at, _)) => {
             if let Some(wake) = wake {
-                wake.request(at + AUTOSAVE_EVERY);
+                wake.request(at + every);
             }
         }
     }

@@ -125,6 +125,7 @@ fn drive(steps: Vec<Step>) -> Vec<View> {
                 }
             }
         })
+        .before(pixl::keymap::read_keys)
         .before(pixl::input::navigate),
     )
     .add_systems(

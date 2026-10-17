@@ -78,6 +78,9 @@ menu row switches the UI to the platform's sans-serif instead. The tool
 icons are pixl's own, drawn in `app/assets/icons/draw.py` in the theme's ink
 colors, and share pixl's license.
 
+pixl keeps its settings in `settings.json` in its data folder, beside the
+recent list, and remembers the theme and font switches there.
+
 The editor builds against Lumen 0.0.10, which is not on crates.io yet. Until it
 is, building `pixl` needs `lumenui` and `lumenui-canvas` patched in from a Lumen
 checkout, and CI fails on the app crate. A release build reads its

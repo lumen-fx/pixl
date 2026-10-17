@@ -84,9 +84,14 @@ pub fn show_home(
     editor: Res<Editor>,
     mut home: ResMut<Home>,
     mut recents: ResMut<Recents>,
+    settings: Res<crate::settings::Settings>,
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
+    if recents.limit != settings.files.recent_count {
+        recents.limit = settings.files.recent_count;
+        home.shown = None;
+    }
     if editor.generation != home.seen_generation {
         home.seen_generation = editor.generation;
         home.open = false;
@@ -124,7 +129,7 @@ pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> Strin
     }
     let filter = filter.trim().to_lowercase();
     let mut out = String::new();
-    for entry in &recents.entries {
+    for entry in recents.shown() {
         let name = entry
             .path
             .file_name()
