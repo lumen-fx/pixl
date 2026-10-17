@@ -14,7 +14,7 @@ use pixl_core::tools::shapes;
 use pixl_core::transform::Pixels;
 use pixl_core::{
     Brush, Canvas, Color, CompositeOptions, Error, Ink, Point, Raster, Rect, Rgba, Scope, SelectOp,
-    Selection, ToolContext, composite, edit_cel,
+    Selection, ToolContext, composite,
 };
 
 use crate::editor::{Editor, Tool};
@@ -377,12 +377,12 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
     } else {
         editor.tool
     };
-    let (layer, frame) = (editor.layer, editor.frame);
+    let layer = editor.layer;
     match tool {
         Tool::Pencil | Tool::Eraser => {
             let ink = ink_for(editor, tool, button, eraser_end);
             let ctx = context(editor);
-            let image = match editor.doc.target_image(layer, frame) {
+            let image = match editor.target_image() {
                 Ok(image) => image,
                 Err(e) => {
                     refuse(editor, e);
@@ -403,7 +403,7 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
             } else {
                 // The stroke reads the canvas's symmetry to know how many
                 // copies it draws.
-                match editor.doc.target(layer, frame) {
+                match editor.target() {
                     Ok(target) => {
                         let canvas = Canvas::new(target, &ctx);
                         Line::Steady(PencilStroke::new(
@@ -450,15 +450,9 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                 contiguous: editor.options.contiguous,
             };
             let ctx = context(editor);
-            let done = edit_cel(
-                &mut editor.doc,
-                &mut editor.history,
-                "Fill",
-                layer,
-                frame,
-                &ctx,
-                |canvas| fill::bucket_fill(canvas, p, &ink, &opts, None),
-            );
+            let done = editor.edit("Fill", &ctx, |canvas| {
+                fill::bucket_fill(canvas, p, &ink, &opts, None)
+            });
             match done {
                 Ok(((), dirty)) if !dirty.is_empty() => editor.touch_pixels(),
                 Ok(_) => {}
@@ -485,7 +479,7 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
             })
         }
         Tool::Move => {
-            let image = match editor.doc.target_image(layer, frame) {
+            let image = match editor.target_image() {
                 Ok(image) => image,
                 Err(e) => {
                     refuse(editor, e);
@@ -541,12 +535,11 @@ fn stroke_to(editor: &mut Editor, session: &mut Session, p: Point, pressure: f32
     else {
         return;
     };
-    let (layer, frame) = (editor.layer, editor.frame);
     let pressed = match line {
         Line::Pressure { size, pen } => Some(editor.brush(pressure_size(*size, pressure, pen))),
         Line::Steady(_) => None,
     };
-    let Ok(target) = editor.doc.target(layer, frame) else {
+    let Ok(target) = editor.target() else {
         return;
     };
     let mut canvas = Canvas::new(target, ctx);
@@ -621,13 +614,12 @@ fn extend(
 }
 
 fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point, shift: bool) {
-    let (layer, frame) = (editor.layer, editor.frame);
     match session {
         Session::Stroke {
             mut tx, line, ctx, ..
         } => {
             if let Line::Steady(stroke) = line
-                && let Ok(target) = editor.doc.target(layer, frame)
+                && let Ok(target) = editor.target()
             {
                 let mut canvas = Canvas::new(target, &ctx);
                 stroke.finish(&mut canvas);
@@ -652,20 +644,12 @@ fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point
             let filled = editor.options.filled;
             let b = editor.brush(editor.options.size);
             let ctx = context(editor);
-            let done = edit_cel(
-                &mut editor.doc,
-                &mut editor.history,
-                tool.label(),
-                layer,
-                frame,
-                &ctx,
-                |canvas| match tool {
-                    Tool::Line => paint::line(canvas, from, to, &b, &ink),
-                    Tool::Rectangle => paint::rectangle(canvas, from, to, filled, &b, &ink),
-                    Tool::Ellipse => paint::ellipse(canvas, from, to, filled, &b, &ink),
-                    _ => {}
-                },
-            );
+            let done = editor.edit(tool.label(), &ctx, |canvas| match tool {
+                Tool::Line => paint::line(canvas, from, to, &b, &ink),
+                Tool::Rectangle => paint::rectangle(canvas, from, to, filled, &b, &ink),
+                Tool::Ellipse => paint::ellipse(canvas, from, to, filled, &b, &ink),
+                _ => {}
+            });
             match done {
                 Ok(((), dirty)) if !dirty.is_empty() => editor.touch_pixels(),
                 Ok(_) => {}
@@ -728,8 +712,7 @@ fn selection_of(
 /// Puts the lifted pixels of `rect` back at `offset` from where they were,
 /// starting again from the cel as it was before the move.
 fn place(editor: &mut Editor, original: &Raster, rect: Rect, offset: Point) {
-    let (layer, frame) = (editor.layer, editor.frame);
-    let Ok(target) = editor.doc.target(layer, frame) else {
+    let Ok(target) = editor.target() else {
         return;
     };
     let clear = match original {

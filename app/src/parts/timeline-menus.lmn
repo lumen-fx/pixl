@@ -1,74 +1,72 @@
-<column id="timeline-popups" class="popups">
-  <menu id="frame-menu">
-    <menuitem id="fm-new" label="New empty frame"/>
-    <menuitem id="fm-duplicate" label="Copy frames"/>
-    <menuitem id="fm-delete" label="Delete frames"/>
-    <separator/>
-    <menuitem id="fm-link" label="Link cels"/>
-    <menuitem id="fm-unlink" label="Unlink cels"/>
-    <menuitem id="fm-clear" label="Clear cels"/>
-    <separator/>
-    <menuitem id="fm-tag" label="New tag from frames"/>
-    <menuitem id="fm-reverse" label="Reverse frames"/>
-  </menu>
-  <menu id="tag-menu">
-    <menuitem id="tm-edit" label="Tag properties..."/>
-    <menuitem id="tm-select" label="Select its frames"/>
-    <separator/>
-    <menuitem id="tm-delete" label="Delete tag"/>
-  </menu>
+<menu id="frame-menu">
+  <menuitem id="fm-new" label="New empty frame"/>
+  <menuitem id="fm-duplicate" label="Copy frames"/>
+  <menuitem id="fm-delete" label="Delete frames"/>
+  <separator/>
+  <menuitem id="fm-link" label="Link cels"/>
+  <menuitem id="fm-unlink" label="Unlink cels"/>
+  <menuitem id="fm-clear" label="Clear cels"/>
+  <separator/>
+  <menuitem id="fm-tag" label="New tag from frames"/>
+  <menuitem id="fm-reverse" label="Reverse frames"/>
+</menu>
+<menu id="tag-menu">
+  <menuitem id="tm-edit" label="Tag properties..."/>
+  <menuitem id="tm-select" label="Select its frames"/>
+  <separator/>
+  <menuitem id="tm-delete" label="Delete tag"/>
+</menu>
 
-  <dialog open="tag_open">
-    <column class="dialog-card">
-      <label class="dialog-title" text="Tag"/>
-      <row class="dialog-row">
-        <label class="field-label" text="Name"/>
-        <input id="tag-name" class="name-field" bind-text="tag_name" text=""/>
+<dialog open="tag_open">
+  <column class="dialog-card">
+    <label class="dialog-title" text="Tag"/>
+    <row class="dialog-row">
+      <label class="field-label" text="Name"/>
+      <input id="tag-name" class="name-field" bind-text="tag_name" text=""/>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Frames"/>
+      <input id="tag-from" class="tl-number" type="number" min="1" bind-text="tag_from" value="1"/>
+      <label class="option-label" text="to"/>
+      <input id="tag-to" class="tl-number" type="number" min="1" bind-text="tag_to" value="1"/>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Color"/>
+      <row id="tag-colors" class="tag-colors">
+        <tile id="tag-color-1" class="tag-choice choice-1"/>
+        <tile id="tag-color-2" class="tag-choice choice-2"/>
+        <tile id="tag-color-3" class="tag-choice choice-3"/>
+        <tile id="tag-color-4" class="tag-choice choice-4"/>
+        <tile id="tag-color-5" class="tag-choice choice-5"/>
+        <tile id="tag-color-6" class="tag-choice choice-6"/>
+        <tile id="tag-color-7" class="tag-choice choice-7"/>
+        <tile id="tag-color-8" class="tag-choice choice-8"/>
       </row>
-      <row class="dialog-row">
-        <label class="field-label" text="Frames"/>
-        <input id="tag-from" class="tl-number" type="number" min="1" bind-text="tag_from" value="1"/>
-        <label class="option-label" text="to"/>
-        <input id="tag-to" class="tl-number" type="number" min="1" bind-text="tag_to" value="1"/>
-      </row>
-      <row class="dialog-row">
-        <label class="field-label" text="Color"/>
-        <row id="tag-colors" class="tag-colors">
-          <tile id="tag-color-1" class="tag-choice choice-1"/>
-          <tile id="tag-color-2" class="tag-choice choice-2"/>
-          <tile id="tag-color-3" class="tag-choice choice-3"/>
-          <tile id="tag-color-4" class="tag-choice choice-4"/>
-          <tile id="tag-color-5" class="tag-choice choice-5"/>
-          <tile id="tag-color-6" class="tag-choice choice-6"/>
-          <tile id="tag-color-7" class="tag-choice choice-7"/>
-          <tile id="tag-color-8" class="tag-choice choice-8"/>
-        </row>
-      </row>
-      <row class="dialog-row">
-        <label class="field-label" text="Direction"/>
-        <dropdown id="tag-direction" class="new-choice" bind-value="tag_direction">
-          <option value="Forward"/>
-          <option value="Reverse"/>
-          <option value="Ping-pong"/>
-        </dropdown>
-      </row>
-      <row class="dialog-row">
-        <label class="field-label" text="Repeat"/>
-        <input id="tag-repeat" class="tl-number" type="number" min="0" max="9999" bind-text="tag_repeat" value="0"/>
-        <label class="option-label" text="times, 0 for always"/>
-      </row>
-      <row class="dialog-actions">
-        <button id="tag-delete" text="Delete"/>
-        <spacer/>
-        <button id="tag-cancel" text="Cancel"/>
-        <button id="tag-ok" class="primary" default="true" text="OK"/>
-      </row>
-    </column>
-  </dialog>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Direction"/>
+      <dropdown id="tag-direction" class="new-choice" bind-value="tag_direction">
+        <option value="Forward"/>
+        <option value="Reverse"/>
+        <option value="Ping-pong"/>
+      </dropdown>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Repeat"/>
+      <input id="tag-repeat" class="tl-number" type="number" min="0" max="9999" bind-text="tag_repeat" value="0"/>
+      <label class="option-label" text="times, 0 for always"/>
+    </row>
+    <row class="dialog-actions">
+      <button id="tag-delete" text="Delete"/>
+      <spacer/>
+      <button id="tag-cancel" text="Cancel"/>
+      <button id="tag-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>
 
-  <tile class="probe">
-    <tile id="probe-onion-before"/>
-    <tile id="probe-onion-after"/>
-    <tile id="probe-tag" class="choice-1"/>
-  </tile>
-</column>
+<tile class="probe">
+  <tile id="probe-onion-before"/>
+  <tile id="probe-onion-after"/>
+  <tile id="probe-tag" class="choice-1"/>
+</tile>

@@ -148,6 +148,8 @@ fn the_tag_dialog_adds_a_tag() {
         vec![
             Step::Click("tl-tag"),
             Step::Wait,
+            Step::Wait,
+            Step::Wait,
             Step::Text("tag_name", "bounce"),
             Step::Text("tag_direction", "Ping-pong"),
             Step::Text("tag_from", "5"),

@@ -1085,6 +1085,14 @@ impl Document {
         Ok(self.bounds())
     }
 
+    /// The image of a layer's mask, which a mask edit writes to.
+    pub fn mask_image(&self, layer: LayerId) -> Result<ImageId, Error> {
+        match &self.layer(layer).ok_or(Error::LayerNotFound(layer))?.kind {
+            LayerKind::Raster { mask: Some(m), .. } => Ok(m.image),
+            _ => Err(Error::NotRaster(layer)),
+        }
+    }
+
     /// A paintable view of a layer's mask. Masks ignore the alpha lock.
     pub fn mask_target(&mut self, layer: LayerId) -> Result<Target<'_>, Error> {
         if self.effective_locks(layer)?.pixels {

@@ -216,6 +216,8 @@ pub struct Editor {
     pub frame: usize,
     /// The layer tools paint on.
     pub layer: LayerId,
+    /// Tools paint the active layer's mask instead of its pixels.
+    pub mask_edit: bool,
     pub fg: Rgba,
     pub bg: Rgba,
     pub tool: Tool,
@@ -259,6 +261,7 @@ impl Editor {
             name: None,
             frame: 0,
             layer,
+            mask_edit: false,
             fg: Rgba::BLACK,
             bg: Rgba::WHITE,
             tool: Tool::default(),
@@ -389,9 +392,21 @@ impl Editor {
         self.frame = self.frame.min(self.doc.frame_count().saturating_sub(1));
     }
 
-    /// Adds a raster layer above the active one and makes it active.
+    /// Adds a raster layer above the active one, or at the top of the
+    /// active group, and makes it active.
     pub fn add_layer(&mut self) {
-        let at = self.placement_above(self.layer);
+        let into_group = self
+            .doc
+            .layer(self.layer)
+            .is_some_and(|l| matches!(l.kind, LayerKind::Group { .. }));
+        let at = if into_group {
+            Placement {
+                parent: Some(self.layer),
+                index: None,
+            }
+        } else {
+            self.placement_above(self.layer)
+        };
         let name = format!("Layer {}", self.doc.walk().len() + 1);
         let id = self
             .history
@@ -481,7 +496,7 @@ impl Editor {
     }
 
     /// The placement just above `id`, in its own group.
-    fn placement_above(&self, id: LayerId) -> Placement {
+    pub fn placement_above(&self, id: LayerId) -> Placement {
         let parent = self.doc.parent_of(id);
         let siblings = match parent {
             None => self.doc.layers(),

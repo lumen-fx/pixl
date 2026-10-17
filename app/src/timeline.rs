@@ -294,6 +294,9 @@ pub struct Timeline {
     /// The tag the tag dialog edits; `None` while it makes a new one.
     editing_tag: Option<usize>,
     tag_color: Option<Rgba>,
+    /// The tag dialog's name, and the ticks left to write it into the
+    /// field, which has focus once the dialog shows (lumen-fx/lumen#536).
+    tag_name: (String, u8),
     /// What the grid showed when it was last written.
     grid: Option<u64>,
     names: Option<String>,
@@ -316,6 +319,7 @@ impl Default for Timeline {
             menu_on: None,
             editing_tag: None,
             tag_color: None,
+            tag_name: (String::new(), 0),
             grid: None,
             names: None,
             current: None,
@@ -703,6 +707,15 @@ pub fn timeline_input(
     }
     let editor = &mut *editor;
     let tl = &mut *timeline;
+    if tl.tag_name.1 > 0 {
+        tl.tag_name.1 -= 1;
+        if let Some(field) = dom::get_by_id("tag-name") {
+            field.set_text(&tl.tag_name.0);
+        }
+        if let Some(c) = tl.tag_color {
+            mark_tag_color(c);
+        }
+    }
     let shift = input.modifiers.0.shift;
     let order: Vec<LayerId> = rows(&editor.doc, &tree).iter().map(|(_, l)| l.id).collect();
     let top = order.first().copied().unwrap_or(editor.layer);
@@ -1097,6 +1110,7 @@ fn open_tag_dialog(
         color: first_tag_color(),
     });
     tl.tag_color = Some(tag.color);
+    tl.tag_name = (tag.name.clone(), 2);
     signals.set("tag_name", tag.name.clone());
     signals.set("tag_from", (tag.from + 1).to_string());
     signals.set("tag_to", (tag.to + 1).to_string());
@@ -1377,9 +1391,15 @@ pub fn playback(
                 {
                     pb.shown.pop_front();
                 }
-                // Late frames start their time when they show, so a slow
-                // frame does not cut the next one short.
-                pb.due = Some(now.max(due) + frame_time(&editor.doc, editor.frame));
+                // The next frame is due a duration after this one was due,
+                // which keeps the document's pace; a frame that showed more
+                // than a frame late starts the count again from now.
+                let next = due + frame_time(&editor.doc, editor.frame);
+                pb.due = Some(if next < now {
+                    now + frame_time(&editor.doc, editor.frame)
+                } else {
+                    next
+                });
             }
             None => pb.stop(),
         }

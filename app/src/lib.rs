@@ -8,6 +8,7 @@ pub mod home;
 pub mod image_menu;
 pub mod input;
 pub mod keymap;
+pub mod layers;
 pub mod palette;
 pub mod panels;
 pub mod perf;
@@ -133,6 +134,18 @@ pub fn editor(source: Source) -> App {
         .insert_resource(timeline::Timeline::default())
         .insert_resource(timeline::LayerTree::default())
         .insert_resource(preview::PreviewPane::default())
+        .insert_resource(layers::LayerPanel::default())
+        .insert_signal("lp_open", false)
+        .insert_signal("lp_has_mask", false)
+        .insert_signal("lp_name", "")
+        .insert_signal("lp_opacity", "100")
+        .insert_signal("lp_blend", "Normal")
+        .insert_signal("tag_open", false)
+        .insert_signal("tag_name", "")
+        .insert_signal("tag_from", "1")
+        .insert_signal("tag_to", "1")
+        .insert_signal("tag_direction", "Forward")
+        .insert_signal("tag_repeat", "0")
         .add_systems(
             TickStage::Systems,
             (
@@ -160,6 +173,7 @@ pub fn editor(source: Source) -> App {
                         .chain(),
                     // then the panels and the tools.
                     (
+                        layers::layer_input,
                         panels::panel_clicks,
                         panels::history_keys,
                         panels::layer_controls,
@@ -188,6 +202,7 @@ pub fn editor(source: Source) -> App {
                     preview::draw_preview,
                     tools::track_pointer,
                     panels::show_panels,
+                    layers::show_layers,
                     files::autosave,
                     files::show_message,
                     (

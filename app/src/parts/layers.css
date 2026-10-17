@@ -1,0 +1,50 @@
+/* The layers list's marks: color tags, locks, group folds, clipping and
+   masks, and where a dragged layer would land. */
+
+.layer-row { gap: var(--space-2); }
+.layer-row.hidden .layer-name { text-color: var(--text-faint); }
+.layer-row.reference .layer-name { text-color: var(--text-dim); }
+.layer-tag { width: 3; height: 16; radius: 1; }
+.layer-tag.untagged { bg: #00000000; }
+.layer-lock {
+  width: 10;
+  height: 10;
+  min-height: 10;
+  padding: 0;
+  radius: 2;
+  border: 1px solid var(--text-faint);
+  bg: #00000000;
+}
+.layer-lock.some { bg: var(--text-faint); }
+.layer-lock.all { bg: var(--accent); border: 1px solid var(--accent-press); }
+.layer-lock:hover { border: 1px solid var(--text); }
+.layer-fold {
+  width: 14;
+  height: 14;
+  min-height: 14;
+  padding: 0;
+  border: none;
+  bg: #00000000;
+  text-color: var(--text-dim);
+  font-size: var(--font-size-small);
+}
+.layer-fold:hover { bg: var(--surface-4); text-color: var(--text); }
+.layer-clip { width: 6; height: 10; border-left: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); }
+.layer-kind { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.layer-mask {
+  height: 16;
+  min-height: 16;
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-small);
+  bg: var(--surface-2);
+  text-color: var(--text-dim);
+  border: 1px solid var(--edge);
+}
+.layer-mask.off { text-color: var(--text-faint); }
+.layer-mask.editing { bg: var(--accent); text-color: var(--on-accent); border: 1px solid var(--accent-press); }
+.layer-row.drop-above { border-top: 2px solid var(--accent); }
+.layer-row.drop-below { border-bottom: 2px solid var(--accent); }
+.layer-row.drop-into { bg: var(--accent-soft); }
+
+.lp-card { min-width: 520; }
+.tag-choice.no-tag { bg: var(--surface-1); }

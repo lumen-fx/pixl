@@ -1,0 +1,98 @@
+<menu id="layer-menu">
+  <menuitem id="lm-new" label="New layer"/>
+  <menuitem id="lm-group" label="New group"/>
+  <menuitem id="lm-reference" label="Reference image..."/>
+  <menuitem id="lm-duplicate" label="Duplicate"/>
+  <menuitem id="lm-delete" label="Delete"/>
+  <separator/>
+  <menuitem id="lm-merge" label="Merge down"/>
+  <menuitem id="lm-flatten" label="Flatten"/>
+  <separator/>
+  <menuitem id="lm-mask-add" label="Add mask"/>
+  <menuitem id="lm-mask-edit" label="Edit mask or pixels"/>
+  <menuitem id="lm-mask-toggle" label="Mask on or off"/>
+  <menuitem id="lm-mask-apply" label="Apply mask"/>
+  <menuitem id="lm-mask-delete" label="Delete mask"/>
+  <separator/>
+  <menuitem id="lm-clip" label="Clip to the layer below, or stop"/>
+  <menuitem id="lm-lock-pixels" label="Lock pixels, or unlock"/>
+  <menuitem id="lm-lock-alpha" label="Lock alpha, or unlock"/>
+  <menuitem id="lm-lock-position" label="Lock position, or unlock"/>
+  <menuitem id="lm-lock-all" label="Lock all, or unlock all"/>
+  <menuitem id="lm-collapse" label="Collapse or expand group"/>
+  <separator/>
+  <menuitem id="lm-properties" label="Properties..."/>
+</menu>
+
+<dialog open="lp_open">
+  <column class="dialog-card lp-card">
+    <label class="dialog-title" text="Layer properties"/>
+    <row class="dialog-row">
+      <label class="field-label" text="Name"/>
+      <input id="lp-name" class="name-field" bind-text="lp_name" text=""/>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Opacity"/>
+      <input id="lp-opacity" class="tl-number" type="number" min="0" max="100" bind-text="lp_opacity" value="100"/>
+      <label class="option-label" text="%"/>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Blend mode"/>
+      <dropdown id="lp-blend" class="new-choice" bind-value="lp_blend">
+        <option value="Normal"/>
+        <option value="Multiply"/>
+        <option value="Screen"/>
+        <option value="Overlay"/>
+        <option value="Darken"/>
+        <option value="Lighten"/>
+        <option value="Color dodge"/>
+        <option value="Color burn"/>
+        <option value="Hard light"/>
+        <option value="Soft light"/>
+        <option value="Difference"/>
+        <option value="Exclusion"/>
+        <option value="Hue"/>
+        <option value="Saturation"/>
+        <option value="Color"/>
+        <option value="Luminosity"/>
+        <option value="Add"/>
+        <option value="Subtract"/>
+      </dropdown>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Color tag"/>
+      <row class="tag-colors">
+        <tile id="lp-tag-0" class="tag-choice no-tag"/>
+        <tile id="lp-tag-1" class="tag-choice choice-1"/>
+        <tile id="lp-tag-2" class="tag-choice choice-2"/>
+        <tile id="lp-tag-3" class="tag-choice choice-3"/>
+        <tile id="lp-tag-4" class="tag-choice choice-4"/>
+        <tile id="lp-tag-5" class="tag-choice choice-5"/>
+        <tile id="lp-tag-6" class="tag-choice choice-6"/>
+        <tile id="lp-tag-7" class="tag-choice choice-7"/>
+        <tile id="lp-tag-8" class="tag-choice choice-8"/>
+      </row>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Clipping"/>
+      <checkbox id="lp-clip" label="Clip to the layer below" bind-checked="lp_clip"/>
+    </row>
+    <row class="dialog-row">
+      <label class="field-label" text="Locks"/>
+      <checkbox id="lp-lock-pixels" label="Pixels" bind-checked="lp_lock_pixels"/>
+      <checkbox id="lp-lock-alpha" label="Alpha" bind-checked="lp_lock_alpha"/>
+      <checkbox id="lp-lock-position" label="Position" bind-checked="lp_lock_position"/>
+    </row>
+    <if signal="lp_has_mask" mode="hide">
+      <row class="dialog-row">
+        <label class="field-label" text="Mask"/>
+        <checkbox id="lp-mask-on" label="On" bind-checked="lp_mask_on"/>
+      </row>
+    </if>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="lp-cancel" text="Cancel"/>
+      <button id="lp-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>

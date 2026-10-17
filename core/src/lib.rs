@@ -39,7 +39,7 @@ pub use rig::{
 };
 pub use selection::{SelectOp, Selection};
 pub use tools::{
-    Bayer, Brush, BrushShape, Canvas, Ink, Symmetry, SymmetryMode, ToolContext, edit_cel,
+    Bayer, Brush, BrushShape, Canvas, Ink, Symmetry, SymmetryMode, ToolContext, edit_cel, edit_mask,
 };
 pub use transform::{
     Affine, CanvasTransform, CelTransform, Pixels, Resample, crop, resize_canvas, transform_canvas,

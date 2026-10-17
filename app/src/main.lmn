@@ -139,7 +139,10 @@
           <scroll id="layer-list" class="layer-list"/>
           <row class="layer-actions">
             <tooltip text="New layer"><button id="layer-add" class="flat small" text="New"/></tooltip>
+            <tooltip text="New group"><button id="layer-group" class="flat small" text="Group"/></tooltip>
+            <tooltip text="Duplicate layer"><button id="layer-duplicate" class="flat small" text="Copy"/></tooltip>
             <tooltip text="Delete layer"><button id="layer-delete" class="flat small" text="Delete"/></tooltip>
+            <tooltip text="Layer properties"><button id="layer-properties" class="flat small" text="Props"/></tooltip>
             <spacer/>
             <tooltip text="Move up"><button id="layer-up" class="flat small" text="Up"/></tooltip>
             <tooltip text="Move down"><button id="layer-down" class="flat small" text="Down"/></tooltip>
@@ -167,6 +170,7 @@
   <include src="parts/palette.lmn"/>
   <include src="parts/timeline-menus.lmn"/>
   <include src="parts/exports.lmn"/>
+  <include src="parts/layer-menus.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

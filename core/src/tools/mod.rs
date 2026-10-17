@@ -670,6 +670,28 @@ pub fn edit_cel<R>(
     Ok((out, dirty))
 }
 
+/// Runs a tool on a layer's mask as a single undo step and returns its
+/// result and the area it changed. Painting reads each color's lightness:
+/// white shows the layer, black hides it.
+pub fn edit_mask<R>(
+    doc: &mut Document,
+    history: &mut History,
+    label: &str,
+    layer: LayerId,
+    ctx: &ToolContext,
+    tool: impl FnOnce(&mut Canvas) -> R,
+) -> Result<(R, Rect), Error> {
+    let image = doc.mask_image(layer)?;
+    let mut tx = history.begin(doc, label, Scope::Images(vec![image]));
+    tx.watch(doc, image);
+    let target = doc.mask_target(layer)?;
+    let mut canvas = Canvas::new(target, ctx);
+    let out = tool(&mut canvas);
+    let dirty = canvas.dirty();
+    history.commit(doc, tx);
+    Ok((out, dirty))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

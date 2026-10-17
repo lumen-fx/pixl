@@ -7,7 +7,7 @@ use lumenui::lumen_core::input::{EditCommitted, PointerButton, PointerPressed, P
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::history::Transaction;
-use pixl_core::{BlendMode, LayerId, LayerKind, Rgba, Scope};
+use pixl_core::{BlendMode, LayerId, Rgba, Scope};
 
 use crate::editor::Editor;
 use crate::home::Home;
@@ -63,7 +63,6 @@ pub fn escape(text: &str) -> String {
 /// What each panel last showed, and a layer property edit in progress.
 #[derive(Resource, Default)]
 pub struct Panels {
-    layers: Option<String>,
     palette: Option<String>,
     history: Option<String>,
     history_len: Option<usize>,
@@ -76,42 +75,6 @@ pub struct Panels {
     /// An opacity or blend change, kept open while the control is dragged
     /// so it lands as one undo step.
     editing: Option<Transaction>,
-}
-
-/// The layers list, top layer first, as markup.
-fn layers_markup(editor: &Editor) -> String {
-    let mut rows = String::new();
-    for (depth, layer) in editor.doc.walk().into_iter().rev() {
-        let id = layer.id.0;
-        let active = if layer.id == editor.layer {
-            " active"
-        } else {
-            ""
-        };
-        let eye = if layer.props.visible { "on" } else { "off" };
-        let kind = match layer.kind {
-            LayerKind::Raster { .. } => "",
-            LayerKind::Group { .. } => " group",
-            LayerKind::Reference { .. } => " reference",
-            LayerKind::Skeleton { .. } => " skeleton",
-        };
-        let meta = if layer.props.blend == BlendMode::Normal && layer.props.opacity == 255 {
-            String::new()
-        } else {
-            format!(
-                "{} {}%",
-                blend_name(layer.props.blend),
-                (u32::from(layer.props.opacity) * 100 + 127) / 255
-            )
-        };
-        rows.push_str(&format!(
-            r#"<row id="layer-row-{id}" class="layer-row depth-{depth}{active}{kind}"><button id="layer-eye-{id}" class="layer-eye {eye}" text=""/><label class="layer-name" text="{name}"/><label class="layer-meta" text="{meta}"/></row>"#,
-            depth = depth.min(4),
-            name = escape(&layer.props.name),
-            meta = escape(&meta),
-        ));
-    }
-    rows
 }
 
 fn palette_markup(editor: &Editor) -> String {
@@ -174,7 +137,6 @@ pub fn show_panels(
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mut changed = false;
-    changed |= refresh(&mut panels.layers, "layer-list", layers_markup(&editor));
     changed |= refresh(
         &mut panels.palette,
         "palette-swatches",
@@ -346,7 +308,7 @@ pub fn jump_to(editor: &mut Editor, k: usize) {
 }
 
 /// Ends an opacity or blend edit, making it one undo step.
-fn close_edit(editor: &mut Editor, panels: &mut Panels) {
+pub fn close_edit(editor: &mut Editor, panels: &mut Panels) {
     if let Some(tx) = panels.editing.take() {
         editor.history.commit(&editor.doc, tx);
         editor.touch();

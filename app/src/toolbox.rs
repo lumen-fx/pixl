@@ -23,7 +23,7 @@ use pixl_core::tools::text::BitmapFont;
 use pixl_core::transform::Pixels;
 use pixl_core::{
     Bayer, Brush, Canvas, Color, CompositeOptions, Ink, Point, Raster, Rect, Rgba, Scope, SelectOp,
-    Selection, SymmetryMode, ToolContext, composite_frame, edit_cel,
+    Selection, SymmetryMode, ToolContext, composite_frame,
 };
 
 use crate::editor::{BrushShape, Editor, Tool};
@@ -413,7 +413,7 @@ fn begin_stroke(
     p: Point,
     alt: bool,
 ) -> Option<Session> {
-    let (layer, frame) = (editor.layer, editor.frame);
+    let layer = editor.layer;
     if tool == Tool::CloneStamp && alt {
         toolbox.clone_source = Some(p);
         editor.message = Some(format!("Clone source set at {}, {}", p.x, p.y));
@@ -475,7 +475,7 @@ fn begin_stroke(
         _ => None,
     };
     let ctx = context(editor);
-    let image = match editor.doc.target_image(layer, frame) {
+    let image = match editor.target_image() {
         Ok(image) => image,
         Err(e) => {
             refuse(editor, e);
@@ -496,7 +496,7 @@ fn begin_stroke(
         .history
         .begin(&editor.doc, tool.label(), Scope::Images(vec![image]));
     tx.watch(&editor.doc, image);
-    let target = editor.doc.target(layer, frame).ok()?;
+    let target = editor.target().ok()?;
     let canvas = Canvas::new(target, &ctx);
     let stroke = match tool {
         Tool::Brush => Stroke::Soft(SoftStroke::new(SoftBrush {
@@ -548,8 +548,7 @@ fn stroke_to(editor: &mut Editor, toolbox: &mut Toolbox, s: &mut StrokeSession, 
     let p = Point::new(x.floor() as i32, y.floor() as i32);
     s.at = p;
     let (radius, density) = (toolbox.options.spray_radius, toolbox.options.spray_density);
-    let (layer, frame) = (editor.layer, editor.frame);
-    let Ok(target) = editor.doc.target(layer, frame) else {
+    let Ok(target) = editor.target() else {
         return;
     };
     let mut canvas = Canvas::new(target, &s.ctx);
@@ -572,7 +571,7 @@ fn end_stroke(editor: &mut Editor, s: StrokeSession) {
         ctx, tx, stroke, ..
     } = s;
     if let Stroke::Inked(stroke) = stroke
-        && let Ok(target) = editor.doc.target(editor.layer, editor.frame)
+        && let Ok(target) = editor.target()
     {
         let mut canvas = Canvas::new(target, &ctx);
         stroke.finish(&mut canvas);
@@ -620,16 +619,7 @@ fn widen(pixels: Vec<Point>, brush: &Brush) -> Vec<Point> {
 /// Paints `pixels` with the brush and the shape ink as one undo step.
 fn paint_pixels(editor: &mut Editor, label: &str, pixels: &[Point], brush: &Brush, ink: &Ink) {
     let ctx = context(editor);
-    let (layer, frame) = (editor.layer, editor.frame);
-    let done = edit_cel(
-        &mut editor.doc,
-        &mut editor.history,
-        label,
-        layer,
-        frame,
-        &ctx,
-        |canvas| canvas.stamp_all(pixels, brush, ink),
-    );
+    let done = editor.edit(label, &ctx, |canvas| canvas.stamp_all(pixels, brush, ink));
     match done {
         Ok(((), dirty)) if !dirty.is_empty() => editor.touch_pixels(),
         Ok(_) => {}
@@ -1018,16 +1008,8 @@ fn finish(editor: &mut Editor, toolbox: &mut Toolbox, preview: &mut Preview, p: 
                 Tool::Gradient => {
                     let g = gradient_of(editor, toolbox, button, from, to);
                     let ctx = context(editor);
-                    let (layer, frame) = (editor.layer, editor.frame);
-                    let done = edit_cel(
-                        &mut editor.doc,
-                        &mut editor.history,
-                        "Gradient",
-                        layer,
-                        frame,
-                        &ctx,
-                        |canvas| gradient::gradient(canvas, &g),
-                    );
+                    let done =
+                        editor.edit("Gradient", &ctx, |canvas| gradient::gradient(canvas, &g));
                     match done {
                         Ok(((), dirty)) if !dirty.is_empty() => editor.touch_pixels(),
                         Ok(_) => {}

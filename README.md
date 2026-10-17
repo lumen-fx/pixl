@@ -92,6 +92,21 @@ panel adds, deletes, reorders and hides layers and sets the active layer's
 opacity and blend mode; the history panel lists every edit and jumps to any of
 them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
 
+Layers nest in groups: a new layer goes into the active group, a group's
+fold button hides what it holds, and a layer dragged onto another row lands
+above or below it, or into a group dropped on its middle. Each row shows the
+layer's color tag, its visibility, a lock button that locks or unlocks
+everything, and marks for clipping and a mask. A mask hides the layer where
+it is dark: Add mask starts painting on the mask instead of the pixels, the
+mask button in the row switches between the two, and the mask can be turned
+off, applied to the pixels or deleted. A clipped layer shows only where the
+layer below it does. A reference image (Layer > Reference image) is any
+image pixl opens, placed at the top left at half opacity to trace over; it
+is never exported. The Layer menu, also opened by a right-click on a row,
+duplicates, merges down, flattens, clips, locks pixels, alpha or position,
+and opens the layer's properties: name, opacity, blend mode, color tag,
+clipping, locks and the mask.
+
 Panels sit in docks left, right and below the canvas. Drag the gutter beside
 a dock to resize it. Each panel's header collapses it to its title or hides
 it, and a right-click on the header moves it to another dock or up and down
