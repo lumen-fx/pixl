@@ -97,8 +97,22 @@ menu row switches the UI to the platform's sans-serif instead. The tool
 icons are pixl's own, drawn in `app/assets/icons/draw.py` in the theme's ink
 colors, and share pixl's license.
 
-pixl keeps its settings in `settings.json` in its data folder, beside the
-recent list, and remembers the theme and font switches there.
+Edit > Settings (Ctrl+,) sets how the view moves (what the wheel does, zoom
+speed, zooming around the pointer, scroll and pan key speeds, an inverted
+wheel), how the pen paints (pressure on or off, the pressure curve with a
+preview, the brush size at the lightest and the firmest touch), how the
+canvas looks (checkerboard size and colors, the pixel grid's color and the
+zoom it shows from, a new custom grid's cell, the color around the
+document), the interface (theme, UI font, UI scale, tooltips), files
+(autosave interval, recovery copies, the length of the recent list),
+performance (the progressive redraw threshold, worker threads, the layer
+buffer memory, the performance overlay) and every keyboard shortcut. Each
+change applies at once. Shortcuts start from pixl's own keys or Aseprite's
+or Photoshop's; a key already in use asks before it moves, and the menus show
+the keys in force. The settings are kept in `settings.json` in pixl's data
+folder, beside the recent list. UI scale grows the text and the sizes the
+theme keeps as tokens; a few fixed sizes (list rows, swatches) stay as they
+are.
 
 The editor builds against Lumen 0.0.10, which is not on crates.io yet. Until it
 is, building `pixl` needs `lumenui` and `lumenui-canvas` patched in from a Lumen

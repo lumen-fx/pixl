@@ -13,7 +13,7 @@ use lumenui::lumen_core::input::{
 use lumenui::prelude::*;
 use pixl::recents::Recent;
 use pixl::view::View;
-use pixl::{Editor, Home, Recents, Tool};
+use pixl::{Editor, Home, Recents, Settings, Tool};
 use pixl_core::{Document, Point, Rgba, Selection};
 
 /// Where a pointer step lands.
@@ -54,6 +54,8 @@ pub enum Step {
     Number(&'static str, f64),
     /// A control writing text to a signal, as a dropdown does.
     Text(&'static str, &'static str),
+    /// A control writing a flag to a signal, as a checkbox does.
+    Flag(&'static str, bool),
     /// Runs a closure on the editor.
     Edit(fn(&mut Editor)),
     /// Waits a tick.
@@ -77,6 +79,9 @@ pub struct Outcome {
     pub recents: Vec<Recent>,
     /// The thumbnail file of each recent document, once drawn.
     pub thumbs: Vec<Option<PathBuf>>,
+    pub settings: Settings,
+    /// Whether the settings dialog is open.
+    pub settings_open: bool,
 }
 
 /// The editor's state at the end of a tick.
@@ -93,6 +98,8 @@ struct Snapshot {
     home_open: bool,
     recents: Vec<Recent>,
     thumbs: Vec<Option<PathBuf>>,
+    settings: Settings,
+    settings_open: bool,
 }
 
 fn key(name: &str) -> Key {
@@ -279,6 +286,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     }
                     Step::Number(name, v) => signals.set(name, v),
                     Step::Text(name, v) => signals.set(name, v),
+                    Step::Flag(name, v) => signals.set(name, v),
                     Step::Edit(f) => f(&mut editor),
                     Step::Wait => {}
                 }
@@ -294,6 +302,8 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    editor: Res<Editor>,
                    home: Res<Home>,
                    mut recents: ResMut<Recents>,
+                   settings: Res<Settings>,
+                   signals: Signals,
                    mut tick: Local<usize>| {
                 *tick += 1;
                 // Thumbnails draw on worker threads; the harness waits for
@@ -319,6 +329,8 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         .iter()
                         .map(|e| recents.thumb_path(e))
                         .collect(),
+                    settings: settings.clone(),
+                    settings_open: signals.get::<bool>("settings_open").unwrap_or(false),
                 });
             })
             .after(pixl::view::draw_stage)
@@ -346,6 +358,8 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         home_open: end.home_open,
         recents: end.recents,
         thumbs: end.thumbs,
+        settings: end.settings,
+        settings_open: end.settings_open,
     }
 }
 

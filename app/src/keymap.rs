@@ -8,7 +8,9 @@ use std::fmt;
 
 use lumenui::ecs::change_detection::DetectChanges;
 use lumenui::ecs::system::SystemParam;
-use lumenui::lumen_core::input::{Key, Modifiers, ModifiersState, NamedKey, WindowFocused};
+use lumenui::lumen_core::input::{
+    Key, MenuClicked, Modifiers, ModifiersState, NamedKey, WindowFocused,
+};
 use lumenui::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -532,12 +534,16 @@ impl KeyCommands {
 /// The key messages and what decides whether keys run commands.
 #[derive(SystemParam)]
 pub struct KeySources<'w, 's> {
+    menu: MessageReader<'w, 's, MenuClicked>,
     pressed: MessageReader<'w, 's, KeyPressed>,
     released: MessageReader<'w, 's, KeyReleased>,
     focus: MessageReader<'w, 's, WindowFocused>,
     typing: Query<'w, 's, (), (With<Focused>, With<TextInput>)>,
     modifiers: Res<'w, ModifiersState>,
 }
+
+/// The commands their menu item runs through the keymap's queue.
+const MENU_RUNS: &[&str] = &["undo", "redo"];
 
 /// The dialogs that keep the editor's keys while open.
 const MODAL_SIGNALS: &[&str] = &[
@@ -567,6 +573,13 @@ pub fn read_keys(
         }
     }
     out.pressed.clear();
+    // A menu item named for a command no other system reads the menu for
+    // runs it as its key would.
+    for m in keys.menu.read() {
+        if MENU_RUNS.contains(&m.id.as_str()) {
+            out.pressed.push((m.id.clone(), false));
+        }
+    }
     let typing = !keys.typing.is_empty();
     let modal = MODAL_SIGNALS
         .iter()

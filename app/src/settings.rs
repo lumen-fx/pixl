@@ -11,14 +11,12 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use lumenui::lumen_core::app_paths;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
-use pixl_core::native::write_atomic;
 use serde::{Deserialize, Serialize};
 
 use crate::home::Home;
-use crate::recents::APP_ID;
+use crate::store::Store;
 
 /// The settings file in pixl's data folder.
 pub const SETTINGS_FILE: &str = "settings.json";
@@ -408,10 +406,11 @@ fn finite(v: f64, fallback: f64) -> f64 {
     if v.is_finite() { v } else { fallback }
 }
 
-/// Where the settings are kept: a file, or memory only.
+/// Where the settings are kept: `settings.json` in a [`Store`], which
+/// keeps nothing for a store without a folder.
 #[derive(Resource, Default)]
 pub struct SettingsStore {
-    path: Option<PathBuf>,
+    store: Store,
     /// The settings as last written.
     saved: Option<Settings>,
     /// When a change was first seen unsaved.
@@ -419,27 +418,29 @@ pub struct SettingsStore {
 }
 
 impl SettingsStore {
-    /// The user's settings file in pixl's data folder.
+    /// The user's settings, in pixl's data folder.
     pub fn user() -> (Settings, Self) {
-        Self::load(app_paths::data_dir_for(APP_ID).join(SETTINGS_FILE))
+        Self::load(Store::user())
     }
 
-    /// The settings in `path`, defaults when it holds none.
-    pub fn load(path: impl Into<PathBuf>) -> (Settings, Self) {
-        let path = path.into();
-        let settings = std::fs::read(&path)
+    /// The settings `store` holds, defaults when it holds none.
+    pub fn load(store: Store) -> (Settings, Self) {
+        let settings = store
+            .path(SETTINGS_FILE)
+            .and_then(|p| std::fs::read(p).ok())
             .map(|b| Settings::from_json(&b))
             .unwrap_or_default();
-        let store = Self {
-            path: Some(path),
+        let kept = Self {
+            store,
             saved: Some(settings.clone()),
             dirty_since: None,
         };
-        (settings, store)
+        (settings, kept)
     }
 
-    pub fn path(&self) -> Option<&PathBuf> {
-        self.path.as_ref()
+    /// The settings file, when the store has a folder.
+    pub fn path(&self) -> Option<PathBuf> {
+        self.store.path(SETTINGS_FILE)
     }
 
     /// Writes `settings` when they changed and have settled. Returns when
@@ -453,12 +454,7 @@ impl SettingsStore {
         if now.saturating_duration_since(since) < SAVE_AFTER {
             return Some(since + SAVE_AFTER);
         }
-        if let Some(path) = &self.path {
-            if let Some(dir) = path.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            let _ = write_atomic(path, &settings.to_json());
-        }
+        let _ = self.store.save(SETTINGS_FILE, settings);
         self.saved = Some(settings.clone());
         self.dirty_since = None;
         None
@@ -643,14 +639,14 @@ mod tests {
     fn a_change_is_written_once_it_settles() {
         let dir = std::env::temp_dir().join(format!("pixl-settings-{}", std::process::id()));
         let path = dir.join(SETTINGS_FILE);
-        let (mut s, mut store) = SettingsStore::load(&path);
+        let (mut s, mut store) = SettingsStore::load(Store::at(&dir));
         let t0 = Instant::now();
         assert_eq!(store.save(&s, t0), None);
         s.pen.pressure = false;
         assert!(store.save(&s, t0).is_some());
         assert!(!path.exists());
         assert_eq!(store.save(&s, t0 + SAVE_AFTER), None);
-        let (back, _) = SettingsStore::load(&path);
+        let (back, _) = SettingsStore::load(Store::at(&dir));
         assert!(!back.pen.pressure);
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -10,6 +10,7 @@ pub mod panels;
 pub mod progressive;
 pub mod recents;
 pub mod settings;
+pub mod settings_ui;
 pub mod store;
 pub mod themes;
 pub mod tools;
@@ -77,6 +78,8 @@ pub fn editor(source: Source) -> App {
         .insert_resource(SettingsStore::default())
         .insert_resource(keymap::Keymap::default())
         .insert_resource(keymap::KeyCommands::default())
+        .insert_resource(settings_ui::SettingsDialog::default())
+        .insert_signal("settings_open", false)
         .insert_resource(Editor::blank())
         .insert_resource(view::View::default())
         .insert_resource(view::ViewColors::default())
@@ -112,6 +115,9 @@ pub fn editor(source: Source) -> App {
                 // What the user did this tick, in the order it applies.
                 (
                     keymap::read_keys,
+                    settings_ui::settings_commands,
+                    settings_ui::keys_page,
+                    settings_ui::settings_form,
                     settings::look_switches,
                     settings::show_look,
                     view::read_view_colors,
@@ -145,6 +151,8 @@ pub fn editor(source: Source) -> App {
                     tools::show_tool,
                     tools::stage_cursor,
                     settings::save_settings,
+                    settings_ui::pressure_preview,
+                    settings_ui::menu_labels,
                 )
                     .chain(),
             )

@@ -1,0 +1,141 @@
+/* The settings dialog, and the looks its Interface page picks. */
+
+.settings-card { width: 760; height: 560; gap: var(--space-4); }
+.settings-head { align: center; gap: var(--space-4); }
+.settings-split { grow: 1; min-height: 0; }
+.settings-nav {
+  flex-basis: 150;
+  min-width: 110;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  bg: var(--surface-1);
+  border: 1px solid var(--edge);
+}
+.settings-tab {
+  justify: start;
+  bg: #00000000;
+  border: none;
+  text-color: var(--text-dim);
+}
+.settings-tab:hover { bg: var(--surface-4); text-color: var(--text); }
+.settings-tab.active { bg: var(--accent-soft); text-color: var(--text); }
+.settings-body {
+  grow: 1;
+  min-width: 260;
+  bg: var(--surface-1);
+  border: 1px solid var(--edge);
+}
+.settings-page { gap: var(--space-4); padding: 12; }
+.settings-section { text-color: var(--text); padding: var(--space-3) 0 0 0; }
+.setting { align: center; gap: var(--space-4); }
+.setting-label { width: 130; text-color: var(--text-dim); }
+.setting-hint { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.setting-readout { text-color: var(--text); }
+.setting-number { width: 96; }
+.setting-choice { width: 120; }
+.setting-slider { width: 180; }
+.setting-value { width: 36; text-color: var(--text-dim); font-size: var(--font-size-small); }
+.setting-color { width: 64; }
+.pressure-preview {
+  width: 180;
+  height: 72;
+  bg: var(--surface-0);
+  border: 1px solid var(--edge);
+}
+
+.keys-message { text-color: var(--text); font-size: var(--font-size-small); }
+.keys-conflict { align: center; gap: var(--space-3); }
+.keys-list { gap: 0; }
+.keys-group { text-color: var(--text); padding: var(--space-4) 0 var(--space-2) 0; }
+.key-row {
+  align: center;
+  gap: var(--space-2);
+  min-height: 24;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--edge-soft);
+}
+.key-row:hover { bg: var(--surface-3); }
+.key-label { text-color: var(--text-dim); }
+.key-chord { min-width: 120; justify: center; }
+.key-row.clash .key-chord { border: 1px solid var(--accent); }
+.key-row.capturing .key-chord { bg: var(--accent); text-color: var(--on-accent); }
+
+/* The colors the pressure preview draws with. */
+#probe-curve { bg: var(--accent); }
+#probe-curve-grid { bg: var(--edge-soft); }
+
+/* Interface > Show tooltips off. */
+.pixl.no-tooltips .tooltip { display: none; }
+
+/* Interface > UI scale: the size tokens at each step. The tool icons are
+   12 pixel images, so they grow by whole multiples only. */
+.pixl.scale-125 {
+  --font-size-ui: 20;
+  --font-size-small: 18;
+  --space-1: 3;
+  --space-2: 5;
+  --space-3: 8;
+  --space-4: 10;
+  --control-h: 28;
+  --tool-size: 38;
+  --bar-h: 32;
+  --options-h: 40;
+  --header-h: 28;
+  --panel-w: 330;
+  --toolbar-w: 48;
+  --swatch: 20;
+  --scrollbar: 8;
+}
+.pixl.scale-150 {
+  --font-size-ui: 24;
+  --font-size-small: 21;
+  --space-1: 3;
+  --space-2: 6;
+  --space-3: 9;
+  --space-4: 12;
+  --control-h: 33;
+  --tool-size: 45;
+  --icon-size: 36;
+  --bar-h: 39;
+  --options-h: 48;
+  --header-h: 33;
+  --panel-w: 396;
+  --toolbar-w: 57;
+  --swatch: 24;
+  --scrollbar: 9;
+}
+.pixl.scale-200 {
+  --font-size-ui: 32;
+  --font-size-small: 28;
+  --space-1: 4;
+  --space-2: 8;
+  --space-3: 12;
+  --space-4: 16;
+  --control-h: 44;
+  --tool-size: 60;
+  --icon-size: 48;
+  --bar-h: 52;
+  --options-h: 64;
+  --header-h: 44;
+  --panel-w: 528;
+  --toolbar-w: 76;
+  --swatch: 32;
+  --scrollbar: 12;
+}
+.pixl.font-plain.scale-125 { --font-size-ui: 15; --font-size-small: 14; }
+.pixl.font-plain.scale-150 { --font-size-ui: 18; --font-size-small: 16; }
+.pixl.font-plain.scale-200 { --font-size-ui: 24; --font-size-small: 22; }
+
+/* The dialog grows with the scale, up to the window. */
+.pixl.scale-125 .settings-card { width: 940; height: 680; }
+.pixl.scale-150 .settings-card { width: 1120; height: 800; }
+.pixl.scale-200 .settings-card { width: 1400; height: 880; }
+.pixl.scale-125 .setting-label { width: 162; }
+.pixl.scale-150 .setting-label { width: 195; }
+.pixl.scale-200 .setting-label { width: 260; }
+.pixl.scale-125 .setting-number { width: 120; }
+.pixl.scale-150 .setting-number { width: 144; }
+.pixl.scale-200 .setting-number { width: 192; }
+.pixl.scale-125 .settings-nav { flex-basis: 190; }
+.pixl.scale-150 .settings-nav { flex-basis: 225; }
+.pixl.scale-200 .settings-nav { flex-basis: 300; }

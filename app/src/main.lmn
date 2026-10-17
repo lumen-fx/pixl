@@ -16,6 +16,12 @@
       <menuitem id="file-close" label="Close (Ctrl+W)"/>
     </menu>
     <button id="menu-edit" class="menu-title" text="Edit"/>
+    <menu id="edit-menu">
+      <menuitem id="undo" label="Undo"/>
+      <menuitem id="redo" label="Redo"/>
+      <separator/>
+      <menuitem id="edit-settings" label="Settings..."/>
+    </menu>
     <button id="menu-view" class="menu-title" text="View"/>
     <button id="menu-layer" class="menu-title" text="Layer"/>
     <button id="menu-window" class="menu-title" text="Window"/>
@@ -210,6 +216,8 @@
     </column>
   </dialog>
 
+  <include src="parts/settings.lmn"/>
+
   <dialog open="discard_open">
     <column class="dialog-card">
       <label class="dialog-title" text="Discard unsaved changes?"/>
@@ -269,6 +277,8 @@
     <tile id="probe-marquee-a"/>
     <tile id="probe-marquee-b"/>
     <tile id="probe-preview"/>
+    <tile id="probe-curve"/>
+    <tile id="probe-curve-grid"/>
   </tile>
 
   <row id="statusbar">

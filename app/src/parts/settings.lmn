@@ -1,0 +1,221 @@
+<dialog open="settings_open">
+  <column id="settings-card" class="dialog-card settings-card">
+    <row class="settings-head">
+      <label class="dialog-title" text="Settings"/>
+      <spacer/>
+      <label class="dialog-text" text="Changes apply as you make them."/>
+    </row>
+    <split id="settings-split" class="settings-split">
+      <column id="settings-nav" class="settings-nav">
+        <button id="settings-page-navigation" class="settings-tab active" text="Navigation"/>
+        <button id="settings-page-pen" class="settings-tab" text="Pen"/>
+        <button id="settings-page-canvas" class="settings-tab" text="Canvas"/>
+        <button id="settings-page-interface" class="settings-tab" text="Interface"/>
+        <button id="settings-page-files" class="settings-tab" text="Files"/>
+        <button id="settings-page-performance" class="settings-tab" text="Performance"/>
+        <button id="settings-page-keyboard" class="settings-tab" text="Keyboard"/>
+      </column>
+      <scroll id="settings-body" class="settings-body">
+        <if signal="settings_on_navigation" mode="hide">
+          <column class="settings-page">
+            <label class="settings-section" text="Wheel"/>
+            <row class="setting">
+              <label class="setting-label" text="The wheel"/>
+              <dropdown id="set-wheel-mode" class="setting-choice" bind-value="set_wheel_mode">
+                <option value="Zooms"/>
+                <option value="Pans"/>
+              </dropdown>
+              <label class="setting-hint" text="When it pans, Ctrl with the wheel zooms."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Zoom speed"/>
+              <input id="set-wheel-zoom" class="setting-number" type="number" min="0.1" max="8" step="0.1" bind-text="set_wheel_zoom"/>
+              <label class="setting-hint" text="Zoom steps per wheel notch."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Scroll pan speed"/>
+              <input id="set-pan-speed" class="setting-number" type="number" min="0.1" max="8" step="0.1" bind-text="set_pan_speed"/>
+              <label class="setting-hint" text="Times the scroll's distance."/>
+            </row>
+            <checkbox id="set-zoom-to-cursor" label="Zoom around the pointer" bind-checked="set_zoom_to_cursor"/>
+            <checkbox id="set-invert-wheel" label="Invert the wheel" bind-checked="set_invert_wheel"/>
+            <label class="settings-section" text="Keys"/>
+            <row class="setting">
+              <label class="setting-label" text="Pan key speed"/>
+              <input id="set-key-pan-speed" class="setting-number" type="number" min="50" max="10000" step="50" bind-text="set_key_pan_speed"/>
+              <label class="setting-hint" text="Screen pixels a second."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="With Shift"/>
+              <input id="set-key-pan-fast" class="setting-number" type="number" min="1" max="20" step="0.5" bind-text="set_key_pan_fast"/>
+              <label class="setting-hint" text="Times faster with Shift held."/>
+            </row>
+          </column>
+        </if>
+        <if signal="settings_on_pen" mode="hide">
+          <column class="settings-page">
+            <checkbox id="set-pressure" label="Pressure sets the brush size" bind-checked="set_pressure"/>
+            <row class="setting">
+              <label class="setting-label" text="Curve"/>
+              <slider id="set-pressure-curve" class="setting-slider" min="0.2" max="5" step="0.1" value="1" bind-value="set_pressure_curve"/>
+              <label class="setting-value" bind-text="set_pressure_curve_text" text="1.0"/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Lightest touch"/>
+              <input id="set-pen-min" class="setting-number" type="number" min="0" max="400" step="5" bind-text="set_pen_min"/>
+              <label class="setting-hint" text="Percent of the tool's size."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Full pressure"/>
+              <input id="set-pen-max" class="setting-number" type="number" min="1" max="400" step="5" bind-text="set_pen_max"/>
+              <label class="setting-hint" text="Percent of the tool's size."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Preview"/>
+              <canvas id="pressure-preview" class="pressure-preview"/>
+              <label class="setting-hint" text="Size (up) by pressure."/>
+            </row>
+          </column>
+        </if>
+        <if signal="settings_on_canvas" mode="hide">
+          <column class="settings-page">
+            <label class="settings-section" text="Checkerboard"/>
+            <row class="setting">
+              <label class="setting-label" text="Cell size"/>
+              <input id="set-checker-size" class="setting-number" type="number" min="1" max="128" step="1" bind-text="set_checker_size"/>
+              <label class="setting-hint" text="Screen pixels."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Colors"/>
+              <input id="set-checker-a" class="setting-color" type="color" bind-value="set_checker_a"/>
+              <input id="set-checker-b" class="setting-color" type="color" bind-value="set_checker_b"/>
+              <checkbox id="set-checker-theme" label="The theme's" bind-checked="set_checker_theme"/>
+            </row>
+            <label class="settings-section" text="Pixel grid"/>
+            <row class="setting">
+              <label class="setting-label" text="Shows from"/>
+              <input id="set-grid-from" class="setting-number" type="number" min="100" max="6400" step="100" bind-text="set_grid_from"/>
+              <label class="setting-hint" text="Percent zoom."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Color"/>
+              <input id="set-grid-color" class="setting-color" type="color" alpha="true" bind-value="set_grid_color"/>
+              <checkbox id="set-grid-theme" label="The theme's" bind-checked="set_grid_theme"/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Custom grid"/>
+              <input id="set-custom-grid-w" class="setting-number" type="number" min="1" max="4096" step="1" bind-text="set_custom_grid_w"/>
+              <label class="option-label" text="x"/>
+              <input id="set-custom-grid-h" class="setting-number" type="number" min="1" max="4096" step="1" bind-text="set_custom_grid_h"/>
+              <label class="setting-hint" text="A new custom grid's cell."/>
+            </row>
+            <label class="settings-section" text="Around the document"/>
+            <row class="setting">
+              <label class="setting-label" text="Background"/>
+              <input id="set-background" class="setting-color" type="color" bind-value="set_background"/>
+              <checkbox id="set-background-theme" label="The theme's" bind-checked="set_background_theme"/>
+            </row>
+          </column>
+        </if>
+        <if signal="settings_on_interface" mode="hide">
+          <column class="settings-page">
+            <row class="setting">
+              <label class="setting-label" text="Theme"/>
+              <dropdown id="set-theme" class="setting-choice" bind-value="set_theme">
+                <option value="Dark"/>
+                <option value="Light"/>
+                <option value="High contrast"/>
+                <option value="Retro"/>
+              </dropdown>
+              <label class="setting-hint" text="Window > Themes edits them."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="UI font"/>
+              <dropdown id="set-font" class="setting-choice" bind-value="set_font">
+                <option value="Pixel"/>
+                <option value="Plain"/>
+              </dropdown>
+              <label class="setting-hint" text="Pixelify Sans, or the platform's sans-serif."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="UI scale"/>
+              <dropdown id="set-ui-scale" class="setting-choice" bind-value="set_ui_scale">
+                <option value="100%"/>
+                <option value="125%"/>
+                <option value="150%"/>
+                <option value="200%"/>
+              </dropdown>
+            </row>
+            <checkbox id="set-tooltips" label="Show tooltips" bind-checked="set_tooltips"/>
+          </column>
+        </if>
+        <if signal="settings_on_files" mode="hide">
+          <column class="settings-page">
+            <checkbox id="set-recovery" label="Keep recovery copies of unsaved edits" bind-checked="set_recovery"/>
+            <row class="setting">
+              <label class="setting-label" text="Autosave every"/>
+              <input id="set-autosave" class="setting-number" type="number" min="0" max="3600" step="5" bind-text="set_autosave"/>
+              <label class="setting-hint" text="Seconds; 0 writes none."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Recent documents"/>
+              <input id="set-recent-count" class="setting-number" type="number" min="1" max="200" step="1" bind-text="set_recent_count"/>
+              <label class="setting-hint" text="How many the start screen lists."/>
+            </row>
+          </column>
+        </if>
+        <if signal="settings_on_performance" mode="hide">
+          <column class="settings-page">
+            <row class="setting">
+              <label class="setting-label" text="Renderer"/>
+              <label id="set-renderer" class="setting-readout" bind-text="set_renderer" text="-"/>
+            </row>
+            <checkbox id="set-show-perf" label="Show the performance overlay" bind-checked="set_show_perf"/>
+            <row class="setting">
+              <label class="setting-label" text="Progressive above"/>
+              <input id="set-progressive" class="setting-number" type="number" min="1" max="4096" step="1" bind-text="set_progressive"/>
+              <label class="setting-hint" text="Tiles; a larger redraw shows tile by tile."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Worker threads"/>
+              <input id="set-workers" class="setting-number" type="number" min="0" max="256" step="1" bind-text="set_workers"/>
+              <label class="setting-hint" bind-text="set_workers_hint" text="0 uses one per core."/>
+            </row>
+            <row class="setting">
+              <label class="setting-label" text="Layer buffers"/>
+              <input id="set-buffer-budget" class="setting-number" type="number" min="64" max="65536" step="64" bind-text="set_buffer_budget"/>
+              <label class="setting-hint" text="MiB; past it the bottom layers flatten."/>
+            </row>
+          </column>
+        </if>
+        <if signal="settings_on_keyboard" mode="hide">
+          <column class="settings-page">
+            <row class="setting">
+              <label class="setting-label" text="Preset"/>
+              <dropdown id="set-keys-preset" class="setting-choice" bind-value="set_keys_preset">
+                <option value="pixl"/>
+                <option value="Aseprite"/>
+                <option value="Photoshop"/>
+              </dropdown>
+              <spacer/>
+              <button id="keys-reset-all" class="small" text="Reset all"/>
+            </row>
+            <label id="keys-message" class="keys-message" bind-text="keys_message" text=""/>
+            <if signal="keys_conflict" mode="hide">
+              <row class="keys-conflict">
+                <button id="keys-take" class="small primary" text="Use it here"/>
+                <button id="keys-keep" class="small" text="Cancel"/>
+              </row>
+            </if>
+            <column id="keys-list" class="keys-list"/>
+          </column>
+        </if>
+      </scroll>
+    </split>
+    <row class="dialog-actions">
+      <button id="settings-reset-page" text="Reset this page"/>
+      <spacer/>
+      <button id="settings-done" class="primary" default="true" text="Done"/>
+    </row>
+  </column>
+</dialog>
