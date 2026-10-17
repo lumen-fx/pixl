@@ -223,3 +223,34 @@ fn painting_shows_on_screen_on_the_same_tick() {
         Some([0, 0, 0, 255])
     );
 }
+
+#[test]
+fn a_locked_layer_refuses_a_stroke_and_gains_no_cel() {
+    let mut d = doc();
+    let layer = d.layers()[0].id;
+    d.update_layer(layer, |p| p.locks.pixels = true).unwrap();
+    // The pencil, the eraser and the spray (a toolbox tool).
+    for tool in ["b", "e", "j"] {
+        let steps = with(vec![Step::Key(tool, false)], drag((2, 2), (12, 7), L));
+        let out = drive(editor_over(d.clone()), steps);
+        assert_eq!(out.doc.cel(layer, 0).unwrap(), None, "{tool}");
+        assert!(out.undo.is_empty(), "{tool}: {:?}", out.undo);
+        assert_eq!(
+            out.message.as_deref(),
+            Some("The layer is locked"),
+            "{tool}"
+        );
+    }
+}
+
+#[test]
+fn undoing_the_first_stroke_on_an_empty_frame_takes_its_cel_away() {
+    let d = doc();
+    let layer = d.layers()[0].id;
+    let steps = with(
+        drag((2, 2), (12, 7), L),
+        vec![Step::Ctrl("z", false), Step::Wait],
+    );
+    let out = drive(editor_over(d), steps);
+    assert_eq!(out.doc.cel(layer, 0).unwrap(), None);
+}

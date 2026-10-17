@@ -411,7 +411,7 @@ pub fn rig_clicks(
             clicked.push(id.to_string());
         }
     }
-    if keys.ran("rig-leave", false) {
+    if keys.ran("cancel", false) {
         ui.mode = None;
     }
     // Picking a tool hands the stage back to it.

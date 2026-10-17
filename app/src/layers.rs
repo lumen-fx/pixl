@@ -21,6 +21,8 @@ use pixl_core::{
     edit_mask,
 };
 
+use pixl_core::history::Transaction;
+
 use crate::editor::Editor;
 use crate::home::Home;
 use crate::panels::{Panels, blend_from_name, blend_name, close_edit, escape};
@@ -48,6 +50,25 @@ impl Editor {
         } else {
             self.doc.target_image(self.layer, self.frame)
         }
+    }
+
+    /// Starts the undo step of an edit to what tools paint on, and returns
+    /// the image it writes to. A layer whose pixels are locked is refused
+    /// before anything changes, and the step begins before an empty frame's
+    /// cel is made, so undo takes the new cel away again.
+    pub fn begin_paint(
+        &mut self,
+        label: &str,
+    ) -> std::result::Result<(ImageId, Transaction), Error> {
+        if !self.mask_edit && self.doc.effective_locks(self.layer)?.pixels {
+            return Err(Error::Locked(self.layer));
+        }
+        let mut tx = self
+            .history
+            .begin(&self.doc, label, Scope::Images(Vec::new()));
+        let image = self.target_image()?;
+        tx.watch(&self.doc, image);
+        Ok((image, tx))
     }
 
     /// Runs a tool on [`Editor::target`] as one undo step.

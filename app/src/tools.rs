@@ -14,7 +14,7 @@ use pixl_core::tools::paint::{self, PencilStroke};
 use pixl_core::tools::shapes;
 use pixl_core::transform::Pixels;
 use pixl_core::{
-    Brush, Canvas, Color, CompositeOptions, Error, Ink, Point, Raster, Rect, Rgba, Scope, SelectOp,
+    Brush, Canvas, Color, CompositeOptions, Error, Ink, Point, Raster, Rect, Rgba, SelectOp,
     Selection, ToolContext, composite,
 };
 
@@ -389,18 +389,13 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
         Tool::Pencil | Tool::Eraser => {
             let ink = ink_for(editor, tool, button, eraser_end);
             let ctx = context(editor);
-            let image = match editor.target_image() {
-                Ok(image) => image,
+            let (_, tx) = match editor.begin_paint(tool.label()) {
+                Ok(started) => started,
                 Err(e) => {
                     refuse(editor, e);
                     return None;
                 }
             };
-            let mut tx =
-                editor
-                    .history
-                    .begin(&editor.doc, tool.label(), Scope::Images(vec![image]));
-            tx.watch(&editor.doc, image);
             let size = editor.options.size;
             let pressure = data.kind == PointerKind::Pen && pen.pressure && size > 1;
             let steady = editor.brush(size);
@@ -487,13 +482,6 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
             })
         }
         Tool::Move => {
-            let image = match editor.target_image() {
-                Ok(image) => image,
-                Err(e) => {
-                    refuse(editor, e);
-                    return None;
-                }
-            };
             if let Err(e) = editor.doc.effective_locks(layer).and_then(|l| {
                 if l.position {
                     Err(Error::Locked(layer))
@@ -504,6 +492,17 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                 refuse(editor, e);
                 return None;
             }
+            // An empty frame has nothing to move.
+            if !editor.mask_edit && matches!(editor.doc.cel(layer, editor.frame), Ok(None)) {
+                return None;
+            }
+            let (image, tx) = match editor.begin_paint("Move") {
+                Ok(started) => started,
+                Err(e) => {
+                    refuse(editor, e);
+                    return None;
+                }
+            };
             let original = editor.doc.image(image)?.clone();
             let (rect, selected) = match &editor.selection {
                 Some(s) if !s.is_empty() => (s.bounds(), true),
@@ -512,10 +511,6 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
             if rect.is_empty() {
                 return None;
             }
-            let mut tx = editor
-                .history
-                .begin(&editor.doc, "Move", Scope::Images(vec![image]));
-            tx.watch(&editor.doc, image);
             Some(Session::Move {
                 button,
                 from: p,

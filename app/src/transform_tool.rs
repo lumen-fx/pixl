@@ -7,7 +7,7 @@
 //! The pixels are resampled by nearest neighbor, RotSprite or clean edge,
 //! so no new colors appear.
 
-use lumenui::lumen_core::input::{Key, NamedKey, PointerButton};
+use lumenui::lumen_core::input::PointerButton;
 use lumenui::prelude::*;
 use pixl_core::history::Transaction;
 use pixl_core::transform::draw_transformed;
@@ -128,11 +128,12 @@ fn local_of(rect: Rect, shape: Shape, p: (f64, f64)) -> Option<(f64, f64)> {
     Some(((x - pivot.0) / hw, (y - pivot.1) / hh))
 }
 
-/// The commands and keys the free transform reads.
+/// The commands the free transform reads: its buttons, and apply and
+/// cancel (Enter and Escape by default).
 #[derive(lumenui::ecs::system::SystemParam)]
-pub struct XfInput<'w, 's> {
+pub struct XfInput<'w> {
     chosen: Res<'w, Chosen>,
-    keys: MessageReader<'w, 's, KeyPressed>,
+    keys: Res<'w, crate::keymap::KeyCommands>,
 }
 
 /// The free transform in progress, if any, and its resampling.
@@ -168,6 +169,11 @@ fn start(editor: &mut Editor) -> Option<Session> {
             return None;
         }
         _ => {}
+    }
+    // An empty frame has nothing to lift, and no cel is made for it.
+    if matches!(editor.doc.cel(layer, frame), Ok(None)) {
+        editor.message = Some("Nothing to transform".into());
+        return None;
     }
     let image = match editor.doc.target_image(layer, frame) {
         Ok(i) => i,
@@ -282,7 +288,7 @@ pub fn use_transform(
     mut pointer: PointerInput,
     mut signals: Signals,
 ) {
-    let XfInput { chosen, mut keys } = input;
+    let XfInput { chosen, keys } = input;
     let editor = &mut *editor;
     let ft = &mut *ft;
     let resample = match signals.get::<String>("opt_resample").as_deref() {
@@ -298,7 +304,6 @@ pub fn use_transform(
     // Leaving the tool keeps what was done.
     if editor.tool != Tool::Transform {
         pointer.events();
-        keys.clear();
         if let Some(s) = ft.session.take() {
             finish(editor, s, true);
             aids.transform_box = None;
@@ -333,12 +338,10 @@ pub fn use_transform(
             _ => {}
         }
     }
-    for k in keys.read() {
-        match k.key {
-            Key::Named(NamedKey::Enter) => keep = Some(true),
-            Key::Named(NamedKey::Escape) => keep = Some(false),
-            _ => {}
-        }
+    if keys.ran("apply", false) {
+        keep = Some(true);
+    } else if keys.ran("cancel", false) {
+        keep = Some(false);
     }
     // The angle field turns the box to a typed angle.
     if let Some(a) = signals

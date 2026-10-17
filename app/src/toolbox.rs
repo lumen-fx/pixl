@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use lumenui::ecs::system::SystemParam;
-use lumenui::lumen_core::input::{Key, NamedKey, PointerButton};
+use lumenui::lumen_core::input::PointerButton;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::history::Transaction;
@@ -23,7 +23,7 @@ use pixl_core::tools::shapes;
 use pixl_core::tools::text::BitmapFont;
 use pixl_core::transform::Pixels;
 use pixl_core::{
-    Bayer, Brush, Canvas, Color, CompositeOptions, Ink, Point, Raster, Rect, Rgba, Scope, SelectOp,
+    Bayer, Brush, Canvas, Color, CompositeOptions, Ink, Point, Raster, Rect, Rgba, SelectOp,
     Selection, SymmetryMode, ToolContext, composite_frame,
 };
 
@@ -417,7 +417,6 @@ fn begin_stroke(
     p: Point,
     alt: bool,
 ) -> Option<Session> {
-    let layer = editor.layer;
     if tool == Tool::CloneStamp && alt {
         toolbox.clone_source = Some(p);
         editor.message = Some(format!("Clone source set at {}, {}", p.x, p.y));
@@ -479,27 +478,13 @@ fn begin_stroke(
         _ => None,
     };
     let ctx = context(editor);
-    let image = match editor.target_image() {
-        Ok(image) => image,
+    let (_, tx) = match editor.begin_paint(tool.label()) {
+        Ok(started) => started,
         Err(e) => {
             refuse(editor, e);
             return None;
         }
     };
-    if let Err(e) = editor.doc.effective_locks(layer).and_then(|l| {
-        if l.pixels {
-            Err(pixl_core::Error::Locked(layer))
-        } else {
-            Ok(())
-        }
-    }) {
-        refuse(editor, e);
-        return None;
-    }
-    let mut tx = editor
-        .history
-        .begin(&editor.doc, tool.label(), Scope::Images(vec![image]));
-    tx.watch(&editor.doc, image);
     let target = editor.target().ok()?;
     let canvas = Canvas::new(target, &ctx);
     let stroke = match tool {
@@ -1134,12 +1119,12 @@ fn show(editor: &Editor, toolbox: &Toolbox, preview: &mut Preview) {
     }
 }
 
-/// The keys the toolbox reads (Enter and Escape), whether they go to a text
-/// field or the start screen instead, and the theme's outline color.
+/// The commands the toolbox answers (apply and cancel, Enter and Escape by
+/// default), whether the start screen has the keys instead, and the theme's
+/// outline color.
 #[derive(SystemParam)]
-pub struct BoxKeys<'w, 's> {
-    pressed: MessageReader<'w, 's, KeyPressed>,
-    typing: Query<'w, 's, (), (With<Focused>, With<TextInput>)>,
+pub struct BoxKeys<'w> {
+    commands: Res<'w, crate::keymap::KeyCommands>,
     home: Res<'w, crate::Home>,
     colors: Res<'w, crate::view::ViewColors>,
 }
@@ -1161,7 +1146,7 @@ pub fn use_toolbox(
     mut preview: ResMut<Preview>,
     place: Place,
     mut pointer: PointerInput,
-    mut keys: BoxKeys,
+    keys: BoxKeys,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let editor = &mut *editor;
@@ -1173,29 +1158,22 @@ pub fn use_toolbox(
     if toolbox.session.is_some() && !session_fits(toolbox.session.as_ref(), editor.tool) {
         cancel(editor, toolbox, &mut preview);
     }
-    let typing = !keys.typing.is_empty() || keys.home.open;
-    for k in keys.pressed.read() {
-        if typing || toolbox.session.is_none() {
-            continue;
-        }
-        match &k.key {
-            Key::Named(NamedKey::Escape) => cancel(editor, toolbox, &mut preview),
-            Key::Named(NamedKey::Enter) => {
-                if let Some(Session::Corners {
-                    button,
-                    select,
-                    points,
-                    ..
-                }) = toolbox.session.take()
-                {
-                    if points.len() >= 3 {
-                        finish_corners(editor, &mut preview, button, select, points);
-                    } else {
-                        preview.clear();
-                    }
-                }
+    if !keys.home.open && toolbox.session.is_some() {
+        if keys.commands.ran("cancel", false) {
+            cancel(editor, toolbox, &mut preview);
+        } else if keys.commands.ran("apply", false)
+            && let Some(Session::Corners {
+                button,
+                select,
+                points,
+                ..
+            }) = toolbox.session.take()
+        {
+            if points.len() >= 3 {
+                finish_corners(editor, &mut preview, button, select, points);
+            } else {
+                preview.clear();
             }
-            _ => {}
         }
     }
     let shift = place.modifiers.0.shift;

@@ -283,7 +283,18 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("pan-right", "Move view right", "View", Kind::Hold),
     ("rig-mode-bones", "Bones mode", "Rig", Kind::Press),
     ("rig-mode-pose", "Pose mode", "Rig", Kind::Press),
-    ("rig-leave", "Leave bones or pose mode", "Rig", Kind::Press),
+    (
+        "apply",
+        "Finish the shape, or apply the transform",
+        "Tools",
+        Kind::Press,
+    ),
+    (
+        "cancel",
+        "Drop the shape or the transform, or leave the rig's mode",
+        "Tools",
+        Kind::Press,
+    ),
     ("select-all", "Select all", "Select", Kind::Press),
     ("select-none", "Deselect", "Select", Kind::Press),
     ("select-invert", "Invert selection", "Select", Kind::Press),
@@ -527,7 +538,8 @@ fn pixl_default(id: &str) -> &'static [&'static str] {
         "pan-left" => &["A"],
         "pan-down" => &["S"],
         "pan-right" => &["D"],
-        "rig-leave" => &["Escape"],
+        "apply" => &["Enter"],
+        "cancel" => &["Escape"],
         _ => &[],
     }
 }
@@ -617,7 +629,9 @@ impl Keymap {
     pub fn conflicts(&self, id: &str, chord: &Chord) -> Vec<String> {
         self.bindings
             .iter()
-            .filter(|(other, chords)| other.as_str() != id && chords.contains(chord))
+            .filter(|(other, chords)| {
+                other.as_str() != id && chords.contains(chord) && !shares(id, other)
+            })
             .map(|(other, _)| other.clone())
             .collect()
     }
@@ -630,7 +644,12 @@ impl Keymap {
                 by_chord.entry(c.clone()).or_default().push(id.clone());
             }
         }
-        by_chord.retain(|_, ids| ids.len() > 1);
+        // A tool's key shares its chord with one command outside the tool.
+        by_chord.retain(|_, ids| {
+            ids.iter()
+                .enumerate()
+                .any(|(i, a)| ids[i + 1..].iter().any(|b| !shares(a, b)))
+        });
         by_chord
     }
 
@@ -694,6 +713,18 @@ fn tidy(settings: &mut Settings) {
     });
 }
 
+/// The commands a tool in use answers: while a shape, a transform or a rig
+/// mode is under way its key runs only them, and otherwise never them, so
+/// they share their chord with another command (Enter plays the animation
+/// under the Aseprite keys, and finishes a polygon while one is drawn).
+pub const TOOL_KEYS: &[&str] = &["apply", "cancel"];
+
+/// Whether two commands may share a chord: one answers a tool in use and
+/// the other does not.
+fn shares(a: &str, b: &str) -> bool {
+    TOOL_KEYS.contains(&a) != TOOL_KEYS.contains(&b)
+}
+
 /// The commands this tick's keys ran, and the hold commands whose key is
 /// down.
 #[derive(Resource, Default, Debug)]
@@ -730,6 +761,18 @@ pub struct KeySources<'w, 's> {
     focus: MessageReader<'w, 's, WindowFocused>,
     typing: Query<'w, 's, (), (With<Focused>, With<TextInput>)>,
     modifiers: Res<'w, ModifiersState>,
+    toolbox: Option<Res<'w, crate::toolbox::Toolbox>>,
+    transform: Option<Res<'w, crate::transform_tool::FreeTransform>>,
+    rig: Option<Res<'w, crate::rig::RigUi>>,
+}
+
+impl KeySources<'_, '_> {
+    /// Whether a tool is in the middle of something its keys answer.
+    fn tool_busy(&self) -> bool {
+        self.toolbox.as_ref().is_some_and(|t| t.active())
+            || self.transform.as_ref().is_some_and(|t| t.active())
+            || self.rig.as_ref().is_some_and(|r| r.mode.is_some())
+    }
 }
 
 /// The commands their menu item runs through the keymap's queue.
@@ -821,11 +864,17 @@ pub fn read_keys(
         if typing {
             continue;
         }
-        let ids: Vec<String> = keymap
+        let mut ids: Vec<String> = keymap
             .commands_for(&press)
             .into_iter()
             .map(str::to_string)
             .collect();
+        // A key a tool answers goes to the tool while it is busy, and to
+        // the other command of its chord the rest of the time.
+        if ids.iter().any(|id| TOOL_KEYS.contains(&id.as_str())) {
+            let busy = keys.tool_busy();
+            ids.retain(|id| TOOL_KEYS.contains(&id.as_str()) == busy);
+        }
         for id in ids.into_iter().filter(|id| !is_hold(id)) {
             // The settings shortcut also closes the dialog it opens.
             if !modal || id == "settings" {

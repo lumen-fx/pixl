@@ -264,7 +264,10 @@ performance (the progressive redraw threshold, worker threads, the layer
 buffer memory, the performance overlay) and every keyboard shortcut. Each
 change applies at once. Shortcuts start from pixl's own keys or Aseprite's
 or Photoshop's; a key already in use asks before it moves, and the menus show
-the keys in force. The settings are kept in `settings.json` in pixl's data
+the keys in force. Apply and Cancel (Enter and Escape) finish or drop the
+shape or transform under way and leave the rig's modes; while no tool is
+busy their keys run whatever else they are bound to, such as Enter playing
+the animation under Aseprite's keys. The settings are kept in `settings.json` in pixl's data
 folder, beside the recent list. UI scale grows the text and the sizes the
 theme keeps as tokens; a few fixed sizes (list rows, swatches) stay as they
 are.

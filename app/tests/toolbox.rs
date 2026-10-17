@@ -457,3 +457,47 @@ fn escape_drops_a_polygon_in_progress() {
     let out = drive(editor_over(doc()), steps);
     assert!(out.undo.is_empty(), "{:?}", out.undo);
 }
+
+/// Whether playback ran on any tick of a drive of `app` through `steps`,
+/// and the drive's outcome.
+fn played(app: lumenui::prelude::App, steps: Vec<Step>) -> (bool, common::drive::Outcome) {
+    use lumenui::prelude::*;
+    use std::sync::{Arc, Mutex};
+    let seen: Arc<Mutex<bool>> = Arc::default();
+    let out = Arc::clone(&seen);
+    let app = app.add_systems(
+        TickStage::Systems,
+        (move |tl: Res<pixl::timeline::Timeline>| {
+            *out.lock().unwrap() |= tl.playback.playing;
+        })
+        .after(pixl::timeline::timeline_input),
+    );
+    let outcome = drive(app, steps);
+    let played = *seen.lock().unwrap();
+    (played, outcome)
+}
+
+#[test]
+fn enter_finishes_a_polygon_and_plays_the_animation_otherwise() {
+    // Under the Aseprite keys Enter also plays the animation.
+    let mut settings = pixl::Settings::default();
+    settings.shortcuts.preset = pixl::keymap::Preset::Aseprite;
+    let mut d = doc();
+    d.insert_frame(1, 100).unwrap();
+    let enter = vec![Step::KeyDown(NamedKey::Enter), Step::KeyUp(NamedKey::Enter)];
+    let polygon = then(vec![
+        vec![Step::Key("h", false)],
+        click((2, 2), L),
+        click((20, 2), L),
+        click((2, 20), L),
+        enter.clone(),
+    ]);
+    let (playing, out) = played(
+        editor_over(d.clone()).insert_resource(settings.clone()),
+        polygon,
+    );
+    assert_eq!(out.undo, vec!["Polygon".to_string()]);
+    assert!(!playing, "Enter finished the polygon and did not play");
+    let (playing, _) = played(editor_over(d).insert_resource(settings), enter);
+    assert!(playing, "with no polygon under way Enter plays");
+}

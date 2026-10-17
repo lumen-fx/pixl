@@ -334,6 +334,11 @@ fn open(editor: &mut Editor, id: &'static str, title: &'static str) -> Option<Se
         });
         return None;
     }
+    // An empty frame has nothing to filter, and no cel is made for it.
+    if matches!(editor.doc.cel(layer, frame), Ok(None)) {
+        editor.message = Some("The frame is empty on this layer".into());
+        return None;
+    }
     let image: ImageId = match editor.doc.target_image(layer, frame) {
         Ok(i) => i,
         Err(e) => {

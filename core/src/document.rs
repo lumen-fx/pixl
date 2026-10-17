@@ -1029,8 +1029,13 @@ impl Document {
     }
 
     /// The image id a paint on `layer` at `frame` writes to (see
-    /// [`Document::target`]); history scopes a transaction to it.
+    /// [`Document::target`]); history scopes a transaction to it. Like
+    /// `target`, it fails, before making any cel, if the layer or a group
+    /// holding it locks pixels.
     pub fn target_image(&mut self, layer: LayerId, frame: usize) -> Result<ImageId, Error> {
+        if self.effective_locks(layer)?.pixels {
+            return Err(Error::Locked(layer));
+        }
         Ok(self.ensure_cel(layer, frame)?.image)
     }
 
@@ -1248,6 +1253,9 @@ mod tests {
         .unwrap();
         d.update_layer(g, |p| p.locks.pixels = true).unwrap();
         assert!(matches!(d.target(base, 0), Err(Error::Locked(_))));
+        // Refused before an empty cel is made for it.
+        assert!(matches!(d.target_image(base, 0), Err(Error::Locked(_))));
+        assert_eq!(d.cel(base, 0).unwrap(), None);
     }
 
     #[test]
