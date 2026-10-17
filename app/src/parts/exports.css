@@ -1,0 +1,19 @@
+/* The Export presets dialog. */
+
+.ex-card { min-width: 820; }
+.ex-main { gap: 16; }
+.ex-presets { width: 260; gap: var(--space-3); }
+.ex-list { height: 300; bg: var(--surface-1); border: 1px solid var(--edge); }
+.ex-preset { align: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--edge-soft); }
+.ex-preset:hover { bg: var(--surface-3); }
+.ex-preset.current { bg: var(--accent-soft); }
+.ex-preset-text { gap: 1; min-width: 0; shrink: 1; }
+.ex-preset-name { text-color: var(--text); }
+.ex-preset-meta { text-color: var(--text-faint); font-size: var(--font-size-small); text-overflow: ellipsis; }
+.ex-preset-all { text-color: var(--accent); font-size: var(--font-size-small); }
+.ex-form { grow: 1; min-width: 0; gap: var(--space-4); }
+.ex-wide { grow: 1; min-width: 0; }
+.ex-choice { width: 150; }
+.ex-number { width: 72; }
+.ex-tag { width: 140; }
+.ex-hint { padding: 0 0 0 108; }

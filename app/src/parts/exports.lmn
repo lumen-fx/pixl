@@ -1,0 +1,54 @@
+<dialog open="ex_open">
+  <column class="dialog-card ex-card">
+    <label class="dialog-title" text="Export presets"/>
+    <row class="ex-main">
+      <column class="ex-presets">
+        <scroll id="ex-list" class="ex-list"/>
+        <row class="dialog-row">
+          <button id="ex-new" class="small" text="New"/>
+          <button id="ex-duplicate" class="small" text="Duplicate"/>
+          <button id="ex-delete" class="small" text="Delete"/>
+        </row>
+      </column>
+      <column class="ex-form">
+        <row class="dialog-row"><label class="field-label" text="Name"/><input id="ex-name" class="ex-wide" bind-text="ex_name" text=""/></row>
+        <row class="dialog-row">
+          <label class="field-label" text="Format"/>
+          <dropdown id="ex-format" class="ex-choice" bind-value="ex_format"><option value="PNG frames"/><option value="GIF"/><option value="Sprite sheet"/></dropdown>
+          <label class="option-label" text="Scale"/>
+          <input id="ex-scale" class="ex-number" type="number" min="1" max="64" bind-text="ex_scale" text="1"/>
+        </row>
+        <row class="dialog-row">
+          <label class="field-label" text="Frames"/>
+          <dropdown id="ex-frames" class="ex-choice" bind-value="ex_frames"><option value="All frames"/><option value="Current frame"/><option value="Each tag"/><option value="One tag"/></dropdown>
+          <if signal="ex_is_tag" mode="hide">
+            <input id="ex-tag" class="ex-tag" placeholder="Tag name" bind-text="ex_tag" text=""/>
+          </if>
+        </row>
+        <row class="dialog-row">
+          <label class="field-label" text="Layers"/>
+          <dropdown id="ex-layers" class="ex-choice" bind-value="ex_layers"><option value="Visible, merged"/><option value="Each layer"/></dropdown>
+        </row>
+        <if signal="ex_is_sheet" mode="hide">
+          <row class="dialog-row">
+            <label class="field-label" text="Sheet"/>
+            <dropdown id="ex-sheet" class="ex-choice" bind-value="ex_sheet"><option value="One row"/><option value="One column"/><option value="Grid"/></dropdown>
+            <label class="option-label" text="Columns"/>
+            <input id="ex-columns" class="ex-number" type="number" min="1" max="4096" bind-text="ex_columns" text="8"/>
+            <label class="option-label" text="Padding"/>
+            <input id="ex-padding" class="ex-number" type="number" min="0" max="256" bind-text="ex_padding" text="0"/>
+          </row>
+        </if>
+        <row class="dialog-row"><label class="field-label" text="File"/><input id="ex-path" class="ex-wide" bind-text="ex_path" text=""/></row>
+        <label class="dialog-text ex-hint" bind-text="ex_hint" text=""/>
+        <checkbox id="ex-in-all" label="Run by Export all (Ctrl+Alt+E)" bind-checked="ex_in_all"/>
+      </column>
+    </row>
+    <row class="dialog-actions">
+      <button id="ex-run" text="Export this one"/>
+      <button id="ex-run-all" text="Export all"/>
+      <spacer/>
+      <button id="ex-close" class="primary" default="true" text="Done"/>
+    </row>
+  </column>
+</dialog>

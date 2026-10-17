@@ -20,6 +20,7 @@ use lumenui::prelude::*;
 use pixl_core::Rgba;
 use pixl_core::native::write_atomic;
 
+use crate::editor::Editor;
 use crate::home::Home;
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
@@ -376,6 +377,7 @@ fn keep_edits(themes: &mut Themes, settings: &mut Settings, name: &str) -> Optio
 pub fn theme_input(
     mut themes: ResMut<Themes>,
     mut settings: ResMut<Settings>,
+    mut editor: ResMut<Editor>,
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
     ids: Query<&LumenId>,
@@ -409,7 +411,7 @@ pub fn theme_input(
             "th-close" => {
                 let name = signals.get::<String>("th_name").unwrap_or_default();
                 if let Some(note) = keep_edits(&mut themes, &mut settings, &name) {
-                    signals.set("status_message", note);
+                    editor.message = Some(note);
                 }
                 themes.draft = None;
                 signals.set("themes_open", false);

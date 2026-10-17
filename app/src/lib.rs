@@ -2,6 +2,7 @@
 //! view, over the document model in `pixl-core`.
 
 pub mod editor;
+pub mod exports;
 pub mod files;
 pub mod home;
 pub mod image_menu;
@@ -58,6 +59,7 @@ pub fn app(file: Option<PathBuf>) -> App {
     .insert_resource(store)
     .insert_resource(Workspace::user())
     .insert_resource(Themes::user())
+    .insert_resource(exports::Exports::user())
 }
 
 /// `app` (an [`editor`]) starting on the start screen over `recents`, or on
@@ -121,6 +123,11 @@ pub fn editor(source: Source) -> App {
         .insert_signal("th_name", "")
         .insert_signal("th_message", "")
         .insert_resource(palette::Palette::default())
+        .insert_resource(exports::Exports::in_memory())
+        .insert_signal("ex_open", false)
+        .insert_signal("ex_is_sheet", false)
+        .insert_signal("ex_is_tag", false)
+        .insert_signal("ex_hint", exports::PATH_HINT)
         .insert_signal("cp_open", false)
         .insert_signal("cp_query", "")
         .insert_resource(timeline::Timeline::default())
@@ -147,6 +154,7 @@ pub fn editor(source: Source) -> App {
                         files::file_commands,
                         workspace::workspace_input,
                         themes::theme_input,
+                        exports::export_input,
                         files::new_form,
                     )
                         .chain(),
@@ -186,6 +194,7 @@ pub fn editor(source: Source) -> App {
                         workspace::show_workspace,
                         themes::show_themes,
                         palette::show_palette,
+                        exports::show_exports,
                     ),
                     home::track_recents,
                     home::show_home,

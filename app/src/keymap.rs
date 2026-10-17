@@ -232,6 +232,8 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
         "File",
         Kind::Press,
     ),
+    ("file-export-presets", "Export presets", "File", Kind::Press),
+    ("file-export-all", "Export all presets", "File", Kind::Press),
     ("file-close", "Close", "File", Kind::Press),
     ("undo", "Undo", "Edit", Kind::Press),
     ("redo", "Redo", "Edit", Kind::Press),
@@ -377,6 +379,7 @@ fn pixl_default(id: &str) -> &'static [&'static str] {
         "file-export-png" => &["Ctrl+E"],
         "file-export-sheet" => &["Ctrl+Shift+E"],
         "file-import-sheet" => &["Ctrl+Shift+I"],
+        "file-export-all" => &["Ctrl+Alt+E"],
         "file-close" => &["Ctrl+W"],
         "undo" => &["Ctrl+Z"],
         "redo" => &["Ctrl+Shift+Z", "Ctrl+Y"],
@@ -618,6 +621,7 @@ const MODAL_SIGNALS: &[&str] = &[
     "ws_open",
     "themes_open",
     "cp_open",
+    "ex_open",
 ];
 
 /// Turns this tick's key presses into commands, through the keymap the

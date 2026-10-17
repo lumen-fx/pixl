@@ -12,6 +12,8 @@
       <separator/>
       <menuitem id="file-export-png" label="Export PNG... (Ctrl+E)"/>
       <menuitem id="file-export-gif" label="Export GIF..."/>
+      <menuitem id="file-export-presets" label="Export presets..."/>
+      <menuitem id="file-export-all" label="Export all (Ctrl+Alt+E)"/>
       <separator/>
       <menuitem id="file-close" label="Close (Ctrl+W)"/>
     </menu>
@@ -164,6 +166,7 @@
   <include src="parts/themes.lmn"/>
   <include src="parts/palette.lmn"/>
   <include src="parts/timeline-menus.lmn"/>
+  <include src="parts/exports.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

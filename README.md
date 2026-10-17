@@ -102,6 +102,16 @@ Reset layout puts the current layout back as it was saved. The arrangement in
 use and the saved layouts are kept in `workspace.json` in pixl's data folder,
 so the window reopens as it was left.
 
+File > Export presets keeps named export settings: the format (PNG frames,
+an animated GIF, or a sprite sheet with its Aseprite-shape JSON), the scale,
+which frames (all, the current one, one tag, or each tag), which layers (the
+visible ones merged, or each layer alone), the sheet's layout, and the file
+to write, relative to the document's folder, where `{name}`, `{tag}`,
+`{frame}`, `{layer}` and `{scale}` fill in. File > Export all (Ctrl+Alt+E)
+runs every preset marked for it on the open document, in the background, and
+the status bar says how many files it wrote. The presets are kept in
+`exports.json` in pixl's data folder and serve every document.
+
 Ctrl+Shift+P opens the command palette: one search field over every command
 a key can run, every tool, the layouts, the themes and the recent documents.
 Typing narrows the list to the entries that have the typed letters in order,
