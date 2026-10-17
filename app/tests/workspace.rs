@@ -79,7 +79,7 @@ fn editor() -> App {
 }
 
 #[test]
-fn paint_is_the_default_layout_with_every_panel_on_the_right() {
+fn paint_is_the_default_layout_with_the_panels_right_and_the_timeline_below() {
     let (app, docks) = watch(editor());
     let out = drive(app, vec![Step::Wait, Step::Wait]);
     common::save(&out.frame, "workspace-paint");
@@ -94,7 +94,10 @@ fn paint_is_the_default_layout_with_every_panel_on_the_right() {
         ]
     );
     assert!(d.shows(Dock::Right));
-    assert!(!d.shows(Dock::Left) && !d.shows(Dock::Bottom));
+    assert_eq!(d.panels(Dock::Bottom), ["panel-timeline", "panel-preview"]);
+    assert!(d.shows(Dock::Bottom));
+    assert_eq!(d.closed, ["panel-preview"], "Paint leaves the preview out");
+    assert!(!d.shows(Dock::Left));
 }
 
 #[test]
@@ -128,7 +131,7 @@ fn header_buttons_collapse_and_hide_and_the_window_menu_shows_all() {
     common::save(&out.frame, "workspace-collapsed");
     let d = docks.lock().unwrap().clone();
     assert_eq!(d.collapsed, ["panel-color"]);
-    assert_eq!(d.closed, ["panel-history"]);
+    assert_eq!(d.closed, ["panel-history", "panel-preview"]);
 
     let (app, docks) = watch(editor());
     drive(
@@ -187,7 +190,10 @@ fn the_panel_menu_moves_a_panel_to_the_bottom_dock_and_back_up() {
     );
     common::save(&out.frame, "workspace-bottom");
     let d = docks.lock().unwrap().clone();
-    assert_eq!(d.panels(Dock::Bottom), ["panel-layers"]);
+    assert_eq!(
+        d.panels(Dock::Bottom),
+        ["panel-timeline", "panel-preview", "panel-layers"]
+    );
     assert!(d.shows(Dock::Bottom));
 
     let (app, docks) = watch(open_panel_menu(editor(), "panel-history"));

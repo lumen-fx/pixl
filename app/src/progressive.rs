@@ -15,7 +15,9 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 use pixl_core::composite::composite_with_threads;
-use pixl_core::{CompositeOptions, Document, Palette, Raster, Rect, Rgba};
+use pixl_core::{
+    CompositeOptions, Document, OnionSkin, Palette, Raster, Rect, Rgba, composite_ghosts,
+};
 
 /// Where a tile's pixels come from.
 pub enum Source {
@@ -31,6 +33,12 @@ pub enum Source {
         frame: usize,
         opts: CompositeOptions,
     },
+    /// The onion skin's ghost frames around `frame`.
+    Ghosts {
+        doc: Document,
+        frame: usize,
+        onion: OnionSkin,
+    },
 }
 
 impl Source {
@@ -45,6 +53,9 @@ impl Source {
             Source::Composite { doc, frame, opts } => {
                 let px = composite_with_threads(doc, *frame, rect, opts, 1);
                 rgba8(&px)
+            }
+            Source::Ghosts { doc, frame, onion } => {
+                rgba8(&composite_ghosts(doc, *frame, rect, onion, false, 1))
             }
         }
     }

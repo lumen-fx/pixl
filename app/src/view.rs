@@ -29,8 +29,8 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, CompositeOperation, Context2d, PixelBuffer};
 use pixl_core::{
-    Background, BlendMode, CompositeOptions, Document, LayerId, LayerKind, Palette, Point, Raster,
-    Rect, Rgba, TILE_SIZE,
+    Background, BlendMode, CompositeOptions, Document, LayerId, LayerKind, OnionSkin, Palette,
+    Point, Raster, Rect, Rgba, TILE_SIZE,
 };
 
 use crate::editor::{Editor, Touched};
@@ -364,6 +364,9 @@ pub enum ItemSource {
     /// everything up to the topmost layer the canvas cannot composite on its
     /// own.
     Flat(Vec<LayerId>),
+    /// The onion skin: the ghosts of the frames around the current one,
+    /// composited by pixl-core, under or over the layers.
+    Ghosts,
 }
 
 /// One buffer the art canvas draws, and how.
@@ -451,6 +454,30 @@ pub fn plan(doc: &Document, frame: usize) -> Vec<PlanItem> {
     plan_within(doc, frame, budget_pixels(DEFAULT_BUFFER_BUDGET_MIB))
 }
 
+/// [`plan_within`] with the onion skin's buffer under or over the layers.
+pub fn plan_with_onion(
+    doc: &Document,
+    frame: usize,
+    budget: u64,
+    onion: Option<&OnionSkin>,
+) -> Vec<PlanItem> {
+    let mut items = plan_within(doc, frame, budget);
+    if let Some(onion) = onion {
+        let ghosts = PlanItem {
+            source: ItemSource::Ghosts,
+            op: CompositeOperation::SourceOver,
+            alpha: 1.0,
+            visible: true,
+        };
+        if onion.above {
+            items.push(ghosts);
+        } else {
+            items.insert(0, ghosts);
+        }
+    }
+    items
+}
+
 /// [`plan`] with a buffer pixel budget of `budget`.
 pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
     let roots = doc.layers();
@@ -519,8 +546,10 @@ pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
 }
 
 /// What a composite needs: the view's options, and a copy of the document
-/// showing only the item's layers.
-pub fn prepared(doc: &Document, source: &ItemSource) -> (Document, CompositeOptions) {
+/// showing only the item's layers. With the onion skin on, the flattened
+/// layers leave the background out, as pixl-core does: the background goes
+/// under the ghosts and the layers over them.
+pub fn prepared(doc: &Document, source: &ItemSource, onion: bool) -> (Document, CompositeOptions) {
     let mut doc = doc.clone();
     let roots: Vec<LayerId> = doc.layers().iter().map(|l| l.id).collect();
     let mut opts = CompositeOptions {
@@ -544,7 +573,9 @@ pub fn prepared(doc: &Document, source: &ItemSource) -> (Document, CompositeOpti
             for r in roots.iter().filter(|r| !ids.contains(r)) {
                 let _ = doc.update_layer(*r, |p| p.visible = false);
             }
+            opts.background = !onion;
         }
+        ItemSource::Ghosts => opts.include_reference = false,
     }
     (doc, opts)
 }
@@ -586,8 +617,77 @@ fn subtree<'a>(layer: &'a pixl_core::Layer, out: &mut Vec<&'a pixl_core::Layer>)
     }
 }
 
-fn shown_for(doc: &Document, source: &ItemSource, frame: usize) -> Shown {
+/// The frames the onion skin ghosts around `frame`, farthest before first.
+pub fn ghost_frames(doc: &Document, frame: usize, onion: &OnionSkin) -> Vec<usize> {
+    let before = (1..=onion.before)
+        .rev()
+        .filter_map(|k| frame.checked_sub(k));
+    let after = (1..=onion.after)
+        .map(|k| frame + k)
+        .filter(|&f| f < doc.frame_count());
+    before.chain(after).collect()
+}
+
+/// What the ghost buffer shows: every non-reference layer's cels in the
+/// ghost frames, in a fixed order, and what else changes their look.
+fn shown_ghosts(doc: &Document, frame: usize, onion: &OnionSkin) -> Shown {
+    let frames = ghost_frames(doc, frame, onion);
+    let mut h = DefaultHasher::new();
+    doc.width().hash(&mut h);
+    doc.height().hash(&mut h);
+    format!("{onion:?}").hash(&mut h);
+    frames.hash(&mut h);
+    if doc.mode() == pixl_core::ColorMode::Indexed {
+        for c in doc.palette().colors() {
+            c.hash(&mut h);
+        }
+        doc.transparent_index().hash(&mut h);
+    }
+    let walk = doc.walk();
+    let layers: Vec<&pixl_core::Layer> = walk
+        .iter()
+        .map(|(_, l)| *l)
+        .filter(|l| !matches!(l.kind, LayerKind::Reference { .. }))
+        .collect();
+    let mut images = Vec::new();
+    for l in &layers {
+        l.id.hash(&mut h);
+        l.props.visible.hash(&mut h);
+        l.props.clip.hash(&mut h);
+        l.props.opacity.hash(&mut h);
+        l.props.blend.code().hash(&mut h);
+        if let LayerKind::Raster { cels, mask } = &l.kind {
+            mask.map(|m| m.enabled).hash(&mut h);
+            for &f in &frames {
+                cels.get(f)
+                    .copied()
+                    .flatten()
+                    .map(|c| c.opacity)
+                    .hash(&mut h);
+                let (img, mask) = layer_images(doc, l, f);
+                images.push((l.id, img, mask));
+            }
+        }
+    }
+    Shown {
+        images,
+        signature: h.finish(),
+    }
+}
+
+fn shown_for(
+    doc: &Document,
+    source: &ItemSource,
+    frame: usize,
+    onion: Option<&OnionSkin>,
+) -> Shown {
     let roots: Vec<&pixl_core::Layer> = match source {
+        ItemSource::Ghosts => {
+            return match onion {
+                Some(o) => shown_ghosts(doc, frame, o),
+                None => Shown::default(),
+            };
+        }
         ItemSource::Layer(id) | ItemSource::Isolated(id) => {
             doc.layers().iter().filter(|l| l.id == *id).collect()
         }
@@ -617,6 +717,7 @@ fn shown_for(doc: &Document, source: &ItemSource, frame: usize) -> Shown {
             && let Background::Color(c) = doc.background()
         {
             c.hash(&mut h);
+            onion.is_some().hash(&mut h);
         }
         for l in &layers {
             l.id.hash(&mut h);
@@ -673,6 +774,23 @@ fn changed_tiles(old: Option<&Raster>, new: Option<&Raster>, out: &mut BTreeSet<
     }
 }
 
+/// The ghost tiles to rewrite: where either version shows a ghost, all of
+/// them when anything but the pixels changed, else where a pixel changed.
+fn diff_ghosts(old: &Shown, now: &Shown, whole: bool, out: &mut BTreeSet<usize>) {
+    if whole || old.images.len() != now.images.len() {
+        for (_, img, _) in old.images.iter().chain(&now.images) {
+            changed_tiles(img.as_ref(), None, out);
+        }
+        // A mask hides parts of a ghost, so its tiles hold ghost pixels only
+        // where the cel does; the cel's tiles above cover them.
+        return;
+    }
+    for ((_, a, ma), (_, b, mb)) in old.images.iter().zip(&now.images) {
+        changed_tiles(a.as_ref(), b.as_ref(), out);
+        changed_tiles(ma.as_ref(), mb.as_ref(), out);
+    }
+}
+
 /// A buffer on the art canvas.
 struct Item {
     key: u64,
@@ -705,6 +823,8 @@ pub struct Layers {
     seen_frame: usize,
     /// Something drawn changed since the art canvas was last drawn.
     pub art_dirty: bool,
+    /// Bumped each time the buffers' pixels or plan reach the art canvas.
+    pub art_revision: u64,
     pub rewrites: Vec<Rewrite>,
     /// Set when a buffer could not be made, such as a document past the
     /// canvas size cap.
@@ -716,6 +836,9 @@ pub struct Layers {
     /// The worker count the performance settings asked for; 0 is one per
     /// core.
     workers_asked: usize,
+    /// The onion skin to show around the current frame, if any.
+    pub onion: Option<OnionSkin>,
+    seen_onion: Option<OnionSkin>,
 }
 
 impl Default for Layers {
@@ -728,11 +851,14 @@ impl Default for Layers {
             seen_generation: u64::MAX,
             seen_frame: 0,
             art_dirty: true,
+            art_revision: 0,
             rewrites: Vec::new(),
             error: None,
             budget: budget_pixels(DEFAULT_BUFFER_BUDGET_MIB),
             sync_tiles: 24,
             workers_asked: 0,
+            onion: None,
+            seen_onion: None,
         }
     }
 }
@@ -819,21 +945,24 @@ impl Layers {
             self.seen_revision = 0;
             self.error = None;
         }
-        if editor.revision == self.seen_revision && editor.frame == self.seen_frame {
+        let same_view = editor.frame == self.seen_frame && self.onion == self.seen_onion;
+        if editor.revision == self.seen_revision && same_view {
             return;
         }
         self.seen_revision = editor.revision;
         self.seen_frame = editor.frame;
+        self.seen_onion = self.onion.clone();
         let frame = editor.frame;
         let pixels_only = match touched {
-            Touched::Layers(ids) if !self.items.is_empty() => Some(ids.as_slice()),
+            Touched::Layers(ids) if same_view && !self.items.is_empty() => Some(ids.as_slice()),
             _ => None,
         };
         if let Some(ids) = pixels_only {
             self.sync_pixels(doc, ids, frame);
             return;
         }
-        let wanted = plan_within(doc, frame, self.budget);
+        let onion = self.onion.clone();
+        let wanted = plan_with_onion(doc, frame, self.budget, onion.as_ref());
 
         // Keep the buffers whose source is still wanted, in the new order.
         let mut old: Vec<Option<Item>> = self.items.drain(..).map(Some).collect();
@@ -883,13 +1012,16 @@ impl Layers {
 
         // Rewrite what changed in each buffer.
         for i in 0..self.items.len() {
-            let now = shown_for(doc, &self.items[i].plan.source, frame);
+            let now = shown_for(doc, &self.items[i].plan.source, frame, onion.as_ref());
             let item = &self.items[i];
             let mut tiles = BTreeSet::new();
+            let ghosts = item.plan.source == ItemSource::Ghosts;
             let whole = now.signature != item.shown.signature
                 && !(item.shown.images.is_empty()
                     && matches!(item.plan.source, ItemSource::Layer(_)));
-            if whole {
+            if ghosts {
+                diff_ghosts(&item.shown, &now, whole, &mut tiles);
+            } else if whole {
                 tiles.extend(0..item.applied.len());
             } else {
                 for (id, img, mask) in &now.images {
@@ -914,6 +1046,16 @@ impl Layers {
     fn sync_pixels(&mut self, doc: &Document, layers: &[LayerId], frame: usize) {
         for i in 0..self.items.len() {
             let mut tiles = BTreeSet::new();
+            if self.items[i].plan.source == ItemSource::Ghosts {
+                // A stroke on a cel linked to a ghost frame shows there too.
+                if let Some(onion) = &self.onion {
+                    let now = shown_ghosts(doc, frame, onion);
+                    diff_ghosts(&self.items[i].shown, &now, false, &mut tiles);
+                    self.items[i].shown = now;
+                }
+                self.rewrite(doc, i, frame, tiles, (0.0, 0.0));
+                continue;
+            }
             for id in layers {
                 let Some(entry) = self.items[i]
                     .shown
@@ -986,8 +1128,13 @@ impl Layers {
                     },
                 }
             }
+            ItemSource::Ghosts => progressive::Source::Ghosts {
+                doc: doc.clone(),
+                frame,
+                onion: self.onion.clone().unwrap_or_default(),
+            },
             other => {
-                let (prepared, opts) = prepared(doc, other);
+                let (prepared, opts) = prepared(doc, other, self.onion.is_some());
                 progressive::Source::Composite {
                     doc: prepared,
                     frame,
@@ -1077,21 +1224,30 @@ impl Layers {
     /// Draws every visible buffer onto the art canvas.
     fn draw(&self, ctx: &Context2d, doc: &Document, view: &View) {
         ctx.clear();
+        self.draw_document(ctx, doc, view, true);
+    }
+
+    /// Draws the buffers onto `ctx` where `view` places the document, with
+    /// the onion skin or without it. The art canvas and the preview both
+    /// draw this way, so the preview costs no compositing of its own.
+    pub fn draw_document(&self, ctx: &Context2d, doc: &Document, view: &View, ghosts: bool) {
         ctx.set_image_smoothing(false);
         let (x, y, w, h) = view.doc_rect(doc.width(), doc.height());
+        // The flattened buffer holds the background, unless the onion skin
+        // goes between the two.
         let flattened = self
             .items
             .iter()
             .any(|i| matches!(i.plan.source, ItemSource::Flat(_)));
-        if !flattened && let Background::Color(c) = doc.background() {
+        if (!flattened || self.seen_onion.is_some())
+            && let Background::Color(c) = doc.background()
+        {
             ctx.set_fill_color(canvas_color(c));
             ctx.fill_rect(x, y, w, h);
         }
-        for item in self
-            .items
-            .iter()
-            .filter(|i| i.plan.visible && i.plan.alpha > 0.0)
-        {
+        for item in self.items.iter().filter(|i| {
+            i.plan.visible && i.plan.alpha > 0.0 && (ghosts || i.plan.source != ItemSource::Ghosts)
+        }) {
             ctx.set_global_composite_operation(item.plan.op);
             ctx.set_global_alpha(item.plan.alpha);
             ctx.draw_buffer_scaled(&item.buffer, x, y, w, h);
@@ -1250,6 +1406,9 @@ pub fn draw_stage(
         draw_checker(&checker, &mut drawn, &view, &colors, doc_size, cell);
     }
     if view_changed || layers.art_dirty {
+        if layers.art_dirty {
+            layers.art_revision += 1;
+        }
         layers.draw(&art, doc, &view);
         layers.art_dirty = false;
     }

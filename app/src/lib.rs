@@ -8,12 +8,14 @@ pub mod input;
 pub mod keymap;
 pub mod palette;
 pub mod panels;
+pub mod preview;
 pub mod progressive;
 pub mod recents;
 pub mod settings;
 pub mod settings_ui;
 pub mod store;
 pub mod themes;
+pub mod timeline;
 pub mod tools;
 pub mod view;
 pub mod workspace;
@@ -113,37 +115,55 @@ pub fn editor(source: Source) -> App {
         .insert_resource(palette::Palette::default())
         .insert_signal("cp_open", false)
         .insert_signal("cp_query", "")
+        .insert_resource(timeline::Timeline::default())
+        .insert_resource(timeline::LayerTree::default())
+        .insert_resource(preview::PreviewPane::default())
         .add_systems(
             TickStage::Systems,
             (
-                // What the user did this tick, in the order it applies.
+                // What the user did this tick, in the order it applies:
+                // the keys, settings and windows first,
                 (
-                    keymap::read_keys,
-                    palette::palette_input,
-                    settings_ui::settings_commands,
-                    settings_ui::keys_page,
-                    settings_ui::settings_form,
-                    settings::look_switches,
-                    settings::show_look,
-                    view::read_view_colors,
-                    view::measure_stage,
-                    input::navigate,
-                    files::file_commands,
-                    (workspace::workspace_input, themes::theme_input),
-                    files::new_form,
-                    panels::panel_clicks,
-                    panels::history_keys,
-                    panels::layer_controls,
-                    panels::color_controls,
-                    tools::pick_tool,
-                    tools::tool_options,
-                    tools::use_tools,
+                    (
+                        keymap::read_keys,
+                        palette::palette_input,
+                        settings_ui::settings_commands,
+                        settings_ui::keys_page,
+                        settings_ui::settings_form,
+                        settings::look_switches,
+                        settings::show_look,
+                        view::read_view_colors,
+                        view::measure_stage,
+                        input::navigate,
+                        files::file_commands,
+                        workspace::workspace_input,
+                        themes::theme_input,
+                        files::new_form,
+                    )
+                        .chain(),
+                    // then the panels and the tools.
+                    (
+                        panels::panel_clicks,
+                        panels::history_keys,
+                        panels::layer_controls,
+                        panels::color_controls,
+                        timeline::timeline_input,
+                        preview::preview_controls,
+                        tools::pick_tool,
+                        tools::tool_options,
+                        tools::use_tools,
+                    )
+                        .chain(),
                 )
                     .chain(),
                 // Then what the window shows of it.
                 (
+                    timeline::playback,
+                    timeline::onion_to_view,
                     view::sync_layers,
                     view::draw_stage,
+                    timeline::show_timeline,
+                    preview::draw_preview,
                     tools::track_pointer,
                     panels::show_panels,
                     files::autosave,

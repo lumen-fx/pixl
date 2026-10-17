@@ -7,14 +7,14 @@ use std::sync::{Arc, Mutex};
 use lumenui::ecs::hierarchy::Children;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
-    Key, MenuClicked, Modifiers, ModifiersState, MouseWheel, NamedKey, PointerButton, PointerData,
-    PointerKind, PointerMoved, PointerPressed, PointerReleased,
+    ContextMenuEvent, Key, MenuClicked, Modifiers, ModifiersState, MouseWheel, NamedKey,
+    PointerButton, PointerData, PointerKind, PointerMoved, PointerPressed, PointerReleased,
 };
 use lumenui::prelude::*;
 use pixl::recents::Recent;
 use pixl::view::View;
 use pixl::{Editor, Home, Recents, Settings, Tool};
-use pixl_core::{Document, Point, Rgba, Selection};
+use pixl_core::{Document, LayerId, Point, Rgba, Selection};
 
 /// Where a pointer step lands.
 #[derive(Clone, Copy, Debug)]
@@ -23,6 +23,8 @@ pub enum At {
     Doc(i32, i32),
     /// A window position.
     Window(Vec2),
+    /// The middle of the element with this id, where it is laid out.
+    Element(&'static str),
 }
 
 /// One scripted input.
@@ -50,12 +52,19 @@ pub enum Step {
     ClickInside(&'static str),
     /// A click on a menu item.
     Menu(&'static str),
+    /// A request for a context menu on the element with this id, at its
+    /// middle.
+    ContextMenu(&'static str),
+    /// A named key pressed and released with Alt held.
+    AltKey(NamedKey),
     /// A control writing a number to a signal, as a slider does.
     Number(&'static str, f64),
     /// A control writing text to a signal, as a dropdown does.
     Text(&'static str, &'static str),
     /// A control writing a flag to a signal, as a checkbox does.
     Flag(&'static str, bool),
+    /// Waits this many milliseconds of real time, for what runs on a clock.
+    Sleep(u64),
     /// Runs a closure on the editor.
     Edit(fn(&mut Editor)),
     /// Waits a tick.
@@ -82,6 +91,8 @@ pub struct Outcome {
     pub settings: Settings,
     /// Whether the settings dialog is open.
     pub settings_open: bool,
+    /// The frame and the layer the editor ended on.
+    pub at: (usize, LayerId),
 }
 
 /// The editor's state at the end of a tick.
@@ -100,6 +111,7 @@ struct Snapshot {
     thumbs: Vec<Option<PathBuf>>,
     settings: Settings,
     settings_open: bool,
+    at: (usize, LayerId),
 }
 
 fn key(name: &str) -> Key {
@@ -129,7 +141,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    mut moved: MessageWriter<PointerMoved>,
                    mut up: MessageWriter<PointerReleased>,
                    mut clicks: MessageWriter<ClickEvent>,
-                   mut menu: MessageWriter<MenuClicked>,
+                   (mut menu, mut context): (
+                MessageWriter<MenuClicked>,
+                MessageWriter<ContextMenuEvent>,
+            ),
                    elements: Query<(Entity, &LumenId)>,
                    children: Query<&Children>,
                    mut signals: Signals| {
@@ -141,6 +156,12 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 let place = |at: At| match at {
                     At::Doc(x, y) => pixl::tools::screen_of(&view, Point::new(x, y)),
                     At::Window(w) => w,
+                    At::Element(id) => {
+                        let r = dom::get_by_id(id)
+                            .and_then(|n| n.rect())
+                            .unwrap_or_else(|| panic!("no element {id} laid out"));
+                        Vec2::new(r.client_x + r.width / 2.0, r.client_y + r.height / 2.0)
+                    }
                 };
                 let pen = |buttons: u32, pressure: f32| PointerData {
                     id: 2,
@@ -284,9 +305,38 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     Step::Menu(id) => {
                         menu.write(MenuClicked { id: id.to_string() });
                     }
+                    Step::ContextMenu(id) => {
+                        let entity = elements
+                            .iter()
+                            .find(|(_, i)| i.0 == id)
+                            .map(|(e, _)| e)
+                            .unwrap_or_else(|| panic!("no element {id}"));
+                        context.write(ContextMenuEvent {
+                            entity,
+                            position: place(At::Element(id)),
+                            button: PointerButton::Secondary,
+                            local: None,
+                        });
+                    }
+                    Step::AltKey(k) => {
+                        let m = Modifiers {
+                            alt: true,
+                            ..Modifiers::default()
+                        };
+                        keys.write(KeyPressed {
+                            key: Key::Named(k),
+                            modifiers: m,
+                            repeat: false,
+                        });
+                        keys_up.write(KeyReleased {
+                            key: Key::Named(k),
+                            modifiers: m,
+                        });
+                    }
                     Step::Number(name, v) => signals.set(name, v),
                     Step::Text(name, v) => signals.set(name, v),
                     Step::Flag(name, v) => signals.set(name, v),
+                    Step::Sleep(ms) => std::thread::sleep(std::time::Duration::from_millis(ms)),
                     Step::Edit(f) => f(&mut editor),
                     Step::Wait => {}
                 }
@@ -331,6 +381,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         .collect(),
                     settings: settings.clone(),
                     settings_open: signals.get::<bool>("settings_open").unwrap_or(false),
+                    at: (editor.frame, editor.layer),
                 });
             })
             .after(pixl::view::draw_stage)
@@ -360,6 +411,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         thumbs: end.thumbs,
         settings: end.settings,
         settings_open: end.settings_open,
+        at: end.at,
     }
 }
 

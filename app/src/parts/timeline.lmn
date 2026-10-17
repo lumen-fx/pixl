@@ -1,0 +1,52 @@
+<column id="panel-timeline" class="panel timeline">
+  <row class="panel-header tl-bar">
+    <label class="panel-title" text="Timeline"/>
+    <tooltip text="First frame"><button id="tl-first" class="flat small" text="|&lt;"/></tooltip>
+    <tooltip text="Previous frame (, or Alt+Left)"><button id="tl-prev" class="flat small" text="&lt;"/></tooltip>
+    <tooltip text="Play or pause"><button id="tl-play" class="flat small tl-play" bind-text="tl_play_label" text="Play"/></tooltip>
+    <tooltip text="Next frame (. or Alt+Right)"><button id="tl-next" class="flat small" text="&gt;"/></tooltip>
+    <tooltip text="Last frame"><button id="tl-last" class="flat small" text="&gt;|"/></tooltip>
+    <dropdown id="tl-mode" class="tl-mode" bind-value="tl_mode">
+      <option value="Loop"/>
+      <option value="Play once"/>
+      <option value="Ping-pong"/>
+    </dropdown>
+    <checkbox id="tl-loop-tag" label="Loop tag" checked="true" bind-checked="tl_loop_tag"/>
+    <label id="tl-fps" class="tl-readout" bind-text="tl_fps" text=""/>
+    <spacer/>
+    <label id="tl-frame-label" class="tl-readout" bind-text="tl_frame_label" text="Frame 1 of 1"/>
+  </row>
+  <column class="panel-body tl-main">
+    <row class="tl-tools">
+      <tooltip text="New empty frame after the selection"><button id="tl-new" class="flat small" text="New"/></tooltip>
+      <tooltip text="Copy the selected frames after them"><button id="tl-duplicate" class="flat small" text="Copy"/></tooltip>
+      <tooltip text="Delete the selected frames"><button id="tl-delete" class="flat small" text="Delete"/></tooltip>
+      <tooltip text="Link the selected cels to the first one"><button id="tl-link" class="flat small" text="Link"/></tooltip>
+      <tooltip text="Give each selected cel its own pixels"><button id="tl-unlink" class="flat small" text="Unlink"/></tooltip>
+      <tooltip text="Tag the selected frames"><button id="tl-tag" class="flat small" text="Tag"/></tooltip>
+      <label class="option-label" text="Duration"/>
+      <input id="tl-duration" class="tl-number" type="number" min="1" max="60000" step="10" bind-text="tl_duration" value="100"/>
+      <label class="option-label" text="ms"/>
+      <spacer/>
+      <checkbox id="tl-onion" label="Onion skin" bind-checked="onion_on"/>
+    </row>
+    <if signal="onion_on" mode="hide">
+      <row class="tl-tools tl-onion">
+        <label class="option-label" text="Before"/>
+        <tooltip text="Frames shown before"><input id="onion-before" class="tl-count" type="number" min="0" max="16" bind-text="onion_before" value="1"/></tooltip>
+        <label class="option-label" text="After"/>
+        <tooltip text="Frames shown after"><input id="onion-after" class="tl-count" type="number" min="0" max="16" bind-text="onion_after" value="1"/></tooltip>
+        <label class="option-label" text="Opacity"/>
+        <slider id="onion-opacity" class="tl-slider" min="0" max="100" step="1" value="40" bind-value="onion_opacity"/>
+        <label class="option-label" text="Falloff"/>
+        <slider id="onion-falloff" class="tl-slider" min="0" max="100" step="1" value="50" bind-value="onion_falloff"/>
+        <checkbox id="onion-tint" label="Tint" checked="true" bind-checked="onion_tint"/>
+        <checkbox id="onion-above" label="Above" bind-checked="onion_above"/>
+      </row>
+    </if>
+    <row class="tl-body">
+      <scroll id="tl-names" class="tl-names" bind-scroll="tl_scroll"/>
+      <scroll id="tl-grid" class="tl-grid" scroll="both" bind-scroll="tl_scroll"/>
+    </row>
+  </column>
+</column>

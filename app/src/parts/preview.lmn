@@ -1,0 +1,9 @@
+<column id="panel-preview" class="panel preview">
+  <row class="panel-header">
+    <label class="panel-title" text="Preview"/>
+    <tooltip text="Actual size or fit to the panel"><button id="pv-zoom" class="flat small" bind-text="pv_zoom_label" text="Fit"/></tooltip>
+  </row>
+  <column id="preview-stage" class="panel-body preview-stage">
+    <canvas id="preview"/>
+  </column>
+</column>

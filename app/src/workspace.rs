@@ -141,19 +141,25 @@ impl Layout {
             shown,
         };
         let panels = match name {
-            // Drawing: color and layers at hand, nothing below the canvas.
+            // Drawing: color and layers at hand, the timeline below the
+            // canvas to move between frames.
             "Paint" => vec![
                 place("panel-color", Dock::Right, true),
                 place("panel-palette", Dock::Right, true),
                 place("panel-layers", Dock::Right, true),
                 place("panel-history", Dock::Right, true),
+                place("panel-timeline", Dock::Bottom, true),
+                place("panel-preview", Dock::Bottom, false),
             ],
-            // Animation: the frames below the canvas, history out of the way.
+            // Animation: the frames and the preview below the canvas,
+            // history out of the way.
             "Animate" => vec![
                 place("panel-color", Dock::Right, true),
                 place("panel-palette", Dock::Right, true),
                 place("panel-layers", Dock::Right, true),
                 place("panel-history", Dock::Right, false),
+                place("panel-timeline", Dock::Bottom, true),
+                place("panel-preview", Dock::Bottom, true),
             ],
             // Rigging: layers and history on the right, colors on the left.
             "Rig" => vec![
@@ -161,6 +167,8 @@ impl Layout {
                 place("panel-palette", Dock::Left, true),
                 place("panel-layers", Dock::Right, true),
                 place("panel-history", Dock::Right, true),
+                place("panel-timeline", Dock::Bottom, true),
+                place("panel-preview", Dock::Bottom, false),
             ],
             _ => return None,
         };
@@ -929,6 +937,11 @@ mod tests {
         ]
         .iter()
         .map(|p| (p.to_string(), Dock::Right))
+        .chain(
+            ["panel-timeline", "panel-preview"]
+                .iter()
+                .map(|p| (p.to_string(), Dock::Bottom)),
+        )
         .collect()
     }
 
@@ -942,7 +955,10 @@ mod tests {
         k.push(("panel-new".to_string(), Dock::Bottom));
         let rig = Layout::built_in("Rig").unwrap().completed(&k);
         assert_eq!(order(&rig, Dock::Left), ["panel-color", "panel-palette"]);
-        assert_eq!(order(&rig, Dock::Bottom), ["panel-new"]);
+        assert_eq!(
+            order(&rig, Dock::Bottom),
+            ["panel-timeline", "panel-preview", "panel-new"]
+        );
         assert!(rig.place("panel-new").unwrap().shown);
     }
 
@@ -986,10 +1002,10 @@ mod tests {
     fn moving_a_hidden_panel_shows_it() {
         let mut l = Layout::built_in("Animate").unwrap().completed(&known());
         assert!(!l.place("panel-history").unwrap().shown);
-        assert!(!l.dock_shows(Dock::Bottom));
-        l.move_to("panel-history", Dock::Bottom);
+        assert!(!l.dock_shows(Dock::Left));
+        l.move_to("panel-history", Dock::Left);
         assert!(l.place("panel-history").unwrap().shown);
-        assert!(l.dock_shows(Dock::Bottom));
+        assert!(l.dock_shows(Dock::Left));
     }
 
     #[test]

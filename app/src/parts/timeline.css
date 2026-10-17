@@ -1,0 +1,152 @@
+/* The timeline, its tags and the preview, over the theme's tokens. The
+   tokens these parts add (cel marks, tag colors, onion skin tints) are set
+   here for both looks, the same way theme.css sets the rest. */
+
+.pixl {
+  --cel-w: 18;
+  --cel-h: 20;
+  --tl-names-w: 140;
+  --timeline-h: 190;
+  --preview-w: 220;
+}
+
+.pixl.dark {
+  --cel-on: #b8b8b8;
+  --cel-off: #3a3a3a;
+  --cel-link: #6f6f6f;
+  --cel-current: #2a3a4d;
+  --onion-before: #ff4040a0;
+  --onion-after: #4080ffa0;
+  --tag-1: #c0504d;
+  --tag-2: #d98e3c;
+  --tag-3: #c9b43a;
+  --tag-4: #5aa04f;
+  --tag-5: #3f9aa6;
+  --tag-6: #4f74c0;
+  --tag-7: #8a5ab8;
+  --tag-8: #8c8c8c;
+}
+
+.pixl.light {
+  --cel-on: #3c3c3c;
+  --cel-off: #c4c4c4;
+  --cel-link: #8a8a8a;
+  --cel-current: #cfe0f5;
+  --onion-before: #e02020a0;
+  --onion-after: #2060e0a0;
+  --tag-1: #c0504d;
+  --tag-2: #d98e3c;
+  --tag-3: #c9b43a;
+  --tag-4: #5aa04f;
+  --tag-5: #3f9aa6;
+  --tag-6: #4f74c0;
+  --tag-7: #8a5ab8;
+  --tag-8: #8c8c8c;
+}
+
+/* The timeline and the preview are panels; below the canvas by default,
+   the timeline takes the width the preview leaves. */
+#dock-bottom { flex-basis: var(--timeline-h); }
+#panel-timeline { grow: 1; min-width: 0; }
+#panel-preview { flex-basis: var(--preview-w); grow: 0; min-width: 80; min-height: 80; }
+.timeline .panel-title { grow: 0; }
+.tl-main { grow: 1; min-height: 0; padding: 0; gap: 0; }
+
+.tl-bar { gap: var(--space-1); overflow: hidden; min-width: 0; }
+.tl-tools { overflow: hidden; min-width: 0; align: center; gap: var(--space-1); padding: var(--space-1) var(--space-3); bg: var(--surface-2); border-bottom: 1px solid var(--edge); }
+.tl-mode { width: 100; min-width: 100; }
+.tl-readout { text-color: var(--text-dim); font-size: var(--font-size-small); min-width: 56; }
+.tl-number { width: 92; font-size: var(--font-size-small); }
+.tl-count { width: 64; font-size: var(--font-size-small); }
+.tl-slider { width: 70; min-width: 50; }
+.tl-onion { gap: var(--space-3); }
+.tl-play { min-width: 44; }
+
+.tl-body { grow: 1; min-height: 0; bg: var(--surface-1); }
+.tl-names { width: var(--tl-names-w); min-width: var(--tl-names-w); border-right: 1px solid var(--edge); }
+.tl-grid { grow: 1; min-width: 0; }
+
+/* One row per tag lane, the frame numbers, then one row per layer. */
+.tl-spacer { height: var(--cel-h); min-height: var(--cel-h); border-bottom: 1px solid var(--edge-soft); }
+.tl-name {
+  height: var(--cel-h);
+  min-height: var(--cel-h);
+  align: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--edge-soft);
+}
+.tl-name:hover { bg: var(--surface-3); }
+.tl-name.active { bg: var(--accent-soft); }
+.tl-name.depth-1 { padding: 0 var(--space-3) 0 14; }
+.tl-name.depth-2 { padding: 0 var(--space-3) 0 22; }
+.tl-name.depth-3 { padding: 0 var(--space-3) 0 30; }
+.tl-name.depth-4 { padding: 0 var(--space-3) 0 38; }
+.tl-name-text { font-size: var(--font-size-small); text-color: var(--text-dim); }
+.tl-name.active .tl-name-text { text-color: var(--text); }
+.tl-name.hidden .tl-name-text { text-color: var(--text-faint); }
+
+.tl-row { height: var(--cel-h); min-height: var(--cel-h); border-bottom: 1px solid var(--edge-soft); }
+.tl-frame {
+  bg: var(--surface-2);
+  width: var(--cel-w);
+  min-width: var(--cel-w);
+  height: var(--cel-h);
+  justify: center;
+  align: center;
+  border-right: 1px solid var(--edge-soft);
+}
+.tl-frame:hover { bg: var(--surface-3); }
+.tl-frame.sel { bg: var(--accent-soft); }
+.tl-frame.cur { bg: var(--accent); }
+.tl-frame-num { font-size: 10; text-color: var(--text-dim); }
+.tl-frame.cur .tl-frame-num { text-color: var(--on-accent); }
+
+.cel {
+  bg: var(--surface-1);
+  width: var(--cel-w);
+  min-width: var(--cel-w);
+  height: var(--cel-h);
+  justify: center;
+  align: center;
+  border-right: 1px solid var(--edge-soft);
+}
+.cel:hover { bg: var(--surface-3); }
+.cel.cur { bg: var(--cel-current); }
+.cel.sel { bg: var(--accent-soft); }
+.cel-dot { width: 6; height: 6; radius: 3; }
+.cel.on .cel-dot { bg: var(--cel-on); }
+.cel.off .cel-dot { width: 4; height: 4; radius: 2; bg: var(--cel-off); }
+.cel.link-l .cel-dot, .cel.link-r .cel-dot { bg: var(--cel-link); radius: 0; height: 2; width: var(--cel-w); }
+.cel.group, .cel.reference, .cel.skeleton { bg: var(--surface-2); }
+.cel.group.cur, .cel.reference.cur, .cel.skeleton.cur { bg: var(--cel-current); }
+
+.tag-band { radius: 3; height: var(--cel-h); }
+.tag-cell { width: var(--cel-w); min-width: var(--cel-w); height: var(--cel-h); }
+.tag-gap { width: var(--cel-w); min-width: var(--cel-w); height: var(--cel-h); bg: var(--surface-1); }
+.tag-name {
+  position: absolute;
+  left: 3;
+  top: 2;
+  font-size: var(--font-size-small);
+  text-color: var(--on-accent);
+}
+
+.tag-colors { gap: var(--space-2); }
+.tag-choice { width: 18; height: 18; radius: 2; border: 1px solid var(--edge); }
+.tag-choice:hover { border: 1px solid var(--text); }
+.tag-choice.chosen { border: 2px solid var(--text); }
+.choice-1 { bg: var(--tag-1); }
+.choice-2 { bg: var(--tag-2); }
+.choice-3 { bg: var(--tag-3); }
+.choice-4 { bg: var(--tag-4); }
+.choice-5 { bg: var(--tag-5); }
+.choice-6 { bg: var(--tag-6); }
+.choice-7 { bg: var(--tag-7); }
+.choice-8 { bg: var(--tag-8); }
+
+.preview-stage { grow: 1; min-height: 0; overflow: hidden; bg: var(--surface-0); }
+.preview-stage canvas { position: absolute; inset: 0; }
+
+#probe-onion-before { bg: var(--onion-before); }
+#probe-onion-after { bg: var(--onion-after); }

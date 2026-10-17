@@ -16,8 +16,8 @@ model, compositing, undo history, raster tools, adjustments and filters,
 palettes and their files, transforms, and PNG and sprite sheet I/O (sheets
 carry Aseprite-compatible JSON). The editor itself is the
 `pixl` program in `app/`, built with the Lumen Rust SDK: one document per
-window, with a menu row, the tool bar, tool options, the canvas, and the color,
-palette, layers and history panels.
+window, with a menu row, the tool bar, tool options, the canvas, and the
+color, palette, layers, history, timeline and preview panels.
 
 Started without a file, pixl opens on its start screen: the documents opened
 or saved most recently, each with a thumbnail of its first frame, its folder,
@@ -75,6 +75,29 @@ a key can run, every tool, the layouts, the themes and the recent documents.
 Typing narrows the list to the entries that have the typed letters in order,
 the arrow keys pick one and Enter runs it. Each entry shows its keys, so the
 palette also answers "what is the shortcut for this".
+
+The timeline panel, below the canvas by default, lists every layer against
+every frame, with the document's tags above the frame numbers.
+A cel shows whether it holds pixels and joins its neighbors when they are
+linked. Click a cel or a frame number to go there; drag or Shift-click to
+select a range of cels or frames. The timeline adds empty frames, copies,
+deletes and reverses frames, links the selected cels to the first one or
+gives each its own pixels, clears cels, and sets the duration of the selected
+frames; drag selected frame numbers to move the frames. Tags are made from
+the selected frames and edited in their dialog (name, frames, color,
+direction, repeats), or by dragging a tag's ends or middle; a right-click on
+a cel, a frame number or a tag opens its menu. `,` and `.` (or Alt+Left and
+Alt+Right) step through frames, Alt+Up and Alt+Down through layers.
+
+Play runs the animation at each frame's duration: looping, once or
+ping-pong, and inside the current frame's tag, with its direction and
+repeats, while Loop tag is on. The frame rate playback reaches shows beside
+the controls; a document too heavy to keep up plays slower rather than
+skipping frames. The onion skin shows the frames before and after the
+current one, as many as asked for, fading with distance, tinted by the
+theme, under or over the current frame. The preview panel shows the
+document at actual size, or fitted to the panel, and plays along; the Paint
+layout hides it and Animate shows it beside the timeline.
 
 The File menu makes a new project (Ctrl+N), opens and saves `.pixl`
 documents (Ctrl+O, Ctrl+S, Ctrl+Shift+S), and exports the current frame as a

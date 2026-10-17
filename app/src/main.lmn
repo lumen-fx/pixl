@@ -83,7 +83,10 @@
       <canvas id="art"/>
       <canvas id="overlay"/>
     </column>
-    <column id="dock-bottom" class="dock empty"/>
+    <column id="dock-bottom" class="dock">
+      <include src="parts/timeline.lmn"/>
+      <include src="parts/preview.lmn"/>
+    </column>
     </split>
 
     <column id="dock-right" class="dock side">
@@ -164,6 +167,7 @@
   <include src="parts/workspace.lmn"/>
   <include src="parts/themes.lmn"/>
   <include src="parts/palette.lmn"/>
+  <include src="parts/timeline-menus.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">
