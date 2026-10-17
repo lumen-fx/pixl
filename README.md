@@ -213,7 +213,9 @@ thumbnails, mirror left to right by bone name (`arm.L` and `arm.R`,
 the next key. Render to new frame adds a frame holding the pose; Render
 keyed fills a range of frames from the keys, eased; Regenerate renders
 every generated frame again after the rig changes. Bones are drawn over the
-art in the theme's colors and are never part of it.
+art in the theme's colors and are never part of it. Escape leaves either
+mode, and picking a tool hands the canvas back to it. Outside the Rig layout
+(Window menu) the panel shows only its header until a mode starts.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
