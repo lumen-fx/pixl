@@ -4,6 +4,7 @@
   <menuitem id="view-clear-guides" label="Clear guides"/>
   <menuitem id="view-snap" label="Snap to grid, guides and slices (Ctrl+Shift+;)"/>
   <separator/>
+  <menuitem id="view-pixel-grid" label="Pixel grid (Ctrl+Shift+')"/>
   <menuitem id="view-grid" label="Grid (Ctrl+')"/>
   <menuitem id="view-grid-settings" label="Grid settings..."/>
   <menuitem id="view-slices" label="Slices"/>

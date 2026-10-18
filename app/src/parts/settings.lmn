@@ -93,6 +93,11 @@
             </row>
             <label class="settings-section" text="Pixel grid"/>
             <row class="setting">
+              <label class="setting-label" text="Show"/>
+              <checkbox id="set-pixel-grid" label="Outline each pixel" bind-checked="set_pixel_grid"/>
+              <label class="setting-hint" text="View > Pixel grid."/>
+            </row>
+            <row class="setting">
               <label class="setting-label" text="Shows from"/>
               <input id="set-grid-from" class="setting-number" type="number" min="100" max="6400" step="100" bind-text="set_grid_from"/>
               <label class="setting-hint" text="Percent zoom."/>

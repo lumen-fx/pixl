@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use lumenui::prelude::*;
 use pixl::view::{ItemSource, View, canvas_blend, plan};
-use pixl::{Editor, editor};
+use pixl::{Editor, Settings, editor};
 use pixl_core::{
     BlendMode, ColorMode, CompositeOptions, Document, LayerId, NewLayer, Placement, Rect, Rgba,
     composite,
@@ -22,6 +22,17 @@ fn render(
     ticks: u64,
     setup: impl Fn(&mut View) + Send + Sync + 'static,
 ) -> (Frame, View) {
+    render_with(backend, doc, Settings::default(), ticks, setup)
+}
+
+/// [`render`] with `settings` in force.
+fn render_with(
+    backend: &str,
+    doc: Document,
+    settings: Settings,
+    ticks: u64,
+    setup: impl Fn(&mut View) + Send + Sync + 'static,
+) -> (Frame, View) {
     let _turn = common::turn();
     let seen: Arc<Mutex<Option<View>>> = Arc::default();
     let out = Arc::clone(&seen);
@@ -29,6 +40,7 @@ fn render(
         dir: common::app_dir(backend),
     })
     .insert_resource(Editor::new(doc))
+    .insert_resource(settings)
     .add_systems(
         TickStage::Systems,
         move |mut view: ResMut<View>, mut n: Local<u32>| {
@@ -189,9 +201,11 @@ fn the_document_fits_the_stage_with_sharp_pixels() {
 }
 
 #[test]
-fn zooming_in_shows_the_pixel_grid() {
+fn zooming_in_shows_the_pixel_grid_once_it_is_on() {
     let doc = Document::new(16, 16, ColorMode::Rgba).unwrap();
-    let (frame, view) = render("cpu", doc, 8, |v| {
+    let mut settings = Settings::default();
+    settings.canvas.pixel_grid = true;
+    let (frame, view) = render_with("cpu", doc, settings, 8, |v| {
         let z = 32.0;
         let mid = v.middle();
         v.zoom_at(z, mid);

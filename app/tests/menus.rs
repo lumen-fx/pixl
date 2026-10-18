@@ -343,6 +343,35 @@ fn tiled_mode_rulers_and_the_grid_show() {
 }
 
 #[test]
+fn the_pixel_grid_is_off_until_the_view_menu_or_its_key_turns_it_on() {
+    // The color on the line between document pixels 5 and 6 of the red
+    // block, and whether the setting is on.
+    let line = |steps: Vec<Step>| {
+        let out = drive(editor_over(art()), steps);
+        let v = out.views.last().unwrap();
+        assert!(v.zoom >= 8.0, "the grid's zoom, not {}", v.zoom);
+        let x = v.stage.0.x + (v.origin.0 + 6.0 * v.zoom) as f32;
+        let y = pixl::tools::screen_of(v, pixl_core::Point::new(6, 6)).y;
+        let px = out.frame.pixel(x as u32, y as u32);
+        (px, out.settings.canvas.pixel_grid, out)
+    };
+    let red = Some([0xff, 0x00, 0x00, 0xff]);
+    let (px, on, _) = line(waits(3));
+    assert!(!on);
+    assert_eq!(px, red, "no grid by default, whatever the zoom");
+    let (px, on, out) = line(vec![Step::Ctrl("\"", false), Step::Wait, Step::Wait]);
+    common::save(&out.frame, "menus-pixel-grid");
+    assert!(on, "the key turns it on and the setting keeps it");
+    assert_ne!(px, red, "the grid outlines the pixels");
+    let (_, on, _) = line(vec![
+        Step::Ctrl("\"", false),
+        Step::Menu("view-pixel-grid"),
+        Step::Wait,
+    ]);
+    assert!(!on, "the menu item turns it off again");
+}
+
+#[test]
 fn snapping_puts_a_selection_on_the_grid() {
     let out = drive(
         editor_over(art()),

@@ -205,9 +205,11 @@ pub fn follow_grid_setting(settings: Res<crate::settings::Settings>, mut aids: R
 
 /// Runs the View menu's commands, the grid and slice dialogs, and keeps the
 /// view's snapping and the overlay in step with the aids.
+#[allow(clippy::too_many_arguments)]
 pub fn aids_commands(
     chosen: Res<Chosen>,
     mut editor: ResMut<Editor>,
+    mut settings: ResMut<crate::settings::Settings>,
     mut toolbox: ResMut<Toolbox>,
     mut aids: ResMut<Aids>,
     mut view: ResMut<View>,
@@ -235,6 +237,18 @@ pub fn aids_commands(
                 });
             }
             "view-grid" => aids.grid = !aids.grid,
+            "view-pixel-grid" => {
+                // A setting, so it stays as it was left; the view redraws
+                // when the canvas settings change.
+                let c = &mut settings.canvas;
+                c.pixel_grid = !c.pixel_grid;
+                if c.pixel_grid && view.zoom * 100.0 < c.grid_from_zoom - 1e-6 {
+                    editor.message = Some(format!(
+                        "The pixel grid shows from {}% zoom",
+                        c.grid_from_zoom.round()
+                    ));
+                }
+            }
             "view-slices" => aids.slices = !aids.slices,
             "view-tile-x" => {
                 view.tiled.0 = !view.tiled.0;

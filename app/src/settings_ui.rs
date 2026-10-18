@@ -305,6 +305,7 @@ fn fields() -> Vec<Field> {
         number!("set_pen_max", 1, 400, |s| s.pen.max_size, u32),
         // Canvas.
         number!("set_checker_size", 1, 128, |s| s.canvas.checker_size, u32),
+        flag!("set_pixel_grid", |s| s.canvas.pixel_grid),
         number!("set_grid_from", 100, 6400, |s| s.canvas.grid_from_zoom, f64),
         number!(
             "set_custom_grid_w",

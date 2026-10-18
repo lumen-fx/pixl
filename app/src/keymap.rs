@@ -379,6 +379,7 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("view-guides", "Guides", "View", Kind::Press),
     ("view-clear-guides", "Clear guides", "View", Kind::Press),
     ("view-snap", "Snap", "View", Kind::Press),
+    ("view-pixel-grid", "Pixel grid", "View", Kind::Press),
     ("view-grid", "Grid", "View", Kind::Press),
     ("view-grid-settings", "Grid settings", "View", Kind::Press),
     ("view-slices", "Show slices", "View", Kind::Press),
@@ -537,6 +538,9 @@ fn pixl_default(id: &str) -> &'static [&'static str] {
         "view-rulers" => &["Ctrl+R"],
         "view-guides" => &["Ctrl+;"],
         "view-snap" => &["Ctrl+Shift+;"],
+        // Ctrl+Shift+' as Aseprite has it: the window names the key a
+        // shifted press makes, which is " on a US layout.
+        "view-pixel-grid" => &["Ctrl+\""],
         "view-grid" => &["Ctrl+'"],
         "view-rotate-ccw" => &["Alt+["],
         "view-rotate-cw" => &["Alt+]"],

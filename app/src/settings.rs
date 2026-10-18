@@ -117,6 +117,9 @@ pub struct CanvasSettings {
     /// The checkerboard's two colors as `#rrggbb`; `None` follows the theme.
     pub checker_a: Option<String>,
     pub checker_b: Option<String>,
+    /// The pixel grid is on (View > Pixel grid). It shows from
+    /// `grid_from_zoom` on.
+    pub pixel_grid: bool,
     /// The zoom, in percent, from which the pixel grid shows.
     pub grid_from_zoom: f64,
     /// The pixel grid's color as `#rrggbbaa`; `None` follows the theme.
@@ -133,6 +136,7 @@ impl Default for CanvasSettings {
             checker_size: 8,
             checker_a: None,
             checker_b: None,
+            pixel_grid: false,
             grid_from_zoom: 800.0,
             grid_color: None,
             custom_grid: [16, 16],

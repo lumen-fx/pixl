@@ -35,9 +35,10 @@ screen; Home keeps the open document to go back to.
 The canvas view zooms from 1 to 6400 percent around the pointer (the wheel,
 or `+`, `-`, `0` to fit and `1` for 100 percent) and pans with the middle
 button, a drag with the space bar held, or W, A, S and D held down (Shift
-moves faster). Pixels stay sharp at every zoom, a
-grid outlines them from 800 percent, and a checkerboard shows through
-transparency. Each layer is its own pixel buffer that Lumen's renderer
+moves faster). Pixels stay sharp at every zoom and a checkerboard shows
+through transparency. View > Pixel grid (Ctrl+Shift+') outlines each pixel
+once the view is zoomed in far enough (800 percent unless the settings say
+otherwise); it is off until you turn it on, and stays as you leave it. Each layer is its own pixel buffer that Lumen's renderer
 composites with the layer's blend mode and opacity, on the GPU when the app
 renders there; what the renderer cannot composite the way `pixl-core` does
 (add and subtract, clipping, masks, groups) is composited by `pixl-core` on the
@@ -128,9 +129,9 @@ image tile by tile on worker threads, nearest the middle of the view first,
 so a large layer fills in as it goes and a change of setting stops the work
 at once. An empty frame of the layer has nothing to filter. Indexed layers stay on their palette.
 
-The View menu shows rulers, which guides drag out of and back into; snaps to
-the grid, the guides and the slices; draws a grid of any cell size and
-offset, square or isometric; repeats the document left and right and above
+The View menu shows rulers, which guides drag out of and back into; shows
+the pixel grid; snaps to the grid, the guides and the slices; draws a grid
+of any cell size and offset, square or isometric; repeats the document left and right and above
 and below for seamless tiles; turns the view in 15 degree steps and mirrors
 it; and shows the slices. The symmetry axes are marked in the rulers and
 move by their marks. Guides and the grid last as long as the editor runs and
@@ -276,8 +277,9 @@ Edit > Settings (Ctrl+,) sets how the view moves (what the wheel does, zoom
 speed, zooming around the pointer, scroll and pan key speeds, an inverted
 wheel), how the pen paints (pressure on or off, the pressure curve with a
 preview, the brush size at the lightest and the firmest touch), how the
-canvas looks (checkerboard size and colors, the pixel grid's color and the
-zoom it shows from, a new custom grid's cell, the color around the
+canvas looks (checkerboard size and colors, whether the pixel grid shows,
+its color and the zoom it shows from, a new custom grid's cell, the color
+around the
 document), the interface (theme, UI font, UI scale, tooltips), files
 (autosave interval, recovery copies, the length of the recent list),
 performance (the progressive redraw threshold, worker threads, the layer

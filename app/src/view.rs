@@ -1,5 +1,5 @@
 //! The canvas view: the document drawn through Lumen's canvas, zoomed and
-//! panned, over a checkerboard and under a pixel grid.
+//! panned, over a checkerboard and under the pixel grid when it is on.
 //!
 //! Three canvases are stacked in the stage. `checker` shows the
 //! checkerboard where the document is transparent, `art` shows the layers,
@@ -1614,7 +1614,8 @@ pub fn draw_stage(
     let view_changed =
         drawn.view != view.revision || resized || drawn.doc_size != doc_size || canvas_changed;
     let cell = f64::from(canvas.checker_size.max(1));
-    let grid_from = canvas.grid_from_zoom / 100.0;
+    // The pixel grid is off until View > Pixel grid turns it on.
+    let grid_from = canvas.pixel_grid.then_some(canvas.grid_from_zoom / 100.0);
 
     if view_changed || drawn.colors != colors.revision || drawn.background != Some(doc.background())
     {
@@ -1731,7 +1732,8 @@ fn draw_checker(
     ctx.restore();
 }
 
-/// The pixel grid, the selection outline and the tool preview.
+/// The pixel grid, from the zoom `grid_from` on while it is on, the
+/// selection outline and the tool preview.
 fn draw_overlay(
     ctx: &Context2d,
     view: &View,
@@ -1739,7 +1741,7 @@ fn draw_overlay(
     preview: &Preview,
     selection: Option<&Selection>,
     doc: (u32, u32),
-    grid_from: f64,
+    grid_from: Option<f64>,
 ) {
     ctx.clear();
     view.apply_turn(ctx);
@@ -1755,7 +1757,7 @@ fn draw_overlay(
             }
         }
     }
-    if z >= grid_from - 1e-9
+    if grid_from.is_some_and(|from| z >= from - 1e-9)
         && let Some(grid) = colors.grid
     {
         let visible = view.visible_pixels(doc.0, doc.1);
