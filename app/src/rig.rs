@@ -426,8 +426,15 @@ pub fn rig_clicks(
         ui.mode = None;
     }
     settle(editor, ui);
+    // A mode asked for with no skeleton to work on unfolds the panel, where
+    // New skeleton is.
+    let mut unfold = false;
     for id in clicked {
         let skeleton = ui.skeleton;
+        if skeleton.is_none() && matches!(id.as_str(), "rig-mode-bones" | "rig-mode-pose") {
+            editor.message = Some("Make a skeleton first: New skeleton in the Rig panel".into());
+            unfold = true;
+        }
         match id.as_str() {
             "rig-new" => {
                 let at = pixl_core::Placement::default();
@@ -611,8 +618,7 @@ pub fn rig_clicks(
         }
     }
     // Entering a mode unfolds the panel it works in.
-    if ui.mode.is_some()
-        && ui.mode != was
+    if (unfold || (ui.mode.is_some() && ui.mode != was))
         && let Some(mut ws) = workspace
         && ws
             .live

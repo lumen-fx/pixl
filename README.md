@@ -309,7 +309,8 @@ keyed fills a range of frames from the keys, eased; Regenerate renders
 every generated frame again after the rig changes. Bones are drawn over the
 art in the theme's colors and are never part of it. Escape leaves either
 mode, and picking a tool hands the canvas back to it. Outside the Rig layout
-(Window menu) the panel shows only its header until a mode starts.
+(Window menu) the panel shows only its header until a mode starts; Bones or
+Pose with no skeleton yet unfolds it to New skeleton.
 
 Help > Open rig demo, also on the start screen, opens a character rigged and
 keyed as an eight-frame walk; press Play to watch it. Help > Rig tutorial

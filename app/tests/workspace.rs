@@ -159,6 +159,26 @@ fn header_buttons_collapse_and_hide_and_the_window_menu_shows_all() {
     assert!(docks.lock().unwrap().closed.is_empty());
 }
 
+#[test]
+fn a_rig_mode_with_no_skeleton_unfolds_the_rig_panel() {
+    let (app, docks) = watch(editor());
+    let out = drive(
+        app,
+        vec![
+            Step::Wait,
+            Step::Click("rig-mode-bones"),
+            Step::Wait,
+            Step::Wait,
+        ],
+    );
+    let d = docks.lock().unwrap().clone();
+    assert_eq!(d.collapsed, Vec::<String>::new(), "New skeleton shows");
+    assert_eq!(
+        out.message.as_deref(),
+        Some("Make a skeleton first: New skeleton in the Rig panel")
+    );
+}
+
 /// Asks for the panel menu on `panel`'s header on the tick the steps start.
 fn open_panel_menu(app: App, panel: &'static str) -> App {
     app.add_systems(
