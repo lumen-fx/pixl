@@ -18,6 +18,12 @@
   </row>
   <column class="panel-body tl-main">
     <row class="tl-tools">
+      <row class="tl-layer-tools">
+        <label class="option-label" text="Layer"/>
+        <tooltip text="New layer above the active one"><button id="tl-new-layer" class="flat small" text="New"/></tooltip>
+        <tooltip text="Delete the active layer"><button id="tl-delete-layer" class="flat small" text="Delete"/></tooltip>
+        <tooltip text="Layer properties: name, opacity, blend mode (or double-click a name)"><button id="tl-edit-layer" class="flat small" text="Props"/></tooltip>
+      </row>
       <tooltip text="New empty frame after the selection"><button id="tl-new" class="flat small" text="New"/></tooltip>
       <tooltip text="Copy the selected frames after them"><button id="tl-duplicate" class="flat small" text="Copy"/></tooltip>
       <tooltip text="Delete the selected frames"><button id="tl-delete" class="flat small" text="Delete"/></tooltip>

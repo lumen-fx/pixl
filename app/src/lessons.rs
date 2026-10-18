@@ -2,8 +2,9 @@
 //!
 //! - Getting started: pick the pencil and a color, draw, erase, undo and
 //!   redo, zoom and pan, save.
-//! - Layers: add a layer, name it, paint on it, move it under another, hide
-//!   and solo layers, fade it, merge it down.
+//! - Layers: in the timeline's layer rows, add a layer, name it, paint on
+//!   it, drag it under another, hide and solo layers, fade it, merge it
+//!   down.
 //! - Selections: select a box, move what it holds, deselect, lasso and add
 //!   to the lasso, paint inside the selection.
 //! - Animation: add frames, turn on the onion skin, draw a bounce, time a
@@ -19,6 +20,7 @@ use pixl_core::rig::{BoneId, Rig};
 use pixl_core::{ColorMode, LayerId};
 
 use crate::editor::Tool;
+use crate::layers::List;
 use crate::rig::{RigMode, skeletons};
 use crate::shipped::Shipped;
 use crate::tutorial::{Lesson, Seen, Step};
@@ -108,9 +110,7 @@ pub const LAYERS: Lesson = Lesson {
     id: "help-layers-tutorial",
     title: "Layers tutorial",
     document: Shipped::LayersLesson,
-    // Animate leaves out the History and Brushes panels, which gives the
-    // layers list room.
-    layout: "Animate",
+    layout: "Paint",
     steps: &LAYERS_STEPS,
     done: "Done. A layer keeps its pixels apart from the others until you merge it, so try ideas on a new one.",
 };
@@ -118,7 +118,16 @@ pub const LAYERS: Lesson = Lesson {
 impl Seen<'_> {
     /// The id of the eye on a layer's row.
     fn eye(layer: Option<LayerId>) -> Option<String> {
-        layer.map(|l| format!("layer-eye-{}", l.0))
+        layer.map(|l| List::Timeline.eye(l))
+    }
+
+    /// `then` while the properties dialog is open: its OK button. Until
+    /// then the timeline's Props button, once the lesson's layer is active.
+    fn props(&self) -> Option<String> {
+        if self.flag("lp_open") {
+            return Some("lp-ok".to_string());
+        }
+        self.on_added(Some("tl-edit-layer".to_string()))
     }
 
     /// `then` while the layer the lesson added is the active one; until
@@ -151,19 +160,14 @@ impl Seen<'_> {
 const LAYERS_STEPS: [Step; 9] = [
     Step {
         title: "Add a layer",
-        text: "Click New below the list in the Layers panel. The new layer goes above the active one, Tree.",
-        target: |_| Some("layer-add".to_string()),
+        text: "The timeline below the canvas has a row for each layer. Click New beside Layer above the rows, and the new layer goes above the active one, Tree.",
+        target: |_| Some("tl-new-layer".to_string()),
         done: |s| s.added().is_some(),
     },
     Step {
         title: "Name it",
-        text: "Click Props below the list, or double-click the new layer's row, then type Shadow as its name and click OK.",
-        target: |s| {
-            if s.flag("lp_open") {
-                return Some("lp-ok".to_string());
-            }
-            s.on_added(Some("layer-properties".to_string()))
-        },
+        text: "Click Props beside New, or double-click the new layer's name, then type Shadow as its name and click OK.",
+        target: |s| s.props(),
         done: |s| {
             s.added()
                 .and_then(|l| s.editor.doc.layer(l))
@@ -172,14 +176,14 @@ const LAYERS_STEPS: [Step; 9] = [
     },
     Step {
         title: "Paint on it",
-        text: "With the pencil, draw a shadow on the grass at the foot of the tree. Only the active layer, highlighted in the list, takes the paint.",
+        text: "With the pencil, draw a shadow on the grass at the foot of the tree. Only the active layer, its row highlighted, takes the paint.",
         target: |s| s.on_added(s.with_tool(Tool::Pencil, None)),
         done: |s| s.added().is_some_and(|l| s.painted(l, s.editor.frame)),
     },
     Step {
         title: "Move it down",
-        text: "Click Down below the list to move your layer under Tree, so the tree covers its shadow. Dragging a row moves it too.",
-        target: |s| s.on_added(Some("layer-down".to_string())),
+        text: "Drag your layer's name down onto the lower half of the Tree row to move it under Tree, so the tree covers its shadow.",
+        target: |s| s.added().map(row),
         done: |s| match (s.place(s.added()), s.place(s.layer("Tree"))) {
             (Some(layer), Some(tree)) => layer < tree,
             _ => false,
@@ -222,8 +226,8 @@ const LAYERS_STEPS: [Step; 9] = [
     },
     Step {
         title: "Fade it",
-        text: "Drag the opacity slider at the top of the Layers panel to the left to fade the shadow.",
-        target: |s| s.on_added(Some("layer-opacity".to_string())),
+        text: "Open your layer's properties again with Props or a double-click on its name, set Opacity to 50 and click OK.",
+        target: |s| s.props(),
         done: |s| {
             s.added()
                 .and_then(|l| s.editor.doc.layer(l))
@@ -574,8 +578,8 @@ impl Seen<'_> {
     }
 
     /// The next click that binds the layer named `part` to `bone`: Bones
-    /// mode, the bone in the Rig panel's list, the layer in the Layers panel,
-    /// then Bind layer.
+    /// mode, the bone in the Rig panel's list, the layer's row in the
+    /// timeline, then Bind layer.
     fn bind_next(&self, part: &str, bone: Option<BoneId>) -> Option<String> {
         let next = if bone.is_some() && self.rig.bone != bone {
             bone.map(|b| format!("rig-bone-{}", b.0))
@@ -588,9 +592,9 @@ impl Seen<'_> {
     }
 }
 
-/// The id of a layer's row in the Layers panel.
+/// The id of a layer's row in the timeline.
 fn row(layer: LayerId) -> String {
-    format!("layer-row-{}", layer.0)
+    List::Timeline.row(layer)
 }
 
 const RIG_STEPS: [Step; 14] = [
@@ -631,13 +635,13 @@ const RIG_STEPS: [Step; 14] = [
     },
     Step {
         title: "Bind the arm",
-        text: "Click Bind layer. It binds the active layer, Front arm (highlighted in the Layers panel), to the selected bone, the arm.",
+        text: "Click Bind layer. It binds the active layer, Front arm (highlighted in the timeline), to the selected bone, the arm.",
         target: |s| s.bind_next("Front arm", s.arm()),
         done: |s| s.bound("Front arm", s.arm()),
     },
     Step {
         title: "Bind the head",
-        text: "Click the head bone, then the Head layer in the Layers panel, then Bind layer. The outline shows each next click.",
+        text: "Click the head bone, then the Head layer's name in the timeline, then Bind layer. The outline shows each next click.",
         target: |s| s.bind_next("Head", s.head()),
         done: |s| s.bound("Head", s.head()),
     },

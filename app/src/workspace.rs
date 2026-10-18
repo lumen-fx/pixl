@@ -145,13 +145,15 @@ impl Layout {
             collapsed: true,
             ..place("panel-rig", Dock::Right, true)
         };
+        // The timeline lists the layers against the frames, as Aseprite's
+        // does, so the Layers panel waits in the Window menu's list.
         let panels = match name {
-            // Drawing: color and layers at hand, the timeline below the
-            // canvas to move between frames.
+            // Drawing: color at hand, the timeline below the canvas for the
+            // layers and frames.
             "Paint" => vec![
                 place("panel-color", Dock::Right, true),
                 place("panel-palette", Dock::Right, true),
-                place("panel-layers", Dock::Right, true),
+                place("panel-layers", Dock::Right, false),
                 rig_folded,
                 place("panel-history", Dock::Right, true),
                 place("panel-brushes", Dock::Right, true),
@@ -163,19 +165,19 @@ impl Layout {
             "Animate" => vec![
                 place("panel-color", Dock::Right, true),
                 place("panel-palette", Dock::Right, true),
-                place("panel-layers", Dock::Right, true),
+                place("panel-layers", Dock::Right, false),
                 rig_folded,
                 place("panel-history", Dock::Right, false),
                 place("panel-brushes", Dock::Right, false),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, true),
             ],
-            // Rigging: layers, the rig and history on the right, colors on
-            // the left.
+            // Rigging: the rig and history on the right, colors on the
+            // left.
             "Rig" => vec![
                 place("panel-color", Dock::Left, true),
                 place("panel-palette", Dock::Left, true),
-                place("panel-layers", Dock::Right, true),
+                place("panel-layers", Dock::Right, false),
                 place("panel-rig", Dock::Right, true),
                 place("panel-history", Dock::Right, true),
                 place("panel-brushes", Dock::Right, false),
@@ -1052,9 +1054,9 @@ mod tests {
         assert_eq!(mine.sizes.right, Some(300.0));
         assert_eq!(again.names(), ["Paint", "Animate", "Rig", "Mine"]);
         // Reset puts the live layout back to what its layout says.
-        ws.edit(|l| l.set_shown("panel-layers", false));
+        ws.edit(|l| l.set_shown("panel-history", false));
         ws.reset();
-        assert!(ws.live.place("panel-layers").unwrap().shown);
+        assert!(ws.live.place("panel-history").unwrap().shown);
         assert!(ws.delete("Mine"));
         assert!(!ws.delete("Paint"));
         let _ = std::fs::remove_dir_all(dir);

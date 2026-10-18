@@ -1,9 +1,14 @@
-//! The layers panel's list and the layer commands behind it: groups that
-//! nest, collapse and take layers dragged into them, layer masks and the
-//! mask editing mode, clipping, reference images, locks, color tags,
-//! renaming, duplicating, merging down and flattening, and the layer
-//! properties dialog. The Layer menu and a right-click on a layer reach the
-//! same commands.
+//! The layer lists and the layer commands behind them: groups that nest,
+//! collapse and take layers dragged into them, layer masks and the mask
+//! editing mode, clipping, reference images, locks, color tags, renaming,
+//! duplicating, merging down and flattening, and the layer properties
+//! dialog. The Layer menu and a right-click on a layer reach the same
+//! commands.
+//!
+//! Two lists show the layers: the timeline's names column, a row per layer
+//! beside its cels, and the Layers panel. Each [`List`] names its rows,
+//! eyes, locks and folds with ids of its own, and both answer the pointer
+//! here, the same way.
 //!
 //! The eyes show and hide layers: a click toggles one, Alt+click shows only
 //! that layer and a second Alt+click puts the others back, and a drag down
@@ -351,7 +356,139 @@ pub fn reference_image(
     Ok(img)
 }
 
-// ---- the list ----
+// ---- the lists ----
+
+/// A list of the layers: the timeline's names column or the Layers panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum List {
+    Timeline,
+    Panel,
+}
+
+impl List {
+    pub const ALL: [List; 2] = [List::Timeline, List::Panel];
+
+    /// The element that holds the rows.
+    pub fn element_id(self) -> &'static str {
+        match self {
+            List::Timeline => "tl-names",
+            List::Panel => "layer-list",
+        }
+    }
+
+    fn prefixes(self) -> [&'static str; 4] {
+        match self {
+            List::Timeline => ["tl-layer-", "tl-eye-", "tl-lock-", "tl-fold-"],
+            List::Panel => ["layer-row-", "layer-eye-", "layer-lock-", "layer-fold-"],
+        }
+    }
+
+    /// The id of a layer's row.
+    pub fn row(self, layer: LayerId) -> String {
+        format!("{}{}", self.prefixes()[0], layer.0)
+    }
+
+    /// The id of a layer's eye.
+    pub fn eye(self, layer: LayerId) -> String {
+        format!("{}{}", self.prefixes()[1], layer.0)
+    }
+
+    /// The id of a layer's lock button.
+    pub fn lock(self, layer: LayerId) -> String {
+        format!("{}{}", self.prefixes()[2], layer.0)
+    }
+
+    /// The id of a group's fold button.
+    pub fn fold(self, layer: LayerId) -> String {
+        format!("{}{}", self.prefixes()[3], layer.0)
+    }
+
+    /// The list and layer an id of kind `k` (row, eye, lock, fold) names.
+    fn parse(id: &str, k: usize) -> Option<(List, LayerId)> {
+        List::ALL.into_iter().find_map(|list| {
+            let n = id.strip_prefix(list.prefixes()[k])?.parse().ok()?;
+            Some((list, LayerId(n)))
+        })
+    }
+}
+
+/// The eye's classes: open while the layer shows, shut while it is hidden,
+/// and faint while a group holding it is hidden.
+pub fn eye_class(visible: bool, muted: bool) -> String {
+    let mut c = String::from(if visible {
+        "layer-eye on"
+    } else {
+        "layer-eye off"
+    });
+    if muted {
+        c.push_str(" muted");
+    }
+    c
+}
+
+/// How much of a layer is locked, as its lock button shows it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Lock {
+    Unlocked,
+    Partly,
+    Locked,
+}
+
+impl Lock {
+    pub fn of(locks: Locks) -> Lock {
+        if locks == Locks::ALL {
+            Lock::Locked
+        } else if locks == Locks::NONE {
+            Lock::Unlocked
+        } else {
+            Lock::Partly
+        }
+    }
+
+    /// The lock button's classes.
+    pub fn class(self) -> &'static str {
+        match self {
+            Lock::Unlocked => "layer-lock none",
+            Lock::Partly => "layer-lock some",
+            Lock::Locked => "layer-lock all",
+        }
+    }
+}
+
+/// Whether a group holding `layer` is hidden.
+pub fn group_hidden(doc: &pixl_core::Document, layer: LayerId) -> bool {
+    doc.ancestors(layer)
+        .iter()
+        .any(|g| doc.layer(*g).is_some_and(|g| !g.props.visible))
+}
+
+/// A group's fold button in `list`, `+` while folded; nothing for a layer
+/// that is not a group.
+pub fn fold_markup(list: List, layer: &pixl_core::Layer, tree: &LayerTree) -> String {
+    match &layer.kind {
+        LayerKind::Group { .. } => {
+            let (cls, text) = if tree.collapsed.contains(&layer.id) {
+                ("folded", "+")
+            } else {
+                ("open", "-")
+            };
+            format!(
+                r#"<button id="{}" class="layer-fold {cls}" text="{text}"/>"#,
+                list.fold(layer.id)
+            )
+        }
+        _ => String::new(),
+    }
+}
+
+/// A row's eye and lock buttons in `list`.
+pub fn eye_and_lock_markup(list: List, eye: &str, lock: &str, layer: LayerId) -> String {
+    format!(
+        r#"<button id="{}" class="{eye}"><tile class="eye-icon"/></button><button id="{}" class="{lock}" text=""/>"#,
+        list.eye(layer),
+        list.lock(layer),
+    )
+}
 
 /// The list's drop marker while a layer is dragged.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -361,16 +498,17 @@ pub enum Drop {
     Into(LayerId),
 }
 
-/// A layer being dragged in the list.
+/// A layer being dragged in a list.
 #[derive(Clone, Copy, Debug)]
 struct Dragging {
+    list: List,
     layer: LayerId,
     from: Vec2,
     moved: bool,
     drop: Option<Drop>,
 }
 
-/// The layers panel's state.
+/// The layer lists' state.
 #[derive(Resource, Default)]
 pub struct LayerPanel {
     /// The list's markup as last written, and what it was written from:
@@ -384,8 +522,8 @@ pub struct LayerPanel {
     /// The color tag the properties dialog has picked: `Some(None)` for no
     /// tag.
     picked_tag: Option<Option<Rgba>>,
-    /// The drop marker as last drawn.
-    marker: Option<Drop>,
+    /// The drop marker as last drawn, and its list.
+    marker: Option<(List, Drop)>,
     /// Ticks left to write the properties dialog's fields again: they
     /// appear a tick after it opens, and the name field, which has focus,
     /// takes only a direct write (lumen-fx/lumen#536).
@@ -414,9 +552,11 @@ struct Solo {
     after: Vec<(LayerId, bool)>,
 }
 
-/// A drag down the eyes: what the first eye becomes, the eyes crossed, the
-/// pointer's last height, and the undo step once an eye has changed.
+/// A drag down the eyes of a list: what the first eye becomes, the eyes
+/// crossed, the pointer's last height, and the undo step once an eye has
+/// changed.
 struct EyePaint {
+    list: List,
     show: bool,
     crossed: Vec<LayerId>,
     y: f32,
@@ -578,38 +718,15 @@ pub fn layers_markup(editor: &Editor, tree: &LayerTree, selected: &BTreeSet<Laye
             LayerKind::Skeleton { .. } => " skeleton",
         };
         class.push_str(kind);
-        let mut eye = String::from(if p.visible { "on" } else { "off" });
-        let group_hidden = editor
-            .doc
-            .ancestors(layer.id)
-            .iter()
-            .any(|g| editor.doc.layer(*g).is_some_and(|g| !g.props.visible));
-        if group_hidden {
-            eye.push_str(" muted");
-        }
-        let lock = if p.locks == Locks::ALL {
-            "all"
-        } else if p.locks == Locks::NONE {
-            "none"
-        } else {
-            "some"
-        };
+        let eye = eye_class(p.visible, group_hidden(&editor.doc, layer.id));
+        let lock = Lock::of(p.locks).class();
+        let controls = eye_and_lock_markup(List::Panel, &eye, lock, layer.id);
         // The color tag is the layer's data, so it rides in the markup.
         let tag = match p.color_tag {
             Some(c) => format!(r#"<tile class="layer-tag" bg="{}"/>"#, hex(c)),
             None => r#"<tile class="layer-tag untagged"/>"#.to_string(),
         };
-        let fold = match &layer.kind {
-            LayerKind::Group { .. } => {
-                let (cls, text) = if tree.collapsed.contains(&layer.id) {
-                    ("folded", "+")
-                } else {
-                    ("open", "-")
-                };
-                format!(r#"<button id="layer-fold-{id}" class="layer-fold {cls}" text="{text}"/>"#)
-            }
-            _ => String::new(),
-        };
+        let fold = fold_markup(List::Panel, layer, tree);
         let clip = if p.clip {
             r#"<tile class="layer-clip"/>"#
         } else {
@@ -640,7 +757,7 @@ pub fn layers_markup(editor: &Editor, tree: &LayerTree, selected: &BTreeSet<Laye
             )
         };
         out.push_str(&format!(
-            r#"<row id="layer-row-{id}" class="{class}">{tag}<button id="layer-eye-{id}" class="layer-eye {eye}"><tile class="eye-icon"/></button><button id="layer-lock-{id}" class="layer-lock {lock}" text=""/>{fold}{clip}<label class="layer-name" text="{name}"/>{note}{mask}<label class="layer-meta" text="{meta}"/></row>"#,
+            r#"<row id="layer-row-{id}" class="{class}">{tag}{controls}{fold}{clip}<label class="layer-name" text="{name}"/>{note}{mask}<label class="layer-meta" text="{meta}"/></row>"#,
             name = escape(&p.name),
             meta = escape(&meta),
         ));
@@ -688,15 +805,17 @@ pub fn show_layers(
             changed = true;
         }
     }
-    let want = panel.drag.and_then(|d| d.drop.filter(|_| d.moved));
+    let want = panel
+        .drag
+        .and_then(|d| d.drop.filter(|_| d.moved).map(|drop| (d.list, drop)));
     if panel.marker != want {
-        let mark = |drop: Drop, on: bool| {
+        let mark = |(list, drop): (List, Drop), on: bool| {
             let (id, class) = match drop {
                 Drop::Above(id) => (id, "drop-above"),
                 Drop::Below(id) => (id, "drop-below"),
                 Drop::Into(id) => (id, "drop-into"),
             };
-            if let Some(n) = dom::get_by_id(&format!("layer-row-{}", id.0)) {
+            if let Some(n) = dom::get_by_id(&list.row(id)) {
                 if on {
                     n.add_class(class);
                 } else {
@@ -720,7 +839,7 @@ pub fn show_layers(
 
 // ---- input ----
 
-/// What reaches the layers panel this tick.
+/// What reaches the layer lists this tick.
 #[derive(SystemParam)]
 pub struct LayerInput<'w, 's> {
     clicks: MessageReader<'w, 's, ClickEvent>,
@@ -737,47 +856,46 @@ pub struct LayerInput<'w, 's> {
 
 impl LayerInput<'_, '_> {
     /// The eye the hovered element is, or is in.
-    fn hovered_eye(&self) -> Option<LayerId> {
+    fn hovered_eye(&self) -> Option<(List, LayerId)> {
         let e = self.hovered.iter().next()?;
         self.ids.up(e).find_map(eye_id)
     }
 
     /// The layer row the hovered element is in: `Some(None)` when the
     /// hovered element is elsewhere, `None` when nothing is hovered.
-    fn hovered_row(&self) -> Option<Option<LayerId>> {
+    fn hovered_row(&self) -> Option<Option<(List, LayerId)>> {
         let e = self.hovered.iter().next()?;
         Some(self.ids.up(e).find_map(row_id))
     }
 }
 
-/// The layer a `layer-row-N` id names.
-fn row_id(id: &str) -> Option<LayerId> {
-    id.strip_prefix("layer-row-")?.parse().ok().map(LayerId)
+/// The list and layer a row id (`tl-layer-N`, `layer-row-N`) names.
+fn row_id(id: &str) -> Option<(List, LayerId)> {
+    List::parse(id, 0)
 }
 
-/// The layer a `layer-eye-N` id names.
-fn eye_id(id: &str) -> Option<LayerId> {
-    id.strip_prefix("layer-eye-")?.parse().ok().map(LayerId)
+/// The list and layer an eye id (`tl-eye-N`, `layer-eye-N`) names.
+fn eye_id(id: &str) -> Option<(List, LayerId)> {
+    List::parse(id, 1)
 }
 
-/// The eyes a drag passed between the heights `from` and `to`, top first,
-/// inside the list's own box so rows scrolled out of it are left alone.
-/// The pointer has to be near the column of eyes.
-fn eyes_crossed(x: f32, from: f32, to: f32, order: &[LayerId]) -> Vec<LayerId> {
-    let Some(list) = dom::get_by_id("layer-list").and_then(|n| n.rect()) else {
+/// The eyes of `list` a drag passed between the heights `from` and `to`,
+/// top first, inside the list's own box so rows scrolled out of it are left
+/// alone. The pointer has to be near the column of eyes.
+fn eyes_crossed(list: List, x: f32, from: f32, to: f32, order: &[LayerId]) -> Vec<LayerId> {
+    let Some(bounds) = dom::get_by_id(list.element_id()).and_then(|n| n.rect()) else {
         return Vec::new();
     };
     let (lo, hi) = (
-        from.min(to).max(list.client_y),
-        from.max(to).min(list.client_y + list.height),
+        from.min(to).max(bounds.client_y),
+        from.max(to).min(bounds.client_y + bounds.height),
     );
     let mut out = Vec::new();
     for id in order {
-        let Some(r) = dom::get_by_id(&format!("layer-eye-{}", id.0)).and_then(|n| n.rect()) else {
+        let Some(r) = dom::get_by_id(&list.eye(*id)).and_then(|n| n.rect()) else {
             continue;
         };
-        let Some(row) = dom::get_by_id(&format!("layer-row-{}", id.0)).and_then(|n| n.rect())
-        else {
+        let Some(row) = dom::get_by_id(&list.row(*id)).and_then(|n| n.rect()) else {
             continue;
         };
         let near = x >= r.client_x - r.width && x < r.client_x + 2.0 * r.width;
@@ -788,11 +906,12 @@ fn eyes_crossed(x: f32, from: f32, to: f32, order: &[LayerId]) -> Vec<LayerId> {
     out
 }
 
-/// The row under a window position and where in it: the top third drops
-/// above, the bottom third below, and the middle of a group into it.
-fn drop_at(at: Vec2, order: &[(LayerId, bool)]) -> Option<Drop> {
+/// The row of `list` under a window position and where in it: the top
+/// third drops above, the bottom third below, and the middle of a group
+/// into it.
+fn drop_at(list: List, at: Vec2, order: &[(LayerId, bool)]) -> Option<Drop> {
     for (id, group) in order {
-        let Some(r) = dom::get_by_id(&format!("layer-row-{}", id.0)).and_then(|n| n.rect()) else {
+        let Some(r) = dom::get_by_id(&list.row(*id)).and_then(|n| n.rect()) else {
             continue;
         };
         if at.y < r.client_y || at.y >= r.client_y + r.height {
@@ -1041,7 +1160,7 @@ pub fn layer_command(
                 tree.collapsed.insert(layer);
             }
         }
-        "lm-properties" | "layer-properties" => {
+        "lm-properties" | "layer-properties" | "tl-edit-layer" => {
             open_properties(editor, panel, editor.layer, signals)
         }
         "lp-ok" => {
@@ -1069,11 +1188,11 @@ pub fn layer_command(
                 let c = if i == 0 { None } else { tag_choice(i) };
                 panel.picked_tag = Some(c);
                 mark_tag_choice(c);
-            } else if let Some(layer) = n("layer-fold-") {
+            } else if let Some((_, layer)) = List::parse(other, 3) {
                 if !tree.collapsed.remove(&layer) {
                     tree.collapsed.insert(layer);
                 }
-            } else if let Some(layer) = n("layer-lock-") {
+            } else if let Some((_, layer)) = List::parse(other, 2) {
                 if let Some(locks) = editor.doc.layer(layer).map(|l| l.props.locks) {
                     let next = if locks == Locks::NONE {
                         Locks::ALL
@@ -1097,7 +1216,7 @@ pub fn layer_command(
     true
 }
 
-/// Clicks, drags, menus and the properties dialog of the layers panel.
+/// Clicks, drags, menus and the properties dialog of the layer lists.
 #[allow(clippy::too_many_arguments)]
 pub fn layer_input(
     mut editor: ResMut<Editor>,
@@ -1141,14 +1260,14 @@ pub fn layer_input(
         let Some(id) = input.ids.id_of(e) else {
             continue;
         };
-        if let Some(layer) = row_id(&id) {
+        if let Some((_, layer)) = row_id(&id) {
             if editor.doc.layer(layer).is_some() {
                 close_edit(editor, &mut panels);
                 panel.pick(editor, &tree, layer, ctrl, shift);
             }
             continue;
         }
-        if let Some(layer) = eye_id(&id) {
+        if let Some((_, layer)) = eye_id(&id) {
             if panel.painted.contains(&layer) || editor.doc.layer(layer).is_none() {
                 continue;
             }
@@ -1163,7 +1282,11 @@ pub fn layer_input(
         chosen.push(id);
     }
     for id in chosen {
-        if id.starts_with("lm-") || id.starts_with("layer-") || id.starts_with("lp-") {
+        if id.starts_with("lm-")
+            || id.starts_with("layer-")
+            || id.starts_with("lp-")
+            || id == "tl-edit-layer"
+        {
             close_edit(editor, &mut panels);
         }
         let about = panel.about.filter(|_| id.starts_with("lm-"));
@@ -1189,7 +1312,7 @@ pub fn layer_input(
     // A double click on a row opens its properties.
     let doubles: Vec<Entity> = input.doubles.read().map(|d| d.entity).collect();
     for e in doubles {
-        if let Some(layer) = input.ids.id_of(e).as_deref().and_then(row_id)
+        if let Some((_, layer)) = input.ids.id_of(e).as_deref().and_then(row_id)
             && editor.doc.layer(layer).is_some()
         {
             editor.layer = layer;
@@ -1200,7 +1323,7 @@ pub fn layer_input(
     // A right click on a row opens the Layer menu for it.
     let menus: Vec<ContextMenuEvent> = input.menus.read().cloned().collect();
     for m in menus {
-        if let Some(layer) = input.ids.id_of(m.entity).as_deref().and_then(row_id)
+        if let Some((_, layer)) = input.ids.id_of(m.entity).as_deref().and_then(row_id)
             && editor.doc.layer(layer).is_some()
         {
             // A right click inside the selection keeps it, for the
@@ -1223,9 +1346,10 @@ pub fn layer_input(
             continue;
         }
         panel.painted.clear();
-        if let Some(eye) = input.hovered_eye() {
+        if let Some((list, eye)) = input.hovered_eye() {
             if !alt && let Some(layer) = editor.doc.layer(eye) {
                 panel.paint = Some(EyePaint {
+                    list,
                     show: !layer.props.visible,
                     crossed: vec![eye],
                     y: p.position.y,
@@ -1243,14 +1367,16 @@ pub fn layer_input(
                     .iter()
                     .map(|(_, l)| (l.id, false))
                     .collect();
-                match drop_at(p.position, &order) {
-                    Some(Drop::Above(id) | Drop::Below(id) | Drop::Into(id)) => Some(id),
-                    None => None,
-                }
+                List::ALL
+                    .into_iter()
+                    .find_map(|list| match drop_at(list, p.position, &order)? {
+                        Drop::Above(id) | Drop::Below(id) | Drop::Into(id) => Some((list, id)),
+                    })
             }
         };
-        if let Some(layer) = row {
+        if let Some((list, layer)) = row {
             panel.drag = Some(Dragging {
+                list,
                 layer,
                 from: p.position,
                 moved: false,
@@ -1264,7 +1390,7 @@ pub fn layer_input(
         // changes once the drag reaches another, and the whole drag is one
         // undo step.
         let order: Vec<LayerId> = rows(&editor.doc, &tree).iter().map(|(_, l)| l.id).collect();
-        let crossed = eyes_crossed(at.x, paint.y, at.y, &order);
+        let crossed = eyes_crossed(paint.list, at.x, paint.y, at.y, &order);
         paint.y = at.y;
         let new: Vec<LayerId> = crossed
             .into_iter()
@@ -1296,7 +1422,7 @@ pub fn layer_input(
                 .iter()
                 .map(|(_, l)| (l.id, matches!(l.kind, LayerKind::Group { .. })))
                 .collect();
-            drag.drop = drop_at(at, &order);
+            drag.drop = drop_at(drag.list, at, &order);
         }
     }
     let released = input.released.read().count() > 0;

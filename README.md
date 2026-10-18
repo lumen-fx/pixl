@@ -139,20 +139,28 @@ are not saved with the document.
 
 The panels on the right show the document: the color panel edits the
 foreground color with RGBA sliders and a hex field; the palette sets the
-foreground with a click and the background with a right-click; the layers
-panel adds, deletes, reorders and hides layers and sets the active layer's
-opacity and blend mode; the history panel lists every edit and jumps to any of
-them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
+foreground with a click and the background with a right-click; the history
+panel lists every edit and jumps to any of them. Ctrl+Z undoes, Ctrl+Shift+Z
+or Ctrl+Y redoes.
+
+The layers are listed in the timeline below the canvas, one row per layer
+against the frames, as in Aseprite. Each row carries the layer's eye, a lock
+button that locks or unlocks everything, its name and, for a group, a fold
+button; above the rows, New adds a layer, Delete removes the active one and
+Props opens its properties. The Layers panel lists the same layers with
+their color tags, clipping and mask marks, the active layer's opacity and
+blend mode, and buttons to group, copy and move layers up and down. It is
+hidden in the built-in layouts; Window > Panels and layouts shows it. Clicks
+and drags work the same in both lists.
 
 Layers nest in groups: a new layer goes into the active group, a group's
 fold button hides what it holds, and a layer dragged onto another row lands
-above or below it, or into a group dropped on its middle. Each row shows the
-layer's color tag, an eye for its visibility, a lock button that locks or
-unlocks everything, and marks for clipping and a mask. A mask hides the layer where
-it is dark: Add mask starts painting on the mask instead of the pixels, the
-mask button in the row switches between the two, and the mask can be turned
-off, applied to the pixels or deleted. A clipped layer shows only where the
-layer below it does. A reference image (Layer > Reference image) is any
+above or below it, or into a group dropped on its middle. A double-click on a
+row opens the layer's properties. A mask hides the layer where it is dark:
+Add mask starts painting on the mask instead of the pixels, the mask button
+in the Layers panel's row or Layer > Edit mask or pixels switches between the
+two, and the mask can be turned off, applied to the pixels or deleted. A
+clipped layer shows only where the layer below it does. A reference image (Layer > Reference image) is any
 image pixl opens, placed at the top left at half opacity to trace over; it
 is never exported. The Layer menu, also opened by a right-click on a row,
 duplicates, merges down, flattens, clips, locks pixels, alpha or position,
@@ -178,7 +186,8 @@ order and whether it shows, and switches between layouts: the built-in Paint,
 Animate and Rig, and any the user saves under a name of their own. Window >
 Reset layout puts the current layout back as it was saved. The arrangement in
 use and the saved layouts are kept in `workspace.json` in pixl's data folder,
-so the window reopens as it was left.
+so the window reopens as it was left; an arrangement saved while the Layers
+panel showed keeps showing it until you switch layouts.
 
 Window > Customize the tool bar picks which tools the tool bar shows and in
 what order, one column or two, and groups related tools on one button: the
@@ -220,7 +229,8 @@ the arrow keys pick one and Enter runs it. Each entry shows its keys, so the
 palette also answers "what is the shortcut for this".
 
 The timeline panel, below the canvas by default, lists every layer against
-every frame, with the document's tags above the frame numbers.
+every frame, with the document's tags above the frame numbers. Its layer
+rows are the layer list described above.
 A cel shows whether it holds pixels and joins its neighbors when they are
 linked; the frames a rig rendered are marked, on their frame numbers and on
 the cels of the skeleton and the layers bound to it, as the ones Regenerate
@@ -336,8 +346,9 @@ The Help menu's tutorials walk through pixl one workflow at a time:
 
 - Getting started: pick the pencil and a color, draw, erase, undo and redo,
   zoom and pan, save.
-- Layers: add a layer, name it, paint on it, move it under another, hide a
-  layer and show one alone, fade it and merge it down.
+- Layers: in the timeline's layer rows, add a layer, name it, paint on it,
+  drag it under another, hide a layer and show one alone, fade it and merge
+  it down.
 - Selections: select a box, move what it holds, deselect, lasso and add to
   the lasso with Shift, paint inside the selection.
 - Animation: add frames, turn on the onion skin, draw a bounce, time a

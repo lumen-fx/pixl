@@ -11,6 +11,7 @@ use common::drive::{At, Step, drive, editor_over};
 use common::script::{Script, drag, trace};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use lumenui::prelude::*;
+use pixl::layers::List;
 use pixl::lessons::{ANIMATION, LAYERS, LEAF, LESSONS, PALETTES, SELECTIONS, STAR, START};
 use pixl::shipped::Shipped;
 use pixl::tutorial::Lesson;
@@ -137,21 +138,35 @@ fn the_layers_lesson_ticks_off_step_by_step() {
     };
     let (background, tree) = (id("Background"), id("Tree"));
     let added = LayerId(tree.0.max(background.0) + 1);
-    let eye = |l: LayerId| -> &'static str { Box::leak(format!("layer-eye-{}", l.0).into()) };
+    let leak = |id: String| -> &'static str { Box::leak(id.into_boxed_str()) };
+    let eye = |l: LayerId| leak(List::Timeline.eye(l));
+    let row = |l: LayerId| leak(List::Timeline.row(l));
+    // The properties dialog fills its fields over two ticks.
+    let props = [
+        Step::Click("tl-edit-layer"),
+        Step::Wait,
+        Step::Wait,
+        Step::Wait,
+    ];
     let mut s = Script::default();
     s.then(opening(&LAYERS))
-        .ticks(0, vec![Step::Click("layer-add")])
-        // The dialog fills its fields over two ticks.
-        .then([
-            Step::Click("layer-properties"),
-            Step::Wait,
-            Step::Wait,
-            Step::Wait,
-        ])
+        .ticks(0, vec![Step::Click("tl-new-layer")])
+        .then(props.clone())
         .then([Step::Text("lp_name", "Shadow"), Step::Wait])
         .ticks(1, vec![Step::Click("lp-ok")])
         .ticks(2, drag((12, 26), (20, 26)))
-        .ticks(3, vec![Step::Click("layer-down")])
+        // The new layer's row, dropped on the lower half of Tree's: its
+        // middle.
+        .then([
+            Step::Move(At::Element(row(added))),
+            Step::Down(At::Element(row(added)), PointerButton::Primary),
+            Step::Move(At::Element(row(tree))),
+            Step::Move(At::Element(row(tree))),
+        ])
+        .ticks(
+            3,
+            vec![Step::Up(At::Element(row(tree)), PointerButton::Primary)],
+        )
         .ticks(4, press_on(eye(tree)))
         .then([Step::Alt(true)])
         .ticks(5, press_on(eye(added)))
@@ -159,7 +174,9 @@ fn the_layers_lesson_ticks_off_step_by_step() {
         .then(press_on(eye(added)))
         .then([Step::Wait, Step::Alt(false)])
         .ticks(6, press_on(eye(tree)))
-        .ticks(7, vec![Step::Number("layer_opacity", 50.0)])
+        .then(props)
+        .then([Step::Text("lp_opacity", "50"), Step::Wait])
+        .ticks(7, vec![Step::Click("lp-ok")])
         .ticks(8, vec![Step::Menu("lm-merge")]);
     let out = drive(editor_over(doc.clone()), s.steps.clone());
     common::save(&out.frame, "lesson-layers");

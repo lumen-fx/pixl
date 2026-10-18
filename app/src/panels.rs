@@ -265,11 +265,11 @@ pub fn panel_clicks(
     let editor = &mut *editor;
     for id in clicked(&mut clicks, &ids) {
         match id.as_str() {
-            "layer-add" => {
+            "layer-add" | "tl-new-layer" => {
                 close_edit(editor, &mut panels);
                 editor.add_layer();
             }
-            "layer-delete" => {
+            "layer-delete" | "tl-delete-layer" => {
                 close_edit(editor, &mut panels);
                 editor.delete_layer();
             }
@@ -291,8 +291,7 @@ pub fn panel_clicks(
                 editor.redo();
             }
             other => {
-                // The layers list's rows and eyes are the layers panel's
-                // (layers.rs).
+                // The layer lists' rows and eyes are layers.rs's.
                 if let Some(i) = other
                     .strip_prefix("swatch-")
                     .and_then(|n| n.parse::<u8>().ok())

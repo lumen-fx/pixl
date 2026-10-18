@@ -5,8 +5,8 @@
 .pixl {
   --cel-w: 18;
   --cel-h: 20;
-  --tl-names-w: 140;
-  --timeline-h: 190;
+  --tl-names-w: 210;
+  --timeline-h: 230;
   --preview-w: 220;
 }
 
@@ -56,6 +56,9 @@
 
 .tl-bar { gap: var(--space-1); overflow: hidden; min-width: 0; }
 .tl-tools { overflow: hidden; min-width: 0; align: center; gap: var(--space-1); padding: var(--space-1) var(--space-3); bg: var(--surface-2); border-bottom: 1px solid var(--edge); }
+/* The layer buttons sit over the names column, the frame buttons over the
+   cels. */
+.tl-layer-tools { align: center; gap: var(--space-1); width: var(--tl-names-w); min-width: var(--tl-names-w); }
 .tl-mode { width: 100; min-width: 100; }
 .tl-readout { text-color: var(--text-dim); font-size: var(--font-size-small); min-width: 56; }
 .tl-number { width: 92; font-size: var(--font-size-small); }
@@ -80,6 +83,11 @@
 }
 .tl-name:hover { bg: var(--surface-3); }
 .tl-name.active { bg: var(--accent-soft); }
+.tl-name.selected { bg: var(--surface-5); }
+.tl-name.selected .tl-name-text { text-color: var(--text); }
+.tl-name.drop-above { border-top: 2px solid var(--accent); }
+.tl-name.drop-below { border-bottom: 2px solid var(--accent); }
+.tl-name.drop-into { bg: var(--accent-soft); }
 .tl-name.depth-1 { padding: 0 var(--space-3) 0 14; }
 .tl-name.depth-2 { padding: 0 var(--space-3) 0 22; }
 .tl-name.depth-3 { padding: 0 var(--space-3) 0 30; }

@@ -23,7 +23,7 @@ const L: PointerButton = PointerButton::Primary;
 const BODY_MID: (i32, i32) = (HIPS.0, (HIPS.1 + NECK.1) / 2);
 const HEAD_MID: (i32, i32) = (NECK.0, (NECK.1 + HEAD_TOP.1) / 2);
 
-/// The id of a lesson layer's row in the Layers panel.
+/// The id of a lesson layer's row in the timeline.
 fn layer_row(name: &str) -> &'static str {
     let doc = Shipped::RigLesson.load().unwrap();
     let id = doc
@@ -32,7 +32,7 @@ fn layer_row(name: &str) -> &'static str {
         .find(|(_, l)| l.props.name == name)
         .map(|(_, l)| l.id)
         .expect("the layer");
-    Box::leak(format!("layer-row-{}", id.0).into_boxed_str())
+    Box::leak(pixl::layers::List::Timeline.row(id).into_boxed_str())
 }
 
 fn skeleton_rig(doc: &Document) -> &Rig {

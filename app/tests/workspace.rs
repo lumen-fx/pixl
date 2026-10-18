@@ -98,8 +98,43 @@ fn paint_is_the_default_layout_with_the_panels_right_and_the_timeline_below() {
     assert!(d.shows(Dock::Right));
     assert_eq!(d.panels(Dock::Bottom), ["panel-timeline", "panel-preview"]);
     assert!(d.shows(Dock::Bottom));
-    assert_eq!(d.closed, ["panel-preview"], "Paint leaves the preview out");
+    assert_eq!(
+        d.closed,
+        ["panel-layers", "panel-preview"],
+        "the timeline lists the layers, and Paint leaves the preview out"
+    );
     assert!(!d.shows(Dock::Left));
+}
+
+#[test]
+fn a_saved_arrangement_keeps_its_layers_panel_and_the_dialog_shows_it() {
+    // A workspace saved before the timeline listed the layers shows the
+    // Layers panel; it opens as it was left.
+    let dir = std::env::temp_dir().join(format!("pixl-ws-layers-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    Workspace::load(Store::at(&dir)).edit(|l| l.set_shown("panel-layers", true));
+    let app = editor().insert_resource(Workspace::load(Store::at(&dir)));
+    let (app, docks) = watch(app);
+    drive(app, vec![Step::Wait, Step::Wait]);
+    assert_eq!(docks.lock().unwrap().closed, ["panel-preview"]);
+    let _ = std::fs::remove_dir_all(dir);
+
+    // Window > Panels and layouts brings it back into a new one.
+    let (app, docks) = watch(editor());
+    let out = drive(
+        app,
+        vec![
+            Step::Menu("window-workspace"),
+            Step::Wait,
+            Step::Wait,
+            Step::Click("ws-show-panel-layers"),
+            Step::Click("ws-close"),
+            Step::Wait,
+            Step::Wait,
+        ],
+    );
+    common::save(&out.frame, "workspace-layers-panel");
+    assert_eq!(docks.lock().unwrap().closed, ["panel-preview"]);
 }
 
 #[test]
@@ -121,6 +156,7 @@ fn the_rig_layout_puts_the_colors_on_the_left() {
             "panel-brushes"
         ]
     );
+    assert_eq!(d.closed, ["panel-layers", "panel-brushes", "panel-preview"]);
     assert!(d.shows(Dock::Left));
     assert!(d.widths.0 > 100.0, "the left dock has room: {:?}", d.widths);
 }
@@ -142,7 +178,7 @@ fn header_buttons_collapse_and_hide_and_the_window_menu_shows_all() {
     let d = docks.lock().unwrap().clone();
     // The Rig panel starts folded outside the Rig layout.
     assert_eq!(d.collapsed, ["panel-color", "panel-rig"]);
-    assert_eq!(d.closed, ["panel-history", "panel-preview"]);
+    assert_eq!(d.closed, ["panel-layers", "panel-history", "panel-preview"]);
 
     let (app, docks) = watch(editor());
     drive(

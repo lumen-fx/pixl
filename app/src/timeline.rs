@@ -1,6 +1,12 @@
 //! The timeline under the canvas: a row per layer and a column per frame,
 //! the document's tags above the frames, and playback.
 //!
+//! The names column is the default list of the layers: each row carries the
+//! layer's eye, lock and name, and a group's fold button. Picking, hiding,
+//! locking, dragging and renaming layers there is [`crate::layers`]'s work,
+//! shared with the Layers panel; this module draws the rows and leaves the
+//! cel selection when one is pressed.
+//!
 //! The grid is markup the editor writes when the document's frames, layers
 //! or the selection change. Moving to another frame only moves the current
 //! frame's highlight, so playback does not rebuild the grid. Playback steps
@@ -29,6 +35,7 @@ use crate::editor::Editor;
 use crate::home::Home;
 use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
+use crate::layers::{self, LayerPanel, List, Lock};
 use crate::panels::escape;
 use crate::tools::{hex, set_if_changed};
 use crate::view::{Layers, parse_hex};
@@ -614,6 +621,14 @@ impl TimelineInput<'_, '_> {
         };
         let mut spot = None;
         for id in self.ids.up(e) {
+            // A row's eye, lock and fold are the layer list's.
+            if spot.is_none()
+                && ["tl-eye-", "tl-lock-", "tl-fold-"]
+                    .iter()
+                    .any(|p| id.starts_with(p))
+            {
+                return Hovering::Elsewhere;
+            }
             if spot.is_none() {
                 spot = Spot::parse(id);
             }
@@ -773,15 +788,9 @@ pub fn timeline_input(
                     tx: None,
                 });
             }
-            Spot::Layer(layer) => {
-                if editor.doc.layer(layer).is_some() {
-                    editor.layer = layer;
-                    if shift {
-                        select_to(tl, editor, (layer, editor.frame), true);
-                    } else {
-                        tl.selection = None;
-                    }
-                }
+            Spot::Layer(_) => {
+                // The click picks the row (layers.rs); the cels let go.
+                tl.selection = None;
             }
         }
     }
@@ -1422,16 +1431,28 @@ mod mark {
     pub const GENERATED: u16 = 1 << 9;
     pub const ACTIVE: u16 = 1 << 10;
     pub const HIDDEN: u16 = 1 << 11;
+    /// A layer row picked with Ctrl or Shift.
+    pub const PICKED: u16 = 1 << 12;
+    /// A group holding the layer is hidden.
+    pub const MUTED: u16 = 1 << 13;
+    pub const LOCK_SOME: u16 = 1 << 14;
+    pub const LOCK_ALL: u16 = 1 << 15;
 }
 
+/// A row of the names column as its markup has it: the layer, its depth,
+/// its name and its fold button.
+type NameRow = (u32, usize, String, String);
+
 /// What the grid shows. Its shape (the tags, the rows and the number of
-/// frames) takes new markup to change; the marks of a cel, a frame number or
-/// a layer name change by setting that one element's classes, so a stroke,
-/// a step to another frame or a new selection restyles only what changed.
+/// frames) takes new markup to change; the marks of a cel, a frame number,
+/// a layer row, its eye or its lock change by setting that one element's
+/// classes, so a stroke, a step to another frame, a new selection or a
+/// hidden layer restyles only what changed.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GridModel {
-    /// The tag lanes' markup, and each row's layer, depth and name.
-    shape: (String, Vec<(u32, usize, String)>, usize),
+    /// The tag lanes' markup, each row's layer, depth, name and fold
+    /// button, and the number of frames.
+    shape: (String, Vec<NameRow>, usize),
     frames: Vec<u16>,
     names: Vec<u16>,
     /// A row per layer, a mark set per frame.
@@ -1478,11 +1499,27 @@ fn name_class(depth: usize, m: u16) -> String {
     let mut c = format!("tl-name depth-{}", depth.min(4));
     if m & mark::ACTIVE != 0 {
         c.push_str(" active");
+    } else if m & mark::PICKED != 0 {
+        c.push_str(" selected");
     }
     if m & mark::HIDDEN != 0 {
         c.push_str(" hidden");
     }
     c
+}
+
+fn eye_class(m: u16) -> String {
+    layers::eye_class(m & mark::HIDDEN == 0, m & mark::MUTED != 0)
+}
+
+fn lock_class(m: u16) -> &'static str {
+    if m & mark::LOCK_ALL != 0 {
+        Lock::Locked.class()
+    } else if m & mark::LOCK_SOME != 0 {
+        Lock::Partly.class()
+    } else {
+        Lock::Unlocked.class()
+    }
 }
 
 fn tags_markup(doc: &Document) -> String {
@@ -1541,8 +1578,14 @@ fn generated(doc: &Document) -> BTreeSet<(LayerId, usize)> {
     out
 }
 
-/// What the grid shows of the document, the selection and the current frame.
-pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel {
+/// What the grid shows of the document, the selection, the layers picked
+/// in the lists and the current frame.
+pub fn grid_model(
+    editor: &Editor,
+    tl: &Timeline,
+    tree: &LayerTree,
+    picked: &BTreeSet<LayerId>,
+) -> GridModel {
     use mark::*;
     let doc = &editor.doc;
     let n = doc.frame_count();
@@ -1580,10 +1623,20 @@ pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel
         let mut nm = 0;
         if layer.id == editor.layer {
             nm |= ACTIVE;
+        } else if picked.contains(&layer.id) {
+            nm |= PICKED;
         }
         if !layer.props.visible {
             nm |= HIDDEN;
         }
+        if layers::group_hidden(doc, layer.id) {
+            nm |= MUTED;
+        }
+        nm |= match Lock::of(layer.props.locks) {
+            Lock::Unlocked => 0,
+            Lock::Partly => LOCK_SOME,
+            Lock::Locked => LOCK_ALL,
+        };
         names.push(nm);
         let selected = tl.selection.is_some() && sel_rows.as_ref().is_some_and(|s| s.contains(&r));
         let row = (0..n)
@@ -1626,7 +1679,10 @@ pub fn grid_model(editor: &Editor, tl: &Timeline, tree: &LayerTree) -> GridModel
     let shape = (
         tags_markup(doc),
         rows.iter()
-            .map(|(d, l)| (l.id.0, *d, l.props.name.clone()))
+            .map(|(d, l)| {
+                let fold = layers::fold_markup(List::Timeline, l, tree);
+                (l.id.0, *d, l.props.name.clone(), fold)
+            })
             .collect(),
         n,
     );
@@ -1655,10 +1711,17 @@ impl GridModel {
             ));
         }
         grid.push_str("</row>");
-        for (r, (id, depth, name)) in rows.iter().enumerate() {
+        for (r, (id, depth, name, fold)) in rows.iter().enumerate() {
+            let m = self.names[r];
+            let controls = layers::eye_and_lock_markup(
+                List::Timeline,
+                &eye_class(m),
+                lock_class(m),
+                LayerId(*id),
+            );
             names.push_str(&format!(
-                r#"<row id="tl-layer-{id}" class="{}"><label class="tl-name-text" text="{}"/></row>"#,
-                name_class(*depth, self.names[r]),
+                r#"<row id="tl-layer-{id}" class="{}">{controls}{fold}<label class="tl-name-text" text="{}"/></row>"#,
+                name_class(*depth, m),
                 escape(name)
             ));
             grid.push_str(r#"<row class="tl-row">"#);
@@ -1685,9 +1748,16 @@ impl GridModel {
                 out.push((format!("tl-frame-{f}"), frame_class(*a)));
             }
         }
-        for (r, (id, depth, _)) in self.shape.1.iter().enumerate() {
-            if self.names[r] != old.names[r] {
-                out.push((format!("tl-layer-{id}"), name_class(*depth, self.names[r])));
+        for (r, (id, depth, _, _)) in self.shape.1.iter().enumerate() {
+            let (a, b) = (self.names[r], old.names[r]);
+            if name_class(*depth, a) != name_class(*depth, b) {
+                out.push((format!("tl-layer-{id}"), name_class(*depth, a)));
+            }
+            if eye_class(a) != eye_class(b) {
+                out.push((format!("tl-eye-{id}"), eye_class(a)));
+            }
+            if lock_class(a) != lock_class(b) {
+                out.push((format!("tl-lock-{id}"), lock_class(a).to_string()));
             }
             for (f, (a, b)) in self.cells[r].iter().zip(&old.cells[r]).enumerate() {
                 if a != b {
@@ -1704,11 +1774,13 @@ pub fn show_timeline(
     editor: Res<Editor>,
     mut timeline: ResMut<Timeline>,
     tree: Res<LayerTree>,
+    panel: Res<LayerPanel>,
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let tl = &mut *timeline;
     let mut changed = false;
+    let picked = panel.selected(&editor);
     // The grid is looked at again when what it shows may have changed, and
     // only the elements whose marks differ are written.
     let key = {
@@ -1723,13 +1795,14 @@ pub fn show_timeline(
         editor.doc.frame_count().hash(&mut h);
         tl.selection.hash(&mut h);
         tree.collapsed.hash(&mut h);
+        picked.hash(&mut h);
         h.finish()
     };
     if tl.grid != Some(key)
         && let (Some(grid_node), Some(names_node)) =
             (dom::get_by_id("tl-grid"), dom::get_by_id("tl-names"))
     {
-        let model = grid_model(&editor, tl, &tree);
+        let model = grid_model(&editor, tl, &tree, &picked);
         match tl.shown.as_ref().and_then(|old| model.changes(old)) {
             Some(edits) => {
                 for (id, class) in &edits {
@@ -1944,12 +2017,12 @@ mod tests {
         let t = e.doc.target(layer, 0).unwrap();
         t.raster
             .fill_rect_raw(&pixl_core::Rect::new(0, 0, 1, 1), Rgba::BLACK.to_u32());
-        let before = grid_model(&e, &tl, &tree);
+        let before = grid_model(&e, &tl, &tree, &BTreeSet::new());
         let t = e.doc.target(layer, 0).unwrap();
         t.raster
             .fill_rect_raw(&pixl_core::Rect::new(1, 1, 1, 1), Rgba::BLACK.to_u32());
         e.touch_pixels();
-        let after = grid_model(&e, &tl, &tree);
+        let after = grid_model(&e, &tl, &tree, &BTreeSet::new());
         assert_eq!(after.changes(&before), Some(Vec::new()));
     }
 
@@ -1958,9 +2031,9 @@ mod tests {
         let mut e = editor(3);
         let tl = Timeline::default();
         let tree = LayerTree::default();
-        let before = grid_model(&e, &tl, &tree);
+        let before = grid_model(&e, &tl, &tree, &BTreeSet::new());
         e.frame = 2;
-        let after = grid_model(&e, &tl, &tree);
+        let after = grid_model(&e, &tl, &tree, &BTreeSet::new());
         let mut ids: Vec<String> = after
             .changes(&before)
             .expect("the same shape")
@@ -1983,16 +2056,66 @@ mod tests {
     }
 
     #[test]
+    fn hiding_locking_or_picking_a_layer_restyles_its_row_alone() {
+        let mut e = editor(2);
+        let tl = Timeline::default();
+        let tree = LayerTree::default();
+        let l = e.layer.0;
+        let before = grid_model(&e, &tl, &tree, &BTreeSet::new());
+        e.doc
+            .update_layer(e.layer, |p| {
+                p.visible = false;
+                p.locks = pixl_core::Locks::ALL;
+            })
+            .unwrap();
+        let after = grid_model(&e, &tl, &tree, &BTreeSet::new());
+        let mut ids: Vec<String> = after
+            .changes(&before)
+            .expect("the same shape")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            [
+                format!("tl-eye-{l}"),
+                format!("tl-layer-{l}"),
+                format!("tl-lock-{l}")
+            ]
+        );
+        let (_, names) = after.markup();
+        assert!(names.contains(&format!(r#"id="tl-eye-{l}" class="layer-eye off""#)));
+        assert!(names.contains(&format!(r#"id="tl-lock-{l}" class="layer-lock all""#)));
+        // A row picked beside the active one shows as selected.
+        e.add_layer();
+        let top = e.layer;
+        e.layer = LayerId(l);
+        let picked = grid_model(&e, &tl, &tree, &BTreeSet::from([top, LayerId(l)]));
+        let (_, names) = picked.markup();
+        assert!(names.contains(&format!(
+            r#"id="tl-layer-{}" class="tl-name depth-0 selected""#,
+            top.0
+        )));
+    }
+
+    #[test]
     fn a_new_frame_or_layer_takes_new_markup() {
         let mut e = editor(2);
         let tl = Timeline::default();
         let tree = LayerTree::default();
-        let before = grid_model(&e, &tl, &tree);
+        let before = grid_model(&e, &tl, &tree, &BTreeSet::new());
         e.doc.insert_frame(2, 100).unwrap();
-        assert_eq!(grid_model(&e, &tl, &tree).changes(&before), None);
-        let before = grid_model(&e, &tl, &tree);
+        assert_eq!(
+            grid_model(&e, &tl, &tree, &BTreeSet::new()).changes(&before),
+            None
+        );
+        let before = grid_model(&e, &tl, &tree, &BTreeSet::new());
         e.add_layer();
-        assert_eq!(grid_model(&e, &tl, &tree).changes(&before), None);
+        assert_eq!(
+            grid_model(&e, &tl, &tree, &BTreeSet::new()).changes(&before),
+            None
+        );
     }
 
     #[test]
@@ -2024,7 +2147,12 @@ mod tests {
         })
         .unwrap();
         rig.frame_mut(2).unwrap().generated = true;
-        let model = grid_model(&e, &Timeline::default(), &LayerTree::default());
+        let model = grid_model(
+            &e,
+            &Timeline::default(),
+            &LayerTree::default(),
+            &BTreeSet::new(),
+        );
         let (grid, _) = model.markup();
         for id in [format!("cel-{}-2", art.0), format!("cel-{}-2", skel.0)] {
             let class = grid
