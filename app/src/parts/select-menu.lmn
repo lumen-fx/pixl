@@ -1,6 +1,6 @@
 <menu id="select-menu">
   <menuitem id="select-all" label="All (Ctrl+A)"/>
-  <menuitem id="select-none" label="Deselect (Ctrl+D)"/>
+  <menuitem id="select-none" label="Deselect (Ctrl+D, Esc)"/>
   <menuitem id="select-invert" label="Invert (Ctrl+Alt+I)"/>
   <separator/>
   <menuitem id="select-color" label="By the foreground color"/>

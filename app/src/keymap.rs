@@ -516,7 +516,7 @@ fn pixl_default(id: &str) -> &'static [&'static str] {
         "layer-above" => &["Alt+ArrowUp"],
         "layer-below" => &["Alt+ArrowDown"],
         "select-all" => &["Ctrl+A"],
-        "select-none" => &["Ctrl+D"],
+        "select-none" => &["Ctrl+D", "Escape"],
         "select-invert" => &["Ctrl+Alt+I"],
         "filter-hue" => &["Ctrl+U"],
         "filter-levels" => &["Ctrl+L"],

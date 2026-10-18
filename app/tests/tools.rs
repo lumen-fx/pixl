@@ -4,7 +4,7 @@
 pub mod common;
 
 use common::drive::{At, Step, drive, editor_over};
-use lumenui::lumen_core::input::PointerButton;
+use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use pixl::Tool;
 use pixl_core::{ColorMode, Document, Point, Rgba, Selection};
 
@@ -296,4 +296,20 @@ fn the_move_tool_carries_a_lasso_selection_in_its_shape() {
         &[Point::new(0, 0), Point::new(0, 7), Point::new(7, 7)],
     );
     assert_eq!(selection.count(), before.count());
+}
+
+/// Escape drops the selection when no tool is in the middle of something.
+#[test]
+fn escape_deselects() {
+    let steps = with(
+        with(vec![Step::Key("m", false)], drag((1, 1), (5, 3), L)),
+        vec![
+            Step::Wait,
+            Step::KeyDown(NamedKey::Escape),
+            Step::KeyUp(NamedKey::Escape),
+            Step::Wait,
+        ],
+    );
+    let out = drive(editor_over(doc()), steps);
+    assert!(out.selection.is_none());
 }
