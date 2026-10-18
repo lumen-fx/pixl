@@ -449,8 +449,11 @@ the whole idle tick, a stroke on the top and on the bottom layer, and a pan,
 each a median against a limit for the renderer. A number past its limit
 fails the run and names the editor's systems that cost the most where it was
 measured. The limits leave room above what a desktop measures, to catch
-regressions rather than to grade the machine; CI runs the gate on the CPU
-renderer.
+regressions rather than to grade the machine. Run the gate locally before
+you push; it enforces the limits. `gate report` prints the same numbers
+without failing on them. CI runs `cpu gate report`, because its runners are
+slower than the desktop the limits were set on: the CI log shows every
+number, and a number past its limit does not fail the build.
 
 `cargo bench -p pixl --bench playback -- gpu` (or `cpu`) times stepping to
 the next frame, with the onion skin and without, until the frame first shows

@@ -17,6 +17,9 @@
 //! and `gate` checks the medians of the run against the limits for the
 //! renderer in `benches/gate.json`, exiting with an error when one is
 //! passed and naming the systems that cost the most in that phase.
+//! `gate report` prints the same numbers and the same systems but does not
+//! fail on a number past its limit, for machines the limits were not set
+//! on, such as CI runners.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -529,7 +532,8 @@ fn main() {
         );
     }
     if args.iter().any(|a| a == "gate") {
-        let passed = gate(&r, &backend, side, layers);
+        let enforce = !args.iter().any(|a| a == "report");
+        let passed = gate(&r, &backend, side, layers, enforce);
         drop(r);
         if !passed {
             std::process::exit(1);
@@ -547,10 +551,11 @@ const GATED: [(&str, &str); 5] = [
 ];
 
 /// Checks the medians of the run against `benches/gate.json` for the
-/// renderer, and prints each. A number past its limit fails the gate,
-/// naming the editor's systems that cost the most in its phase. The limits
-/// hold for the 4096x4096 document of 32 layers only.
-fn gate(r: &Results, backend: &str, side: u32, layers: usize) -> bool {
+/// renderer, and prints each. A number past its limit names the editor's
+/// systems that cost the most in its phase, and fails the gate when
+/// `enforce` is set. The limits hold for the 4096x4096 document of 32
+/// layers only.
+fn gate(r: &Results, backend: &str, side: u32, layers: usize, enforce: bool) -> bool {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("benches/gate.json");
     let text = std::fs::read_to_string(&path).expect("benches/gate.json reads");
     let limits: serde_json::Value = serde_json::from_str(&text).expect("gate.json is JSON");
@@ -587,7 +592,9 @@ fn gate(r: &Results, backend: &str, side: u32, layers: usize) -> bool {
             if ok { "ok" } else { "OVER" }
         );
         if !ok {
-            passed = false;
+            if enforce {
+                passed = false;
+            }
             if let Some(systems) = r.systems.get(phase) {
                 let ticks = r.ticks.get(phase).copied().unwrap_or(1).max(1);
                 for (name, t) in heaviest(systems, 5) {
@@ -598,6 +605,9 @@ fn gate(r: &Results, backend: &str, side: u32, layers: usize) -> bool {
                 }
             }
         }
+    }
+    if !enforce {
+        println!("gate: report only, a number past its limit does not fail the run");
     }
     passed
 }
