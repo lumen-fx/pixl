@@ -11,13 +11,23 @@ Rust SDK.
 
 ## Download
 
-Windows (x86_64) builds are on the
-[releases page](https://github.com/lumen-fx/pixl/releases) as pre-releases.
-Unzip `pixl-<version>-windows-x86_64.zip` anywhere and run `pixl.exe`; keep
-the files beside it, since pixl reads its icons and font from that folder at
-start. The executable is not signed, so Windows SmartScreen
-may ask before it runs the first time. On Linux and macOS, build it from
-source (see Quick start).
+Builds are on the [releases page](https://github.com/lumen-fx/pixl/releases)
+as pre-releases. Each package holds pixl, its `lumen.toml`, and the icons and
+font it reads at start. On Windows and Linux keep those files beside the
+executable; on macOS they are inside `pixl.app`.
+
+- Windows (x86_64): unzip `pixl-<version>-windows-x86_64.zip` anywhere and
+  run `pixl.exe`.
+- Linux (x86_64): unpack `pixl-<version>-linux-x86_64.tar.gz` anywhere and
+  run `pixl`. It links GTK 3, which desktop distributions install by
+  default.
+- macOS (Apple silicon): unzip `pixl-<version>-macos-arm64.zip` and move
+  `pixl.app` to Applications.
+
+The builds are not signed. Windows SmartScreen asks before `pixl.exe` runs the
+first time. macOS refuses to open `pixl.app` the first time; allow it under
+System Settings > Privacy & Security > Open Anyway, or run
+`xattr -dr com.apple.quarantine pixl.app` once.
 
 ## Status
 
@@ -417,10 +427,12 @@ into one markup file and one stylesheet, which the executable embeds. A debug
 build reads `src/` from disk instead, for hot reload. The icons and font in
 `assets/` stay files, read from the folder beside the executable when that
 folder holds a `lumen.toml`, and from `app/` in the source tree otherwise. The
-Windows zip is that folder: `pixl.exe`, `lumen.toml`, `LICENSE`, and
-`assets/icons` and `assets/fonts`. Pushing a `v*` tag that
-matches the workspace version builds it on CI and publishes it as a
-pre-release.
+Windows zip and the Linux tarball are that folder: the executable,
+`lumen.toml`, `LICENSE`, and `assets/icons` and `assets/fonts`. On macOS the
+folder is `pixl.app/Contents/MacOS`, where `lumen.toml` and `assets` link to
+`Contents/Resources`, and `LICENSE` sits beside `pixl.app`.
+Pushing a `v*` tag that matches the workspace version builds all three on CI
+and publishes them on one pre-release.
 
 The rig demo and the tutorials' documents are built by
 `app/tests/common/demo.rs`, and a test checks the files shipped in

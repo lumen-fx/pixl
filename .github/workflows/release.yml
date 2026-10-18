@@ -264,19 +264,24 @@ jobs:
         run: cargo build --release --locked -p pixl
 
       # An app bundle. Lumen takes the folder holding the executable as the
-      # app folder when lumen.toml is beside it, so lumen.toml and assets/
-      # sit in Contents/MacOS with the executable rather than in
-      # Contents/Resources. The bundle is signed ad hoc, which binds
-      # Info.plist and the files to the signature; it is not a Developer ID
-      # signature, so Gatekeeper still asks before the first start.
+      # app folder when lumen.toml is beside it. A signed bundle keeps only
+      # code in Contents/MacOS, so lumen.toml and assets/ live in
+      # Contents/Resources and Contents/MacOS links to them. The bundle is
+      # signed ad hoc, which seals Info.plist and the files; it is not a
+      # Developer ID signature, so Gatekeeper still asks before the first
+      # start.
       - name: Lay out the package
         run: |
           app="dist/$PACKAGE/pixl.app"
           exe="$app/Contents/MacOS"
-          mkdir -p "$exe/assets/icons" "$exe/assets/fonts"
-          cp target/release/pixl app/lumen.toml "$exe/"
-          cp app/assets/icons/*.png "$exe/assets/icons/"
-          cp app/assets/fonts/* "$exe/assets/fonts/"
+          res="$app/Contents/Resources"
+          mkdir -p "$exe" "$res/assets/icons" "$res/assets/fonts"
+          cp target/release/pixl "$exe/"
+          cp app/lumen.toml "$res/"
+          cp app/assets/icons/*.png "$res/assets/icons/"
+          cp app/assets/fonts/* "$res/assets/fonts/"
+          ln -s ../Resources/lumen.toml "$exe/lumen.toml"
+          ln -s ../Resources/assets "$exe/assets"
           cp LICENSE "dist/$PACKAGE/"
           cat > "$app/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
