@@ -82,6 +82,18 @@ impl Selection {
         self.mask.set(x, y, selected);
     }
 
+    /// The same pixels moved by `offset`; what moves off the canvas is
+    /// dropped.
+    pub fn translated(&self, offset: Point) -> Self {
+        let mut out = Self::empty(self.width(), self.height());
+        for p in self.bounds().points() {
+            if self.contains(p.x, p.y) {
+                out.mask.set(p.x + offset.x, p.y + offset.y, true);
+            }
+        }
+        out
+    }
+
     /// The bounding box of selected pixels.
     pub fn bounds(&self) -> Rect {
         if self.mask.fill() {

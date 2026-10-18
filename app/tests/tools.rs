@@ -6,7 +6,7 @@ pub mod common;
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
 use pixl::Tool;
-use pixl_core::{ColorMode, Document, Rgba};
+use pixl_core::{ColorMode, Document, Point, Rgba, Selection};
 
 const BLACK: Rgba = Rgba::BLACK;
 const L: PointerButton = PointerButton::Primary;
@@ -253,4 +253,47 @@ fn undoing_the_first_stroke_on_an_empty_frame_takes_its_cel_away() {
     );
     let out = drive(editor_over(d), steps);
     assert_eq!(out.doc.cel(layer, 0).unwrap(), None);
+}
+
+/// A lasso's pixels move, and only they: the rest of their bounding box
+/// stays, and the selection keeps its shape.
+#[test]
+fn the_move_tool_carries_a_lasso_selection_in_its_shape() {
+    let steps = with(
+        vec![Step::Edit(|e| {
+            let layer = e.doc.layers()[0].id;
+            let raster = e.doc.target(layer, 0).unwrap().raster;
+            for y in 0..8 {
+                for x in 0..8 {
+                    raster.set_raw(x, y, Rgba::BLACK.to_u32());
+                }
+            }
+            // A triangle: the lower left half of the block.
+            let points = [Point::new(0, 0), Point::new(0, 7), Point::new(7, 7)];
+            e.selection = Some(Selection::lasso(32, 32, &points));
+        })],
+        with(vec![Step::Key("v", false)], drag((1, 6), (11, 16), L)),
+    );
+    let out = drive(editor_over(doc()), steps);
+    assert_eq!(px(&out.doc, 7, 0), BLACK, "outside the lasso, left alone");
+    assert_eq!(px(&out.doc, 0, 7).a, 0, "lifted from where it was");
+    assert_eq!(
+        px(&out.doc, 10, 17),
+        BLACK,
+        "dropped ten pixels down and right"
+    );
+    assert_eq!(
+        px(&out.doc, 17, 10).a,
+        0,
+        "the box corner did not come along"
+    );
+    let selection = out.selection.unwrap();
+    assert!(selection.contains(10, 17));
+    assert!(!selection.contains(17, 10), "the selection kept its shape");
+    let before = Selection::lasso(
+        32,
+        32,
+        &[Point::new(0, 0), Point::new(0, 7), Point::new(7, 7)],
+    );
+    assert_eq!(selection.count(), before.count());
 }

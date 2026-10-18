@@ -73,7 +73,8 @@ enum Session {
         offset: Point,
         rect: Rect,
         original: Raster,
-        selected: bool,
+        /// The selection being moved, as it was; `None` moves the layer.
+        selection: Option<Selection>,
         tx: Option<Transaction>,
     },
 }
@@ -505,9 +506,9 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                 }
             };
             let original = editor.doc.image(image)?.clone();
-            let (rect, selected) = match &editor.selection {
-                Some(s) if !s.is_empty() => (s.bounds(), true),
-                _ => (original.content_bounds(), false),
+            let (rect, selection) = match &editor.selection {
+                Some(s) if !s.is_empty() => (s.bounds(), Some(s.clone())),
+                _ => (original.content_bounds(), None),
             };
             if rect.is_empty() {
                 return None;
@@ -518,7 +519,7 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                 offset: Point::new(0, 0),
                 rect,
                 original,
-                selected,
+                selection,
                 tx: Some(tx),
             })
         }
@@ -604,17 +605,15 @@ fn extend(
             offset,
             rect,
             original,
-            selected,
+            selection,
             ..
         } => {
             let d = Point::new(p.x - from.x, p.y - from.y);
             if d != *offset {
                 *offset = d;
-                place(editor, original, *rect, d);
-                if *selected {
-                    let (w, h) = (editor.doc.width(), editor.doc.height());
-                    let moved = Rect::new(rect.x + d.x, rect.y + d.y, rect.w, rect.h);
-                    editor.selection = Some(Selection::rect(w, h, moved));
+                place(editor, original, *rect, selection.as_ref(), d);
+                if let Some(s) = selection {
+                    editor.selection = Some(s.translated(d));
                 }
             }
         }
@@ -717,9 +716,16 @@ fn selection_of(
     Some(out)
 }
 
-/// Puts the lifted pixels of `rect` back at `offset` from where they were,
-/// starting again from the cel as it was before the move.
-fn place(editor: &mut Editor, original: &Raster, rect: Rect, offset: Point) {
+/// Puts the lifted pixels of `rect`, those `mask` selects when there is one,
+/// back at `offset` from where they were, starting again from the cel as it
+/// was before the move.
+fn place(
+    editor: &mut Editor,
+    original: &Raster,
+    rect: Rect,
+    mask: Option<&Selection>,
+    offset: Point,
+) {
     let Ok(target) = editor.target() else {
         return;
     };
@@ -729,8 +735,19 @@ fn place(editor: &mut Editor, original: &Raster, rect: Rect, offset: Point) {
     };
     let raster = target.raster;
     *raster = original.clone();
-    let lifted = Pixels::from_raster(original, rect);
-    raster.fill_rect_raw(&rect, clear);
+    let lifted = Pixels::from_raster_masked(original, rect, mask, clear);
+    match mask {
+        None => {
+            raster.fill_rect_raw(&rect, clear);
+        }
+        Some(_) => {
+            for (i, p) in rect.points().enumerate() {
+                if lifted.data[i] != clear {
+                    raster.set_raw(p.x, p.y, clear);
+                }
+            }
+        }
+    }
     lifted.write_to(
         raster,
         Point::new(rect.x + offset.x, rect.y + offset.y),
