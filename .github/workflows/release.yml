@@ -66,6 +66,9 @@ jobs:
 
       # Unzip into a fresh folder and run the editor without a window from a
       # different working directory, as a double-click from Explorer would.
+      # The app folder of the checkout moves away first: a release build
+      # falls back to the folder it was built from, which a user does not
+      # have.
       - name: Smoke test the zip
         run: |
           smoke="$RUNNER_TEMP/smoke"
@@ -73,6 +76,7 @@ jobs:
           mkdir -p "$smoke" "$elsewhere"
           7z x "dist/$PACKAGE.zip" -o"$smoke" > /dev/null
           cp app/assets/demo/rig-demo.pixl "$elsewhere/"
+          mv app "$RUNNER_TEMP/app-source"
           cd "$elsewhere"
           status=0
           LUMEN_HEADLESS=1 LUMEN_HEADLESS_TICKS=60 \
