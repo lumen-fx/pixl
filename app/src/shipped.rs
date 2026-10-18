@@ -1,6 +1,7 @@
 //! The documents pixl ships: the rig demo, a small character rigged and keyed
-//! as a walk. Each opens as an untitled copy, so the file it came from is
-//! never written. `tests/common/demo.rs` builds them with pixl-core, and
+//! as a walk, and the rig lesson the tutorial opens, the same character with
+//! no skeleton. Each opens as an untitled copy, so the file it came from is
+//! never written. `tests/common/demo.rs` builds both with pixl-core, and
 //! `tests/demo.rs` checks the files here are what it builds.
 
 use pixl_core::Document;
@@ -10,6 +11,7 @@ use pixl_core::native;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shipped {
     RigDemo,
+    RigLesson,
 }
 
 impl Shipped {
@@ -17,6 +19,7 @@ impl Shipped {
     pub fn bytes(self) -> &'static [u8] {
         match self {
             Shipped::RigDemo => include_bytes!("../assets/demo/rig-demo.pixl"),
+            Shipped::RigLesson => include_bytes!("../assets/demo/rig-lesson.pixl"),
         }
     }
 
@@ -24,6 +27,7 @@ impl Shipped {
     pub fn name(self) -> &'static str {
         match self {
             Shipped::RigDemo => "rig demo",
+            Shipped::RigLesson => "rig lesson",
         }
     }
 

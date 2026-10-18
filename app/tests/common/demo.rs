@@ -1,14 +1,18 @@
 //! The documents pixl ships, built from code: the rig demo, a small character
-//! rigged and keyed as a walk. `tests/demo.rs` checks the files in
+//! rigged and keyed as a walk, and the rig lesson the tutorial opens, the same
+//! character with no skeleton. `tests/demo.rs` checks the files in
 //! `assets/demo/` are what this builds.
 
 use pixl_core::rig::{BonePose, Easing, NamedPose, Pose, PoseKey, RenderOptions, Vec2};
 use pixl_core::{Binding, ColorMode, Document, LayerId, NewLayer, Placement, Rgba};
 
-/// The canvas side.
+/// The canvas side of both documents.
 pub const SIDE: u32 = 48;
 /// The milliseconds each frame of the demo's walk lasts.
 const WALK_MS: u32 = 100;
+/// The frames of the lesson, and each one's milliseconds.
+pub const LESSON_FRAMES: usize = 5;
+const LESSON_MS: u32 = 150;
 
 /// The front arm hangs from its shoulder to its hand along this column.
 pub const ARM_X: i32 = 24;
@@ -132,6 +136,18 @@ fn character(frames: usize, ms: u32) -> (Document, Vec<LayerId>) {
         layers.push(layer);
     }
     (d, layers)
+}
+
+/// The lesson: the character on every frame (each frame's cels linked to
+/// frame 0's) and no skeleton yet.
+pub fn rig_lesson() -> Document {
+    let (mut d, layers) = character(LESSON_FRAMES, LESSON_MS);
+    for layer in layers {
+        for f in 1..LESSON_FRAMES {
+            d.link_cel(layer, 0, f).expect("a frame");
+        }
+    }
+    d
 }
 
 /// The demo: the character on a skeleton, its walk keyed on eight frames

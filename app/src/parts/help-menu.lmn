@@ -1,3 +1,4 @@
 <menu id="help-menu">
+  <menuitem id="help-rig-tutorial" label="Rig tutorial"/>
   <menuitem id="help-rig-demo" label="Open rig demo"/>
 </menu>

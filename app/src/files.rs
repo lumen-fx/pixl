@@ -61,6 +61,9 @@ pub struct Files {
     pub confirming: Option<Replace>,
     /// The document whose newer recovery copy is on offer.
     pub recovery: Option<PathBuf>,
+    /// The generation of the rig lesson just opened, for the tutorial to
+    /// start on.
+    pub lesson: Option<u64>,
     /// When the recovery copy was last written, and for which revision.
     last_autosave: Option<(Instant, u64)>,
 }
@@ -72,6 +75,7 @@ impl Default for Files {
             queued: None,
             confirming: None,
             recovery: None,
+            lesson: None,
             last_autosave: None,
         }
     }
@@ -188,6 +192,9 @@ pub fn open_shipped(editor: &mut Editor, files: &mut Files, which: Shipped) {
             editor.message = None;
             files.recovery = None;
             files.last_autosave = None;
+            if which == Shipped::RigLesson {
+                files.lesson = Some(editor.generation);
+            }
         }
         Err(e) => editor.message = Some(e),
     }

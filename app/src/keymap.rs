@@ -284,6 +284,7 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("rig-mode-bones", "Bones mode", "Rig", Kind::Press),
     ("rig-mode-pose", "Pose mode", "Rig", Kind::Press),
     ("help-rig-demo", "Open rig demo", "Help", Kind::Press),
+    ("help-rig-tutorial", "Rig tutorial", "Help", Kind::Press),
     (
         "apply",
         "Finish the shape, or apply the transform",

@@ -5,7 +5,7 @@
     <tooltip text="Draw bones and bind layers to them"><button id="rig-mode-bones" class="flat small" text="Bones"/></tooltip>
     <tooltip text="Pose the bones"><button id="rig-mode-pose" class="flat small" text="Pose"/></tooltip>
   </row>
-  <scroll id="rig-scroll" class="rig-scroll">
+  <scroll id="rig-scroll" class="rig-scroll" bind-scroll="rig_scroll">
     <column id="rig-body" class="panel-body">
       <if signal="rig_none" mode="hide">
         <row class="rig-row">

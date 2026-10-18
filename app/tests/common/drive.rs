@@ -2,6 +2,7 @@
 //! way the window delivers them, and reports what the editor ended with.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use lumenui::ecs::hierarchy::Children;
@@ -112,6 +113,9 @@ pub struct Outcome {
     pub perf_lines: Vec<String>,
     /// The pixels the tool preview draws over the document.
     pub preview: usize,
+    /// For each tick from the fifth on: how many steps had run, the rig
+    /// tutorial's step, and whether its card showed.
+    pub tutorial: Vec<(usize, usize, bool)>,
 }
 
 /// The editor's state at the end of a tick.
@@ -159,6 +163,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
     let _turn = super::turn();
     let waits = steps.iter().filter(|s| matches!(s, Step::Until(_))).count() as u64;
     let views: Arc<Mutex<Vec<View>>> = Arc::default();
+    let tutorial: Arc<Mutex<Vec<(usize, usize, bool)>>> = Arc::default();
+    let ran: Arc<AtomicUsize> = Arc::default();
+    let (tutorial_out, ran_in, ran_out) =
+        (Arc::clone(&tutorial), Arc::clone(&ran), Arc::clone(&ran));
     let end: Arc<Mutex<Option<Snapshot>>> = Arc::default();
     let (views_out, end_out) = (Arc::clone(&views), Arc::clone(&end));
     let n = steps.len() as u64;
@@ -210,6 +218,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 }
                 *index += 1;
                 *waited = 0;
+                ran_in.store(*index, Ordering::Relaxed);
                 let place = |at: At| match at {
                     At::Doc(x, y) => pixl::tools::screen_of(&view, Point::new(x, y)),
                     At::Window(w) => w,
@@ -425,7 +434,11 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    home: Res<Home>,
                    mut recents: ResMut<Recents>,
                    settings: Res<Settings>,
-                   (perf, preview): (Res<pixl::perf::Perf>, Res<pixl::view::Preview>),
+                   (perf, preview, tutor): (
+                Res<pixl::perf::Perf>,
+                Res<pixl::view::Preview>,
+                Res<pixl::tutorial::Tutorial>,
+            ),
                    signals: Signals,
                    mut tick: Local<usize>| {
                 *tick += 1;
@@ -434,6 +447,11 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 recents.finish_thumbnails();
                 if *tick >= 5 {
                     views_out.lock().unwrap().push(view.clone());
+                    tutorial_out.lock().unwrap().push((
+                        ran_out.load(Ordering::Relaxed),
+                        tutor.step,
+                        signals.get::<bool>("tutor_open").unwrap_or(false),
+                    ));
                 }
                 *end_out.lock().unwrap() = Some(Snapshot {
                     doc: editor.doc.clone(),
@@ -473,6 +491,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         .expect("the editor runs");
     let end = end.lock().unwrap().take().expect("the editor ran");
     let views = views.lock().unwrap().clone();
+    let tutorial = tutorial.lock().unwrap().clone();
     Outcome {
         doc: end.doc,
         fg: end.fg,
@@ -495,6 +514,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         last_stroke: end.last_stroke,
         perf_lines: end.perf_lines,
         preview: end.preview,
+        tutorial,
     }
 }
 

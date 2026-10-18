@@ -1,0 +1,31 @@
+/* The rig tutorial's card over the canvas, and the outline on the control
+   the current step uses. */
+
+.pixl.dark { --tutor-mark: #f0c04f; --tutor-bg: #1c1c1ef2; }
+.pixl.light { --tutor-mark: #c08a10; --tutor-bg: #fafafaf2; }
+
+.tutor {
+  position: absolute;
+  inset: 8 auto auto 8;
+  width: 280;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  bg: var(--tutor-bg);
+  border: 1px solid var(--edge);
+  radius: var(--radius);
+  cursor: default;
+}
+.tutor-head { align: center; gap: var(--space-3); }
+.tutor-title { text-color: var(--text); }
+.tutor-count { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.tutor-text { text-color: var(--text); font-size: var(--font-size-small); wrap: word; }
+.tutor-steps { gap: 1; }
+.tutor-step { align: center; gap: var(--space-3); height: 18; min-height: 18; }
+.tutor-mark { width: 8; height: 8; min-width: 8; radius: 4; border: 1px solid var(--text-faint); }
+.tutor-step.done .tutor-mark { bg: var(--accent); border: 1px solid var(--accent); }
+.tutor-step.current .tutor-mark { border: 1px solid var(--tutor-mark); bg: var(--tutor-mark); }
+.tutor-step-name { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.tutor-step.done .tutor-step-name { text-color: var(--text-dim); }
+.tutor-step.current .tutor-step-name { text-color: var(--text); }
+
+button.tutor-target, button.flat.tutor-target { border: 2px solid var(--tutor-mark); text-color: var(--text); }

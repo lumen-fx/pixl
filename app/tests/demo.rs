@@ -10,7 +10,7 @@ pub mod common;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use common::demo::rig_demo;
+use common::demo::{rig_demo, rig_lesson};
 use common::drive::{Step, drive, editor_over};
 use pixl::Recents;
 use pixl::shipped::Shipped;
@@ -20,11 +20,14 @@ use pixl_core::{ColorMode, CompositeOptions, Document, composite_frame};
 #[test]
 fn the_shipped_documents_are_what_the_code_builds() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/demo");
-    for (which, file, build) in [(
-        Shipped::RigDemo,
-        "rig-demo.pixl",
-        rig_demo as fn() -> Document,
-    )] {
+    for (which, file, build) in [
+        (
+            Shipped::RigDemo,
+            "rig-demo.pixl",
+            rig_demo as fn() -> Document,
+        ),
+        (Shipped::RigLesson, "rig-lesson.pixl", rig_lesson),
+    ] {
         let bytes = native::save(&build(), SaveOptions::default());
         assert_eq!(
             bytes,
@@ -55,6 +58,16 @@ fn every_frame_of_the_walk_differs_from_the_next() {
     for f in 0..frames.len() {
         let next = (f + 1) % frames.len();
         assert_ne!(frames[f], frames[next], "frames {f} and {next}");
+    }
+    // The lesson's frames all show the character at rest.
+    let lesson = Shipped::RigLesson.load().unwrap();
+    let rest = composite_frame(&lesson, 0, &CompositeOptions::default());
+    assert!(rest.iter().any(|c| c.a > 0));
+    for f in 1..lesson.frame_count() {
+        assert_eq!(
+            composite_frame(&lesson, f, &CompositeOptions::default()),
+            rest
+        );
     }
 }
 

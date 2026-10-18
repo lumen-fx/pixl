@@ -35,6 +35,7 @@ pub mod toolbar;
 pub mod toolbox;
 pub mod tools;
 pub mod transform_tool;
+pub mod tutorial;
 pub mod view;
 pub mod workspace;
 
@@ -306,6 +307,7 @@ pub fn editor(source: Source) -> App {
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
         );
     let app = rig::install(app);
+    let app = tutorial::install(app);
     let app = presets::install(app, presets::Presets::in_memory());
     toolbar::install(app, toolbar::Toolbar::in_memory())
 }

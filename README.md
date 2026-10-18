@@ -312,8 +312,14 @@ mode, and picking a tool hands the canvas back to it. Outside the Rig layout
 (Window menu) the panel shows only its header until a mode starts.
 
 Help > Open rig demo, also on the start screen, opens a character rigged and
-keyed as an eight-frame walk; press Play to watch it. It opens as an untitled
-copy, so what pixl ships is never changed.
+keyed as an eight-frame walk; press Play to watch it. Help > Rig tutorial
+opens the same character with no skeleton and a card over the canvas that
+goes through rigging its arm: make a skeleton, draw a bone, bind the arm's
+layer, pose it on two frames, render the frames between and play. Each step
+outlines the control it uses and ticks itself off once done. The tutorial
+switches to the Rig layout; closing its card keeps the place, and Help > Rig
+tutorial shows it again. Both open as untitled copies, so what pixl ships is
+never changed.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
@@ -351,9 +357,10 @@ cargo run -p pixl -- art.pixl     # straight into a document
 cargo test
 ```
 
-The rig demo is built by `app/tests/common/demo.rs`, and a test checks the
-file shipped in `app/assets/demo/` matches. After changing it, or the `.pixl`
-format, write it again with `PIXL_WRITE_DEMO=1 cargo test -p pixl --test demo`.
+The rig demo and the tutorial's lesson are built by
+`app/tests/common/demo.rs`, and a test checks the files shipped in
+`app/assets/demo/` match. After changing either, or the `.pixl` format,
+write them again with `PIXL_WRITE_DEMO=1 cargo test -p pixl --test demo`.
 
 `cargo bench -p pixl-core --bench rig` times posing and rendering a
 20-bone character, and `cargo bench -p pixl --bench pose -- gpu` (or `cpu`)

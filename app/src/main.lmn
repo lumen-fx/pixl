@@ -91,6 +91,7 @@
       <canvas id="rig"/>
       <canvas id="overlay"/>
       <include src="parts/perf.lmn"/>
+      <include src="parts/tutorial.lmn"/>
       <canvas id="ruler-top" class="ruler"/>
       <canvas id="ruler-left" class="ruler"/>
     </column>
