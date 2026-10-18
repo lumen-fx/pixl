@@ -804,8 +804,8 @@ mod tests {
     fn png_frames_number_every_frame_padded() {
         let jobs = plan(&doc(), "hero", 0, &Preset::default(), Path::new("out"));
         assert_eq!(jobs.len(), 12);
-        assert_eq!(names(&jobs)[0], "out/hero-00.png");
-        assert_eq!(names(&jobs)[11], "out/hero-11.png");
+        assert_eq!(jobs[0].path, Path::new("out").join("hero-00.png"));
+        assert_eq!(jobs[11].path, Path::new("out").join("hero-11.png"));
     }
 
     #[test]
