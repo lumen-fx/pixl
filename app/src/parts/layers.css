@@ -1,7 +1,21 @@
-/* The layers list's marks: color tags, locks, group folds, clipping and
+/* The layers list's marks: eyes, color tags, locks, group folds, clipping and
    masks, and where a dragged layer would land. */
 
 .layer-row { gap: var(--space-2); }
+/* The eye: open while the layer shows, shut while it is hidden, and faint
+   while a group holding the layer is hidden. */
+.eye-icon {
+  width: 12;
+  height: 12;
+  bg: var(--text-dim);
+  mask-image: url("assets/icons/eye.png");
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+.layer-eye:hover .eye-icon { bg: var(--text); }
+.layer-eye.off .eye-icon { mask-image: url("assets/icons/eye-shut.png"); bg: var(--text-faint); }
+.layer-eye.muted .eye-icon { bg: var(--text-faint); }
 .layer-row.hidden .layer-name { text-color: var(--text-faint); }
 .layer-row.reference .layer-name { text-color: var(--text-dim); }
 .layer-tag { width: 3; height: 16; radius: 1; }

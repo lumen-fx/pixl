@@ -4,13 +4,22 @@
 //! renaming, duplicating, merging down and flattening, and the layer
 //! properties dialog. The Layer menu and a right-click on a layer reach the
 //! same commands.
+//!
+//! The eyes show and hide layers: a click toggles one, Alt+click shows only
+//! that layer and a second Alt+click puts the others back, and a drag down
+//! the eyes sets each to what the first one became. Ctrl+click and
+//! Shift+click select more rows; the selection is what the Layer menu's
+//! visibility commands act on, while the tools and the other commands keep
+//! to the active layer.
+
+use std::collections::BTreeSet;
 
 use lumenui::ecs::system::SystemParam;
 use lumenui::ecs::world::World;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
-    ContextMenuEvent, DoubleClickEvent, MenuClicked, PointerButton, PointerMoved, PointerPressed,
-    PointerReleased,
+    ContextMenuEvent, DoubleClickEvent, MenuClicked, ModifiersState, PointerButton, PointerMoved,
+    PointerPressed, PointerReleased,
 };
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
@@ -254,6 +263,61 @@ impl Editor {
             self.layer = id;
         }
     }
+
+    /// Shows or hides layers as one undo step. Returns false when nothing
+    /// changed, and records no step then.
+    pub fn set_visibility(&mut self, label: &str, changes: &[(LayerId, bool)]) -> bool {
+        let changed = changes
+            .iter()
+            .any(|&(id, show)| self.doc.layer(id).is_some_and(|l| l.props.visible != show));
+        if !changed {
+            return false;
+        }
+        self.history
+            .transact(&mut self.doc, label, Scope::Images(Vec::new()), |doc| {
+                for &(id, show) in changes {
+                    // A layer that went away has nothing to show.
+                    let _ = doc.update_layer(id, |p| p.visible = show);
+                }
+            });
+        self.touch();
+        true
+    }
+}
+
+/// What showing only `keep` changes: the kept layers and the groups holding
+/// them show, and every other layer beside them, at the top or in one of
+/// those groups, hides. Layers inside a kept group, or inside a group that
+/// hides, keep their own visibility.
+pub fn show_only(doc: &pixl_core::Document, keep: &BTreeSet<LayerId>) -> Vec<(LayerId, bool)> {
+    let mut shown = keep.clone();
+    for &id in keep {
+        shown.extend(doc.ancestors(id));
+    }
+    let mut out = Vec::new();
+    for (_, layer) in doc.walk() {
+        let id = layer.id;
+        if shown.contains(&id) {
+            out.push((id, true));
+            continue;
+        }
+        let ancestors = doc.ancestors(id);
+        if ancestors.iter().any(|a| keep.contains(a)) {
+            continue;
+        }
+        if ancestors.first().is_none_or(|p| shown.contains(p)) {
+            out.push((id, false));
+        }
+    }
+    out
+}
+
+/// Every layer's visibility as it is now.
+fn visibility(doc: &pixl_core::Document) -> Vec<(LayerId, bool)> {
+    doc.walk()
+        .iter()
+        .map(|(_, l)| (l.id, l.props.visible))
+        .collect()
 }
 
 fn mask_of(doc: &pixl_core::Document, id: LayerId) -> Option<pixl_core::LayerMask> {
@@ -326,10 +390,171 @@ pub struct LayerPanel {
     /// appear a tick after it opens, and the name field, which has focus,
     /// takes only a direct write (lumen-fx/lumen#536).
     refill: u8,
+    /// Rows picked with Ctrl or Shift besides the active layer, the row a
+    /// Shift+click selects from, and the document and active layer they
+    /// were picked with: when either changes elsewhere, the pick goes.
+    picked: BTreeSet<LayerId>,
+    anchor: Option<LayerId>,
+    picked_with: Option<(u64, LayerId)>,
+    /// What the last Alt+click on an eye changed, to put back on the next.
+    solo: Option<Solo>,
+    /// A drag down the eyes.
+    paint: Option<EyePaint>,
+    /// Eyes a drag set, whose click as the button comes up is part of the
+    /// drag.
+    painted: Vec<LayerId>,
+}
+
+/// An Alt+click on an eye: the layer, every layer's visibility before it,
+/// and what it changed.
+struct Solo {
+    layer: LayerId,
+    generation: u64,
+    before: Vec<(LayerId, bool)>,
+    after: Vec<(LayerId, bool)>,
+}
+
+/// A drag down the eyes: what the first eye becomes, the eyes crossed, the
+/// pointer's last height, and the undo step once an eye has changed.
+struct EyePaint {
+    show: bool,
+    crossed: Vec<LayerId>,
+    y: f32,
+    tx: Option<Transaction>,
+}
+
+impl LayerPanel {
+    /// Drops a pick made for another document or another active layer, and
+    /// picked layers that went away.
+    fn sync_pick(&mut self, editor: &Editor) {
+        let now = (editor.generation, editor.layer);
+        if self.picked_with != Some(now) {
+            self.picked.clear();
+            self.anchor = None;
+            self.picked_with = Some(now);
+        }
+        self.picked.retain(|id| editor.doc.layer(*id).is_some());
+        if self
+            .solo
+            .as_ref()
+            .is_some_and(|s| s.generation != editor.generation)
+        {
+            self.solo = None;
+        }
+    }
+
+    /// The selected layers: the picked rows and the active layer.
+    pub fn selected(&self, editor: &Editor) -> BTreeSet<LayerId> {
+        let mut out = self.picked.clone();
+        out.insert(editor.layer);
+        out
+    }
+
+    /// Makes `layer` the active layer, and the row a Shift+click selects
+    /// from, and keeps the pick.
+    fn activate(&mut self, editor: &mut Editor, layer: LayerId) {
+        if editor.layer != layer {
+            editor.mask_edit = false;
+        }
+        editor.layer = layer;
+        self.anchor = Some(layer);
+        self.picked_with = Some((editor.generation, layer));
+    }
+
+    /// A click on a row: alone it selects that layer; with Ctrl it adds the
+    /// row to the selection or takes it out; with Shift it selects the rows
+    /// from the active layer to it, and further Shift+clicks keep that
+    /// start. The row clicked becomes the active layer, unless Ctrl took it
+    /// out.
+    fn pick(
+        &mut self,
+        editor: &mut Editor,
+        tree: &LayerTree,
+        layer: LayerId,
+        ctrl: bool,
+        shift: bool,
+    ) {
+        self.sync_pick(editor);
+        if shift {
+            let anchor = self.anchor.unwrap_or(editor.layer);
+            let order: Vec<LayerId> = rows(&editor.doc, tree).iter().map(|(_, l)| l.id).collect();
+            let (Some(a), Some(b)) = (
+                order.iter().position(|&id| id == anchor),
+                order.iter().position(|&id| id == layer),
+            ) else {
+                return;
+            };
+            self.picked = order[a.min(b)..=a.max(b)].iter().copied().collect();
+            self.activate(editor, layer);
+            self.anchor = Some(anchor);
+        } else if ctrl {
+            let mut selected = self.selected(editor);
+            if selected.contains(&layer) {
+                if selected.len() == 1 {
+                    return;
+                }
+                selected.remove(&layer);
+                if editor.layer == layer {
+                    let top = rows(&editor.doc, tree)
+                        .iter()
+                        .map(|(_, l)| l.id)
+                        .find(|id| selected.contains(id));
+                    if let Some(top) = top {
+                        self.activate(editor, top);
+                    }
+                }
+                self.picked = selected;
+            } else {
+                selected.insert(layer);
+                self.picked = selected;
+                self.activate(editor, layer);
+            }
+        } else {
+            self.picked.clear();
+            self.activate(editor, layer);
+        }
+    }
+
+    /// An Alt+click on an eye: shows only that layer, or after one, puts
+    /// back what it hid. On a layer already shown alone, it shows them all.
+    fn solo(&mut self, editor: &mut Editor, layer: LayerId) {
+        if let Some(s) = self.solo.take()
+            && s.layer == layer
+            && s.generation == editor.generation
+            && s.after
+                .iter()
+                .all(|&(id, show)| editor.doc.layer(id).is_none_or(|l| l.props.visible == show))
+        {
+            editor.set_visibility("Restore visibility", &s.before);
+            return;
+        }
+        let before = visibility(&editor.doc);
+        let after = show_only(&editor.doc, &BTreeSet::from([layer]));
+        if editor.set_visibility("Show only", &after) {
+            self.solo = Some(Solo {
+                layer,
+                generation: editor.generation,
+                before,
+                after,
+            });
+        } else {
+            show_all(editor);
+        }
+    }
+}
+
+fn show_all(editor: &mut Editor) {
+    let all: Vec<(LayerId, bool)> = editor
+        .doc
+        .walk()
+        .iter()
+        .map(|(_, l)| (l.id, true))
+        .collect();
+    editor.set_visibility("Show all layers", &all);
 }
 
 /// The layers list, top layer first, as markup.
-pub fn layers_markup(editor: &Editor, tree: &LayerTree) -> String {
+pub fn layers_markup(editor: &Editor, tree: &LayerTree, selected: &BTreeSet<LayerId>) -> String {
     let mut out = String::new();
     for (depth, layer) in rows(&editor.doc, tree) {
         let id = layer.id.0;
@@ -337,6 +562,8 @@ pub fn layers_markup(editor: &Editor, tree: &LayerTree) -> String {
         let mut class = format!("layer-row depth-{}", depth.min(4));
         if layer.id == editor.layer {
             class.push_str(" active");
+        } else if selected.contains(&layer.id) {
+            class.push_str(" selected");
         }
         if !p.visible {
             class.push_str(" hidden");
@@ -351,7 +578,15 @@ pub fn layers_markup(editor: &Editor, tree: &LayerTree) -> String {
             LayerKind::Skeleton { .. } => " skeleton",
         };
         class.push_str(kind);
-        let eye = if p.visible { "on" } else { "off" };
+        let mut eye = String::from(if p.visible { "on" } else { "off" });
+        let group_hidden = editor
+            .doc
+            .ancestors(layer.id)
+            .iter()
+            .any(|g| editor.doc.layer(*g).is_some_and(|g| !g.props.visible));
+        if group_hidden {
+            eye.push_str(" muted");
+        }
         let lock = if p.locks == Locks::ALL {
             "all"
         } else if p.locks == Locks::NONE {
@@ -405,7 +640,7 @@ pub fn layers_markup(editor: &Editor, tree: &LayerTree) -> String {
             )
         };
         out.push_str(&format!(
-            r#"<row id="layer-row-{id}" class="{class}">{tag}<button id="layer-eye-{id}" class="layer-eye {eye}" text=""/><button id="layer-lock-{id}" class="layer-lock {lock}" text=""/>{fold}{clip}<label class="layer-name" text="{name}"/>{note}{mask}<label class="layer-meta" text="{meta}"/></row>"#,
+            r#"<row id="layer-row-{id}" class="{class}">{tag}<button id="layer-eye-{id}" class="layer-eye {eye}"><tile class="eye-icon"/></button><button id="layer-lock-{id}" class="layer-lock {lock}" text=""/>{fold}{clip}<label class="layer-name" text="{name}"/>{note}{mask}<label class="layer-meta" text="{meta}"/></row>"#,
             name = escape(&p.name),
             meta = escape(&meta),
         ));
@@ -424,6 +659,7 @@ pub fn show_layers(
     if editor.mask_edit && mask_of(&editor.doc, editor.layer).is_none() {
         editor.mask_edit = false;
     }
+    panel.sync_pick(&editor);
     let mut changed = false;
     let key = {
         use std::hash::{Hash, Hasher};
@@ -436,9 +672,11 @@ pub fn show_layers(
         )
             .hash(&mut h);
         tree.collapsed.hash(&mut h);
+        panel.picked.hash(&mut h);
         h.finish()
     };
-    let markup = (panel.shown_for != Some(key)).then(|| layers_markup(&editor, &tree));
+    let markup = (panel.shown_for != Some(key))
+        .then(|| layers_markup(&editor, &tree, &panel.selected(&editor)));
     if let Some(markup) = markup
         && let Some(node) = dom::get_by_id("layer-list")
     {
@@ -494,9 +732,16 @@ pub struct LayerInput<'w, 's> {
     released: MessageReader<'w, 's, PointerReleased>,
     ids: ElementIds<'w, 's>,
     hovered: Query<'w, 's, Entity, With<Hovered>>,
+    modifiers: Res<'w, ModifiersState>,
 }
 
 impl LayerInput<'_, '_> {
+    /// The eye the hovered element is, or is in.
+    fn hovered_eye(&self) -> Option<LayerId> {
+        let e = self.hovered.iter().next()?;
+        self.ids.up(e).find_map(eye_id)
+    }
+
     /// The layer row the hovered element is in: `Some(None)` when the
     /// hovered element is elsewhere, `None` when nothing is hovered.
     fn hovered_row(&self) -> Option<Option<LayerId>> {
@@ -508,6 +753,39 @@ impl LayerInput<'_, '_> {
 /// The layer a `layer-row-N` id names.
 fn row_id(id: &str) -> Option<LayerId> {
     id.strip_prefix("layer-row-")?.parse().ok().map(LayerId)
+}
+
+/// The layer a `layer-eye-N` id names.
+fn eye_id(id: &str) -> Option<LayerId> {
+    id.strip_prefix("layer-eye-")?.parse().ok().map(LayerId)
+}
+
+/// The eyes a drag passed between the heights `from` and `to`, top first,
+/// inside the list's own box so rows scrolled out of it are left alone.
+/// The pointer has to be near the column of eyes.
+fn eyes_crossed(x: f32, from: f32, to: f32, order: &[LayerId]) -> Vec<LayerId> {
+    let Some(list) = dom::get_by_id("layer-list").and_then(|n| n.rect()) else {
+        return Vec::new();
+    };
+    let (lo, hi) = (
+        from.min(to).max(list.client_y),
+        from.max(to).min(list.client_y + list.height),
+    );
+    let mut out = Vec::new();
+    for id in order {
+        let Some(r) = dom::get_by_id(&format!("layer-eye-{}", id.0)).and_then(|n| n.rect()) else {
+            continue;
+        };
+        let Some(row) = dom::get_by_id(&format!("layer-row-{}", id.0)).and_then(|n| n.rect())
+        else {
+            continue;
+        };
+        let near = x >= r.client_x - r.width && x < r.client_x + 2.0 * r.width;
+        if near && row.client_y < hi && row.client_y + row.height > lo {
+            out.push(*id);
+        }
+    }
+    out
 }
 
 /// The row under a window position and where in it: the top third drops
@@ -744,6 +1022,19 @@ pub fn layer_command(
                 editor.set_locks(layer, locks);
             }
         }
+        "lm-show-only" => {
+            let changes = show_only(&editor.doc, &panel.selected(editor));
+            editor.set_visibility("Show only selected", &changes);
+        }
+        "lm-show-all" => show_all(editor),
+        "lm-hide-selected" => {
+            let changes: Vec<(LayerId, bool)> = panel
+                .selected(editor)
+                .iter()
+                .map(|&id| (id, false))
+                .collect();
+            editor.set_visibility("Hide selected", &changes);
+        }
         "lm-collapse" => {
             let layer = editor.layer;
             if !tree.collapsed.remove(&layer) {
@@ -837,8 +1128,13 @@ pub fn layer_input(
         }
     }
 
-    // A row click picks the layer and leaves the mask; the buttons in the
-    // row and the Layer menu run commands.
+    panel.sync_pick(editor);
+    let held = input.modifiers.0;
+    let (ctrl, shift, alt) = (held.ctrl || held.super_, held.shift, held.alt);
+
+    // A row click picks the layer and leaves the mask, and an eye shows or
+    // hides one; the other buttons in the row and the Layer menu run
+    // commands.
     let mut chosen: Vec<String> = input.chosen.read().map(|m| m.id.clone()).collect();
     let clicked: Vec<Entity> = input.clicks.read().map(|c| c.entity).collect();
     for e in clicked {
@@ -846,8 +1142,21 @@ pub fn layer_input(
             continue;
         };
         if let Some(layer) = row_id(&id) {
-            if editor.doc.layer(layer).is_some() && editor.layer != layer {
-                editor.mask_edit = false;
+            if editor.doc.layer(layer).is_some() {
+                close_edit(editor, &mut panels);
+                panel.pick(editor, &tree, layer, ctrl, shift);
+            }
+            continue;
+        }
+        if let Some(layer) = eye_id(&id) {
+            if panel.painted.contains(&layer) || editor.doc.layer(layer).is_none() {
+                continue;
+            }
+            close_edit(editor, &mut panels);
+            if alt {
+                panel.solo(editor, layer);
+            } else {
+                editor.update_layer("Visibility", layer, |p| p.visible = !p.visible);
             }
             continue;
         }
@@ -862,7 +1171,7 @@ pub fn layer_input(
             && editor.doc.layer(layer).is_some()
         {
             // A context menu acts on the layer it was opened on.
-            editor.layer = layer;
+            panel.activate(editor, layer);
         }
         layer_command(
             &id,
@@ -894,19 +1203,35 @@ pub fn layer_input(
         if let Some(layer) = input.ids.id_of(m.entity).as_deref().and_then(row_id)
             && editor.doc.layer(layer).is_some()
         {
-            if editor.layer != layer {
-                editor.mask_edit = false;
+            // A right click inside the selection keeps it, for the
+            // visibility commands.
+            if panel.selected(editor).contains(&layer) {
+                panel.activate(editor, layer);
+            } else {
+                panel.pick(editor, &tree, layer, false, false);
             }
-            editor.layer = layer;
             panel.about = Some(layer);
             signals.open_menu_at("layer-menu", m.position.x, m.position.y);
         }
     }
 
     // Dragging a row moves the layer: beside another row, or into a group.
+    // A press on an eye starts a drag down the eyes instead.
     let presses: Vec<PointerPressed> = input.pressed.read().cloned().collect();
     for p in presses {
         if p.button != PointerButton::Primary {
+            continue;
+        }
+        panel.painted.clear();
+        if let Some(eye) = input.hovered_eye() {
+            if !alt && let Some(layer) = editor.doc.layer(eye) {
+                panel.paint = Some(EyePaint {
+                    show: !layer.props.visible,
+                    crossed: vec![eye],
+                    y: p.position.y,
+                    tx: None,
+                });
+            }
             continue;
         }
         // The row under the pointer: the hovered one, or with nothing
@@ -934,6 +1259,34 @@ pub fn layer_input(
         }
     }
     let last = input.moved.read().last().map(|m| m.position);
+    if let (Some(at), Some(paint)) = (last, panel.paint.as_mut()) {
+        // Each eye crossed takes the state the first one gets; the first
+        // changes once the drag reaches another, and the whole drag is one
+        // undo step.
+        let order: Vec<LayerId> = rows(&editor.doc, &tree).iter().map(|(_, l)| l.id).collect();
+        let crossed = eyes_crossed(at.x, paint.y, at.y, &order);
+        paint.y = at.y;
+        let new: Vec<LayerId> = crossed
+            .into_iter()
+            .filter(|id| !paint.crossed.contains(id))
+            .collect();
+        if !new.is_empty() {
+            if paint.tx.is_none() {
+                paint.tx = Some(editor.history.begin(
+                    &editor.doc,
+                    "Visibility",
+                    Scope::Images(Vec::new()),
+                ));
+            }
+            let first = paint.crossed[0];
+            for id in std::iter::once(first).chain(new.iter().copied()) {
+                let _ = editor.doc.update_layer(id, |p| p.visible = paint.show);
+            }
+            paint.crossed.extend(new);
+            panel.painted = paint.crossed.clone();
+            editor.touch();
+        }
+    }
     if let (Some(at), Some(drag)) = (last, panel.drag.as_mut()) {
         if (at - drag.from).length() > 4.0 {
             drag.moved = true;
@@ -946,7 +1299,15 @@ pub fn layer_input(
             drag.drop = drop_at(at, &order);
         }
     }
-    if input.released.read().count() > 0
+    let released = input.released.read().count() > 0;
+    if released
+        && let Some(paint) = panel.paint.take()
+        && let Some(tx) = paint.tx
+    {
+        editor.history.commit(&editor.doc, tx);
+        editor.touch();
+    }
+    if released
         && let Some(drag) = panel.drag.take()
         && drag.moved
         && let Some(drop) = drag.drop

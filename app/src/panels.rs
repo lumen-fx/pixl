@@ -291,22 +291,9 @@ pub fn panel_clicks(
                 editor.redo();
             }
             other => {
-                if let Some(n) = other
-                    .strip_prefix("layer-eye-")
-                    .and_then(|n| n.parse().ok())
-                {
-                    close_edit(editor, &mut panels);
-                    let id = LayerId(n);
-                    editor.update_layer("Visibility", id, |p| p.visible = !p.visible);
-                } else if let Some(n) = other
-                    .strip_prefix("layer-row-")
-                    .and_then(|n| n.parse().ok())
-                {
-                    close_edit(editor, &mut panels);
-                    if editor.doc.layer(LayerId(n)).is_some() {
-                        editor.layer = LayerId(n);
-                    }
-                } else if let Some(i) = other
+                // The layers list's rows and eyes are the layers panel's
+                // (layers.rs).
+                if let Some(i) = other
                     .strip_prefix("swatch-")
                     .and_then(|n| n.parse::<u8>().ok())
                 {

@@ -48,6 +48,8 @@ pub enum Step {
     Shift(bool),
     /// Holds or lets go of Alt for the pointer steps that follow.
     Alt(bool),
+    /// Holds or lets go of Ctrl for the pointer steps that follow.
+    HoldCtrl(bool),
     /// A key press with Ctrl held, and shift or not.
     Ctrl(&'static str, bool),
     /// A click on the element with this id.
@@ -174,7 +176,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         .add_systems(
             TickStage::Systems,
             (move |mut state: Local<(usize, (usize, u64))>,
-                   mut held: Local<(bool, bool)>,
+                   mut held: Local<(bool, bool, bool)>,
                    mut editor: ResMut<Editor>,
                    view: Res<View>,
                    (mut modifiers, mut pointer_state): (
@@ -197,9 +199,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    mut signals: Signals| {
                 let (tick, cursor) = &mut *state;
                 *tick += 1;
-                let (shift, alt) = &mut *held;
+                let (shift, alt, ctrl) = &mut *held;
                 modifiers.0.shift = *shift;
                 modifiers.0.alt = *alt;
+                modifiers.0.ctrl = *ctrl;
                 if *tick < 5 {
                     return;
                 }
@@ -331,6 +334,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     Step::Alt(held) => {
                         *alt = held;
                         modifiers.0.alt = held;
+                    }
+                    Step::HoldCtrl(held) => {
+                        *ctrl = held;
+                        modifiers.0.ctrl = held;
                     }
                     Step::Shift(held) => {
                         *shift = held;

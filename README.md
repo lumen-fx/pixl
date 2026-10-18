@@ -144,8 +144,8 @@ them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
 Layers nest in groups: a new layer goes into the active group, a group's
 fold button hides what it holds, and a layer dragged onto another row lands
 above or below it, or into a group dropped on its middle. Each row shows the
-layer's color tag, its visibility, a lock button that locks or unlocks
-everything, and marks for clipping and a mask. A mask hides the layer where
+layer's color tag, an eye for its visibility, a lock button that locks or
+unlocks everything, and marks for clipping and a mask. A mask hides the layer where
 it is dark: Add mask starts painting on the mask instead of the pixels, the
 mask button in the row switches between the two, and the mask can be turned
 off, applied to the pixels or deleted. A clipped layer shows only where the
@@ -155,6 +155,17 @@ is never exported. The Layer menu, also opened by a right-click on a row,
 duplicates, merges down, flattens, clips, locks pixels, alpha or position,
 and opens the layer's properties: name, opacity, blend mode, color tag,
 clipping, locks and the mask.
+
+Click an eye to show or hide its layer; a hidden group hides everything in
+it. Alt+click an eye to see only that layer, with the groups holding it, and
+Alt+click it again to bring back what was showing before. Drag down the
+column of eyes to show or hide each layer you pass, the way the first eye
+went. Ctrl+click a row to add it to the selection or take it out, and
+Shift+click to select the rows from the active layer to it; the active layer,
+the last row clicked, is still the one the tools paint on. The Layer menu's
+Show only selected, Show all layers and Hide selected act on the selection;
+its other commands act on the active layer. Each visibility change is an
+undo step.
 
 Panels sit in docks left, right and below the canvas. Drag the gutter beside
 a dock to resize it. Each panel's header collapses it to its title or hides

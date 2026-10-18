@@ -300,3 +300,176 @@ fn a_mask_turns_off_and_goes() {
     assert!(mask_of(&out.doc, LayerId(3)).is_none());
     assert_eq!(out.undo, ["Disable mask", "Delete mask"]);
 }
+
+/// Closes the panels around the layers panel, so its rows have room to be
+/// pointed at.
+fn roomy(mut steps: Vec<Step>) -> Vec<Step> {
+    let mut out = vec![
+        Step::Wait,
+        Step::Click("panel-color-close"),
+        Step::Click("panel-palette-close"),
+        Step::Click("panel-history-close"),
+        Step::Click("panel-brushes-close"),
+        Step::Wait,
+        Step::Wait,
+    ];
+    out.append(&mut steps);
+    out
+}
+
+/// A click with the pointer, pressed and let go over an element.
+fn click(id: &'static str) -> [Step; 3] {
+    [
+        Step::Move(At::Element(id)),
+        Step::Down(At::Element(id), PointerButton::Primary),
+        Step::Up(At::Element(id), PointerButton::Primary),
+    ]
+}
+
+fn shown(doc: &Document) -> Vec<u32> {
+    doc.walk()
+        .iter()
+        .filter(|(_, l)| l.props.visible)
+        .map(|(_, l)| l.id.0)
+        .collect()
+}
+
+#[test]
+fn an_alt_click_on_an_eye_shows_only_that_layer_and_another_puts_back() {
+    let mut d = doc();
+    d.update_layer(LayerId(1), |p| p.visible = false).unwrap();
+    let mut steps = vec![Step::Alt(true)];
+    steps.extend(click("layer-eye-2"));
+    steps.push(Step::Wait);
+    steps.push(Step::Edit(|e| assert_eq!(shown(&e.doc), [2])));
+    steps.extend(click("layer-eye-2"));
+    steps.extend([Step::Wait, Step::Alt(false)]);
+    let out = drive(editor_over(d), roomy(steps));
+    common::save(&out.frame, "layers-solo");
+    assert_eq!(shown(&out.doc), [2, 3], "layer 1 stays hidden as before");
+    assert_eq!(out.undo, ["Show only", "Restore visibility"]);
+}
+
+#[test]
+fn the_eye_is_an_icon_that_shuts_when_hidden() {
+    let mut d = doc();
+    d.update_layer(LayerId(2), |p| p.visible = false).unwrap();
+    let out = drive(
+        editor_over(d),
+        roomy(vec![
+            Step::Edit(|_| {
+                let classes = |id: &str| dom::get_by_id(id).unwrap().classes();
+                assert!(classes("layer-eye-2").iter().any(|c| c == "off"));
+                assert!(classes("layer-eye-3").iter().any(|c| c == "on"));
+            }),
+            Step::Wait,
+        ]),
+    );
+    common::save(&out.frame, "layers-eyes");
+}
+
+#[test]
+fn ctrl_and_shift_select_rows_for_the_visibility_commands() {
+    let mut d = doc();
+    d.add_layer(NewLayer::Raster, "Layer 4", Placement::default())
+        .unwrap();
+    // Rows top first: 4, 3, 2, 1.
+    let mut steps = Vec::new();
+    steps.extend(click("layer-row-4"));
+    steps.push(Step::HoldCtrl(true));
+    steps.extend(click("layer-row-2"));
+    // The click lands a tick after the button comes up.
+    steps.extend([Step::Wait, Step::HoldCtrl(false), Step::Wait]);
+    steps.push(Step::Edit(|e| {
+        assert_eq!(e.layer, LayerId(2), "the last row clicked is active");
+        let has = |id: &str, class: &str| {
+            dom::get_by_id(id)
+                .unwrap()
+                .classes()
+                .iter()
+                .any(|c| c == class)
+        };
+        assert!(has("layer-row-4", "selected"));
+        assert!(has("layer-row-2", "active"));
+        assert!(!has("layer-row-3", "selected"));
+    }));
+    // A right click inside the selection keeps it.
+    steps.extend([
+        Step::ContextMenu("layer-row-4"),
+        Step::Wait,
+        Step::Menu("lm-hide-selected"),
+        Step::Wait,
+    ]);
+    steps.push(Step::Edit(|e| assert_eq!(shown(&e.doc), [1, 3])));
+    // Shift selects from the active layer, 4, down to 3.
+    steps.push(Step::Shift(true));
+    steps.extend(click("layer-row-3"));
+    steps.extend([Step::Wait, Step::Shift(false), Step::Wait]);
+    steps.push(Step::Edit(|e| assert_eq!(e.layer, LayerId(3))));
+    steps.extend([Step::Menu("lm-show-only"), Step::Wait]);
+    steps.push(Step::Edit(|e| assert_eq!(shown(&e.doc), [3, 4])));
+    steps.extend([Step::Wait, Step::Wait]);
+    let out = drive(editor_over(d), roomy(steps));
+    common::save(&out.frame, "layers-selected");
+    let out = drive(
+        editor_over(out.doc),
+        vec![Step::Menu("lm-show-all"), Step::Wait],
+    );
+    assert_eq!(shown(&out.doc), [1, 2, 3, 4]);
+    assert_eq!(out.undo, ["Show all layers"]);
+}
+
+#[test]
+fn an_alt_click_inside_a_group_keeps_the_group_shown() {
+    let mut d = doc();
+    let g = d
+        .add_layer(NewLayer::Group, "Group", Placement::default())
+        .unwrap();
+    for id in [LayerId(1), LayerId(2)] {
+        d.move_layer(
+            id,
+            Placement {
+                parent: Some(g),
+                index: None,
+            },
+        )
+        .unwrap();
+    }
+    d.update_layer(g, |p| p.visible = false).unwrap();
+    // Rows top first: Group 4 with 2 and 1 in it, then 3.
+    let mut steps = vec![Step::Alt(true)];
+    steps.extend(click("layer-eye-1"));
+    steps.extend([Step::Wait, Step::Alt(false), Step::Wait]);
+    let out = drive(editor_over(d), roomy(steps));
+    common::save(&out.frame, "layers-solo-group");
+    assert_eq!(shown(&out.doc), [4, 1], "the group and layer 1");
+    let px = pixl_core::composite_frame(&out.doc, 0, &pixl_core::CompositeOptions::EXPORT);
+    assert_eq!(px[16 + 1], Rgba::opaque(255, 0, 0), "layer 1 shows");
+    assert_eq!(out.undo, ["Show only"]);
+}
+
+#[test]
+fn a_drag_down_the_eyes_sets_each_like_the_first() {
+    let mut d = doc();
+    d.add_layer(NewLayer::Raster, "Layer 4", Placement::default())
+        .unwrap();
+    d.update_layer(LayerId(3), |p| p.visible = false).unwrap();
+    let out = drive(
+        editor_over(d),
+        roomy(vec![
+            Step::Move(At::Element("layer-eye-4")),
+            Step::Down(At::Element("layer-eye-4"), PointerButton::Primary),
+            Step::Move(At::Element("layer-eye-3")),
+            Step::Move(At::Element("layer-eye-2")),
+            Step::Up(At::Element("layer-eye-2"), PointerButton::Primary),
+            Step::Wait,
+            Step::Wait,
+        ]),
+    );
+    common::save(&out.frame, "layers-eye-drag");
+    // Layer 4's eye went off, so 3 stays off and 2 goes off.
+    assert_eq!(shown(&out.doc), [1]);
+    assert_eq!(out.undo, ["Visibility"], "one undo step");
+    let order: Vec<u32> = out.doc.layers().iter().map(|l| l.id.0).collect();
+    assert_eq!(order, [1, 2, 3, 4], "no layer moved");
+}

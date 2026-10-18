@@ -8,6 +8,10 @@
   <menuitem id="lm-merge" label="Merge down"/>
   <menuitem id="lm-flatten" label="Flatten"/>
   <separator/>
+  <menuitem id="lm-show-only" label="Show only selected"/>
+  <menuitem id="lm-show-all" label="Show all layers"/>
+  <menuitem id="lm-hide-selected" label="Hide selected"/>
+  <separator/>
   <menuitem id="lm-mask-add" label="Add mask"/>
   <menuitem id="lm-mask-edit" label="Edit mask or pixels"/>
   <menuitem id="lm-mask-toggle" label="Mask on or off"/>
