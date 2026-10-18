@@ -22,6 +22,7 @@ pub mod presets;
 pub mod preview;
 pub mod progressive;
 pub mod recents;
+pub mod refview;
 pub mod rig;
 pub mod select;
 pub mod settings;

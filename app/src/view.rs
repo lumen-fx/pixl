@@ -16,7 +16,9 @@
 //! which the view finds by comparing tile pointers with the copy it last
 //! showed (tiles are copy-on-write, so an untouched tile keeps its pointer).
 //! Large rewrites run on worker threads and appear tile by tile
-//! ([`crate::progressive`]).
+//! ([`crate::progressive`]). Reference layers are not part of the
+//! document's pixels: each draws its own full-resolution image, smoothly,
+//! at its place in the layer stack ([`crate::refview`]).
 
 use std::collections::BTreeSet;
 use std::collections::hash_map::DefaultHasher;
@@ -30,12 +32,13 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, CompositeOperation, Context2d, PixelBuffer};
 use pixl_core::{
-    Background, BlendMode, CompositeOptions, Document, LayerId, LayerKind, OnionSkin, Palette,
-    Point, Raster, Rect, Rgba, Selection, TILE_SIZE,
+    Background, BlendMode, CompositeOptions, Document, ImageId, LayerId, LayerKind, OnionSkin,
+    Palette, Point, Raster, Rect, ReferencePlace, Rgba, Selection, TILE_SIZE,
 };
 
 use crate::editor::{Editor, Touched};
 use crate::progressive::{self, Pool};
+use crate::refview::References;
 use crate::settings::{CanvasSettings, Look, PerformanceSettings, Settings};
 
 /// The zoom levels the wheel and the zoom keys step through, as scale
@@ -511,6 +514,8 @@ pub enum ItemSource {
     /// The onion skin: the ghosts of the frames around the current one,
     /// composited by pixl-core, under or over the layers.
     Ghosts,
+    /// A reference layer's image, at its own resolution and place.
+    Reference(LayerId),
 }
 
 /// One buffer the art canvas draws, and how.
@@ -520,6 +525,8 @@ pub struct PlanItem {
     pub op: CompositeOperation,
     pub alpha: f64,
     pub visible: bool,
+    /// A reference's image and where it sits.
+    pub reference: Option<(ImageId, ReferencePlace)>,
 }
 
 /// The canvas operation that composites like pixl-core's blend mode, where
@@ -557,8 +564,8 @@ enum Class {
     Backdrop,
 }
 
-fn classify(roots: &[pixl_core::Layer], i: usize) -> Class {
-    let layer = &roots[i];
+fn classify(roots: &[&pixl_core::Layer], i: usize) -> Class {
+    let layer = roots[i];
     let clips_above = roots.get(i + 1).is_some_and(|l| l.props.clip);
     if layer.props.clip || clips_above {
         return Class::Backdrop;
@@ -574,7 +581,8 @@ fn classify(roots: &[pixl_core::Layer], i: usize) -> Class {
                 Class::Direct(op)
             }
         }
-        // A skeleton paints nothing; its bones are an overlay.
+        // A skeleton paints nothing; its bones are an overlay. References
+        // are planned on their own.
         LayerKind::Reference { .. } | LayerKind::Skeleton { .. } => Class::Direct(op),
         LayerKind::Group { .. } => Class::Isolated(op),
     }
@@ -615,6 +623,7 @@ pub fn plan_with_onion(
             op: CompositeOperation::SourceOver,
             alpha: 1.0,
             visible: true,
+            reference: None,
         };
         if onion.above {
             items.push(ghosts);
@@ -626,8 +635,77 @@ pub fn plan_with_onion(
 }
 
 /// [`plan`] with a buffer pixel budget of `budget`.
+///
+/// References are drawn by the canvas at their place in the stack and take
+/// no part in the art's composite: they never cause flattening, never count
+/// against the budget, and a reference among the layers a buffer flattens
+/// shows above that buffer. One inside a group shows above the group.
 pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
-    let roots = doc.layers();
+    let all = doc.layers();
+    // The art: the root layers but references, with their index in the
+    // root list.
+    let (index, roots): (Vec<usize>, Vec<&pixl_core::Layer>) = all
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| !matches!(l.kind, LayerKind::Reference { .. }))
+        .unzip();
+    let art = plan_art(doc, &roots, frame, budget);
+    // Each item's place in the stack: twice the lowest root index it covers.
+    let mut keyed: Vec<(usize, PlanItem)> = art
+        .into_iter()
+        .map(|(first, item)| (2 * index[first], item))
+        .collect();
+    for (i, root) in all.iter().enumerate() {
+        // A root reference sits between the roots around it; one inside a
+        // group just above the group.
+        let mut refs = Vec::new();
+        nested_references(root, 1.0, true, &mut refs);
+        let key = if matches!(root.kind, LayerKind::Reference { .. }) {
+            2 * i
+        } else {
+            2 * i + 1
+        };
+        for item in refs {
+            let at = keyed
+                .iter()
+                .position(|(k, _)| *k > key)
+                .unwrap_or(keyed.len());
+            keyed.insert(at, (key, item));
+        }
+    }
+    keyed.into_iter().map(|(_, item)| item).collect()
+}
+
+/// The reference layers in `layer` (itself included), with the opacity and
+/// visibility of the groups holding them.
+fn nested_references(layer: &pixl_core::Layer, alpha: f64, visible: bool, out: &mut Vec<PlanItem>) {
+    let alpha = alpha * f64::from(layer.props.opacity) / 255.0;
+    let visible = visible && layer.props.visible;
+    match &layer.kind {
+        LayerKind::Reference { image, place } => out.push(PlanItem {
+            source: ItemSource::Reference(layer.id),
+            op: canvas_blend(layer.props.blend).unwrap_or(CompositeOperation::SourceOver),
+            alpha,
+            visible,
+            reference: Some((*image, *place)),
+        }),
+        LayerKind::Group { children } => {
+            for c in children {
+                nested_references(c, alpha, visible, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The buffers of the art layers `roots`, each with the index in `roots`
+/// of the lowest layer it covers.
+fn plan_art(
+    doc: &Document,
+    roots: &[&pixl_core::Layer],
+    frame: usize,
+    budget: u64,
+) -> Vec<(usize, PlanItem)> {
     let classes: Vec<Class> = (0..roots.len()).map(|i| classify(roots, i)).collect();
     let mut split = classes.iter().rposition(|c| matches!(c, Class::Backdrop));
     // Flatten from the bottom until the buffers fit the budget.
@@ -650,23 +728,23 @@ pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
     let mut items = Vec::new();
     let first = match split {
         Some(s) => {
-            items.push(PlanItem {
-                source: ItemSource::Flat(roots[..=s].iter().map(|l| l.id).collect()),
-                op: CompositeOperation::SourceOver,
-                alpha: 1.0,
-                visible: true,
-            });
+            items.push((
+                0,
+                PlanItem {
+                    source: ItemSource::Flat(roots[..=s].iter().map(|l| l.id).collect()),
+                    op: CompositeOperation::SourceOver,
+                    alpha: 1.0,
+                    visible: true,
+                    reference: None,
+                },
+            ));
             s + 1
         }
         None => 0,
     };
-    for (layer, class) in roots.iter().zip(&classes).skip(first) {
-        // A skeleton paints nothing; its bones are drawn by the rig. A
-        // reference is not part of the document's pixels.
-        if matches!(
-            layer.kind,
-            LayerKind::Skeleton { .. } | LayerKind::Reference { .. }
-        ) {
+    for (i, (layer, class)) in roots.iter().zip(&classes).enumerate().skip(first) {
+        // A skeleton paints nothing; its bones are drawn by the rig.
+        if matches!(layer.kind, LayerKind::Skeleton { .. }) {
             continue;
         }
         let opacity = f64::from(layer.props.opacity) / 255.0;
@@ -685,6 +763,7 @@ pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
                     op: *op,
                     alpha: opacity * cel,
                     visible: layer.props.visible,
+                    reference: None,
                 }
             }
             Class::Isolated(op) => PlanItem {
@@ -692,10 +771,11 @@ pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
                 op: *op,
                 alpha: opacity,
                 visible: layer.props.visible,
+                reference: None,
             },
             Class::Backdrop => unreachable!("backdrop layers are all at or below the split"),
         };
-        items.push(item);
+        items.push((i, item));
     }
     items
 }
@@ -729,7 +809,7 @@ pub fn prepared(doc: &Document, source: &ItemSource, onion: bool) -> (Document, 
             }
             opts.background = !onion;
         }
-        ItemSource::Ghosts => {}
+        ItemSource::Ghosts | ItemSource::Reference(_) => {}
     }
     (doc, opts)
 }
@@ -759,8 +839,11 @@ fn layer_images(
             let mask = mask.and_then(|m| doc.image(m.image).cloned());
             (cel, mask)
         }
-        LayerKind::Reference { image, .. } => (doc.image(*image).cloned(), None),
-        LayerKind::Group { .. } | LayerKind::Skeleton { .. } => (None, None),
+        // A reference's pixels are not the document's; it has its own
+        // buffers.
+        LayerKind::Reference { .. } | LayerKind::Group { .. } | LayerKind::Skeleton { .. } => {
+            (None, None)
+        }
     }
 }
 
@@ -850,6 +933,7 @@ fn shown_for(
             .iter()
             .filter(|l| ids.contains(&l.id))
             .collect(),
+        ItemSource::Reference(_) => return Shown::default(),
     };
     let mut layers = Vec::new();
     for r in roots {
@@ -1000,6 +1084,10 @@ pub struct Layers {
     pub tiles_written: u64,
     /// The plan must be made again: the buffer budget changed.
     replan: bool,
+    /// The references the plan draws, each after this many of `items`.
+    references: Vec<(usize, PlanItem)>,
+    /// The references' own buffers.
+    pub reference_images: References,
 }
 
 impl Default for Layers {
@@ -1023,6 +1111,8 @@ impl Default for Layers {
             seen_onion: None,
             tiles_written: 0,
             replan: false,
+            references: Vec::new(),
+            reference_images: References::default(),
         }
     }
 }
@@ -1063,17 +1153,30 @@ impl Layers {
 
     /// The buffers the art canvas draws, and their memory in bytes.
     pub fn buffer_stats(&self) -> (usize, u64) {
-        let bytes = self
+        let bytes: u64 = self
             .items
             .iter()
             .map(|i| u64::from(i.buffer.width()) * u64::from(i.buffer.height()) * 4)
             .sum();
-        (self.items.len(), bytes)
+        let (refs, ref_bytes) = self.reference_images.buffer_stats();
+        (self.items.len() + refs, bytes + ref_bytes)
     }
 
-    /// The plan the buffers currently follow.
+    /// The plan the canvas currently draws, bottom first.
     pub fn current_plan(&self) -> Vec<PlanItem> {
-        self.items.iter().map(|i| i.plan.clone()).collect()
+        let mut out = Vec::new();
+        for i in 0..=self.items.len() {
+            out.extend(
+                self.references
+                    .iter()
+                    .filter(|(after, _)| *after == i)
+                    .map(|(_, p)| p.clone()),
+            );
+            if let Some(item) = self.items.get(i) {
+                out.push(item.plan.clone());
+            }
+        }
+        out
     }
 
     /// The buffer an item of the plan draws.
@@ -1084,7 +1187,8 @@ impl Layers {
             .map(|i| &i.buffer)
     }
 
-    /// Tiles queued for the workers, or rendered but not yet written.
+    /// Tiles queued for the workers, or rendered but not yet written, and
+    /// reference levels still being made.
     pub fn pending(&self) -> usize {
         self.pool.queued()
             + self
@@ -1092,6 +1196,7 @@ impl Layers {
                 .iter()
                 .map(|r| r.tiles.saturating_sub(r.done))
                 .sum::<usize>()
+            + self.reference_images.pending()
     }
 
     /// Brings the buffers up to date with the document. `focus` is the
@@ -1134,7 +1239,29 @@ impl Layers {
             return;
         }
         let onion = self.onion.clone();
-        let wanted = plan_with_onion(doc, frame, self.budget, onion.as_ref());
+        let mut wanted = plan_with_onion(doc, frame, self.budget, onion.as_ref());
+
+        // References draw from buffers of their own, between the others.
+        let mut references = Vec::new();
+        let mut art = 0;
+        wanted.retain(|p| {
+            if p.reference.is_some() {
+                references.push((art, p.clone()));
+                false
+            } else {
+                art += 1;
+                true
+            }
+        });
+        if references != self.references {
+            self.art_dirty = true;
+        }
+        let images: Vec<ImageId> = references
+            .iter()
+            .filter_map(|(_, p)| p.reference.map(|(img, _)| img))
+            .collect();
+        self.reference_images.sync(doc, &images);
+        self.references = references;
 
         // Keep the buffers whose source is still wanted, in the new order.
         let mut old: Vec<Option<Item>> = self.items.drain(..).map(Some).collect();
@@ -1314,6 +1441,7 @@ impl Layers {
                 frame,
                 onion: self.onion.clone().unwrap_or_default(),
             },
+            ItemSource::Reference(_) => unreachable!("references have buffers of their own"),
             other => {
                 let (prepared, opts) = prepared(doc, other, self.onion.is_some());
                 progressive::Source::Composite {
@@ -1398,6 +1526,14 @@ impl Layers {
                 r.arrivals.push(r.started.elapsed());
             }
         }
+        // Reference levels come in as they are made, within what is left of
+        // the budget.
+        if self.reference_images.pump(deadline) {
+            wrote = true;
+        }
+        if let Some(e) = self.reference_images.error.take() {
+            self.error = Some(e);
+        }
         if wrote {
             self.art_dirty = true;
         }
@@ -1419,20 +1555,29 @@ impl Layers {
         for &j in ys {
             for &i in xs {
                 if i == 0.0 && j == 0.0 {
-                    self.draw_document(ctx, doc, view, true);
+                    self.draw_document(ctx, doc, view, true, true);
                 } else {
+                    // The copies repeat the art; references show once.
                     let mut copy = view.clone();
                     copy.origin = (view.origin.0 + i * w, view.origin.1 + j * h);
-                    self.draw_document(ctx, doc, &copy, false);
+                    self.draw_document(ctx, doc, &copy, false, false);
                 }
             }
         }
     }
 
     /// Draws the buffers onto `ctx` where `view` places the document, with
-    /// the onion skin or without it. The art canvas and the preview both
-    /// draw this way, so the preview costs no compositing of its own.
-    pub fn draw_document(&self, ctx: &Context2d, doc: &Document, view: &View, ghosts: bool) {
+    /// the onion skin or without it, with the references or without them.
+    /// The art canvas and the preview both draw this way, so the preview
+    /// costs no compositing of its own.
+    pub fn draw_document(
+        &self,
+        ctx: &Context2d,
+        doc: &Document,
+        view: &View,
+        ghosts: bool,
+        references: bool,
+    ) {
         ctx.set_image_smoothing(false);
         let (x, y, w, h) = view.doc_rect(doc.width(), doc.height());
         // The flattened buffer holds the background, unless the onion skin
@@ -1447,13 +1592,30 @@ impl Layers {
             ctx.set_fill_color(canvas_color(c));
             ctx.fill_rect(x, y, w, h);
         }
-        for item in self.items.iter().filter(|i| {
-            i.plan.visible && i.plan.alpha > 0.0 && (ghosts || i.plan.source != ItemSource::Ghosts)
-        }) {
-            ctx.set_global_composite_operation(item.plan.op);
-            ctx.set_global_alpha(item.plan.alpha);
-            ctx.draw_buffer_scaled(&item.buffer, x, y, w, h);
+        let draw_references = |after: usize| {
+            if !references {
+                return;
+            }
+            for (_, p) in self.references.iter().filter(|(a, _)| *a == after) {
+                if let (true, Some((image, place))) = (p.visible && p.alpha > 0.0, p.reference) {
+                    self.reference_images
+                        .draw(ctx, view, image, place, p.alpha, p.op);
+                }
+            }
+            ctx.set_image_smoothing(false);
+        };
+        for (i, item) in self.items.iter().enumerate() {
+            draw_references(i);
+            let shown = item.plan.visible
+                && item.plan.alpha > 0.0
+                && (ghosts || item.plan.source != ItemSource::Ghosts);
+            if shown {
+                ctx.set_global_composite_operation(item.plan.op);
+                ctx.set_global_alpha(item.plan.alpha);
+                ctx.draw_buffer_scaled(&item.buffer, x, y, w, h);
+            }
         }
+        draw_references(self.items.len());
         ctx.set_global_composite_operation(CompositeOperation::SourceOver);
         ctx.set_global_alpha(1.0);
     }
@@ -1944,5 +2106,109 @@ mod tests {
         .unwrap();
         let p = plan(&doc, 0);
         assert_eq!(p[1].source, ItemSource::Isolated(g));
+    }
+
+    fn reference(doc: &mut Document, name: &str, at: Placement) -> LayerId {
+        doc.add_layer(
+            NewLayer::Reference {
+                image: pixl_core::TiledImage::new(400, 300, Rgba::WHITE),
+                place: ReferencePlace::fitted((400, 300), (doc.width(), doc.height())),
+            },
+            name,
+            at,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_reference_draws_between_the_layers_around_it() {
+        let mut doc = Document::new(8, 8, ColorMode::Rgba).unwrap();
+        let base = doc.layers()[0].id;
+        let top = doc
+            .add_layer(NewLayer::Raster, "top", Placement::default())
+            .unwrap();
+        let r = reference(
+            &mut doc,
+            "ref",
+            Placement {
+                parent: None,
+                index: Some(1),
+            },
+        );
+        doc.update_layer(r, |p| p.opacity = 128).unwrap();
+        let p = plan(&doc, 0);
+        let sources: Vec<_> = p.iter().map(|i| i.source.clone()).collect();
+        assert_eq!(
+            sources,
+            vec![
+                ItemSource::Layer(base),
+                ItemSource::Reference(r),
+                ItemSource::Layer(top)
+            ]
+        );
+        assert!((p[1].alpha - 128.0 / 255.0).abs() < 1e-9);
+        assert!(p[1].reference.is_some());
+    }
+
+    #[test]
+    fn a_reference_in_a_group_draws_above_it_with_its_opacity() {
+        let mut doc = Document::new(8, 8, ColorMode::Rgba).unwrap();
+        let g = doc
+            .add_layer(NewLayer::Group, "g", Placement::default())
+            .unwrap();
+        let inside = Placement {
+            parent: Some(g),
+            index: None,
+        };
+        doc.add_layer(NewLayer::Raster, "in", inside).unwrap();
+        let r = reference(&mut doc, "ref", inside);
+        doc.update_layer(g, |p| p.opacity = 51).unwrap();
+        let p = plan(&doc, 0);
+        assert_eq!(p[1].source, ItemSource::Isolated(g));
+        assert_eq!(p[2].source, ItemSource::Reference(r));
+        assert!((p[2].alpha - 0.2).abs() < 1e-9);
+        doc.update_layer(g, |p| p.visible = false).unwrap();
+        assert!(!plan(&doc, 0)[2].visible, "a hidden group hides it");
+    }
+
+    #[test]
+    fn references_never_flatten_and_cost_no_budget() {
+        let mut doc = Document::new(64, 64, ColorMode::Rgba).unwrap();
+        let base = doc.layers()[0].id;
+        let mid = doc
+            .add_layer(NewLayer::Raster, "mid", Placement::default())
+            .unwrap();
+        let refs: Vec<LayerId> = (0..3)
+            .map(|i| reference(&mut doc, &format!("ref {i}"), Placement::default()))
+            .collect();
+        // Room for the two art layers' buffers only.
+        let p = plan_within(&doc, 0, 2 * 64 * 64);
+        assert_eq!(p.len(), 5);
+        assert!(!p.iter().any(|i| matches!(i.source, ItemSource::Flat(_))));
+        // A layer the canvas cannot blend flattens what is below it; a
+        // reference among those layers draws above the flattened buffer.
+        let sub = doc
+            .add_layer(NewLayer::Raster, "sub", Placement::default())
+            .unwrap();
+        doc.update_layer(sub, |p| p.blend = BlendMode::Subtract)
+            .unwrap();
+        doc.move_layer(
+            refs[0],
+            Placement {
+                parent: None,
+                index: Some(1),
+            },
+        )
+        .unwrap();
+        let sources: Vec<_> = plan(&doc, 0).into_iter().map(|i| i.source).collect();
+        assert_eq!(
+            sources,
+            vec![
+                ItemSource::Flat(vec![base, mid, sub]),
+                ItemSource::Reference(refs[0]),
+                ItemSource::Reference(refs[1]),
+                ItemSource::Reference(refs[2]),
+            ]
+        );
     }
 }

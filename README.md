@@ -170,9 +170,14 @@ row opens the layer's properties. A mask hides the layer where it is dark:
 Add mask starts painting on the mask instead of the pixels, the mask button
 in the Layers panel's row or Layer > Edit mask or pixels switches between the
 two, and the mask can be turned off, applied to the pixels or deleted. A
-clipped layer shows only where the layer below it does. A reference image (Layer > Reference image) is any
-image pixl opens, placed at the top left at half opacity to trace over; it
-is never exported. The Layer menu, also opened by a right-click on a row,
+clipped layer shows only where the layer below it does. A reference image
+(Layer > Reference image) is any image pixl opens, kept at its full
+resolution and drawn smoothly at screen resolution over the canvas, not on
+its pixel grid, so a high-resolution photo stays sharp at any zoom. It
+arrives at half opacity in the middle of the canvas, scaled down to fit when
+it is larger, and sits in the layer stack like any layer: above the art or
+below it. It is never painted on, never exported, and the eyedropper and the
+other tools read the art alone. The Layer menu, also opened by a right-click on a row,
 duplicates, merges down, flattens, clips, locks pixels, alpha or position,
 and opens the layer's properties: name, opacity, blend mode, color tag,
 clipping, locks and the mask.
@@ -458,7 +463,8 @@ cargo bench -p pixl --bench view -- gpu budget=2048 log=frames.csv
 The view bench opens a 4096x4096 document of 32 layers with no window and
 measures what a user waits for: the progressive redraw after opening it,
 the time from a stroke to the frame that shows it on the top layer and on
-the bottom one, the frame after a pan and after a zoom step, hiding a
+the bottom one, the frame after a pan and after a zoom step, the same with
+a 4000x3000 photo as a reference layer in the middle of the stack, hiding a
 layer, and exporting the frame as a PNG; and what a tick costs when nothing
 changes, the editor's systems alone and the whole tick. `side=N` and
 `layers=N` change the document, `budget=MiB` the layer buffer memory,
@@ -469,8 +475,9 @@ the load on the machine, so compare runs taken under the same load.
 
 `cargo bench -p pixl --bench view -- cpu gate` (or `gpu gate`) also checks
 the run against `app/benches/gate.json`: the editor's work on an idle tick,
-the whole idle tick, a stroke on the top and on the bottom layer, and a pan,
-each a median against a limit for the renderer. A number past its limit
+the whole idle tick, a stroke on the top and on the bottom layer, a pan, and
+a pan and a zoom step with the reference, each a median against a limit for
+the renderer. A number past its limit
 fails the run and names the editor's systems that cost the most where it was
 measured. The limits leave room above what a desktop measures, to catch
 regressions rather than to grade the machine. Run the gate locally before

@@ -1,6 +1,6 @@
 //! The canvas view, rendered with no window: the document's pixels on
 //! screen, every blend mode against pixl-core's own compositing, the grid,
-//! and zoom.
+//! zoom, and reference images drawn at screen resolution.
 
 pub mod common;
 
@@ -10,8 +10,8 @@ use lumenui::prelude::*;
 use pixl::view::{ItemSource, View, canvas_blend, plan};
 use pixl::{Editor, Settings, editor};
 use pixl_core::{
-    BlendMode, ColorMode, CompositeOptions, Document, LayerId, NewLayer, Placement, Rect, Rgba,
-    composite,
+    BlendMode, ColorMode, CompositeOptions, Document, LayerId, NewLayer, Placement, Rect,
+    ReferencePlace, Rgba, TiledImage, composite,
 };
 
 /// Runs the editor on `backend` over `doc`, with `setup` run on the first
@@ -233,4 +233,139 @@ fn hiding_a_layer_redraws_without_it() {
     let (frame, view) = render("cpu", doc, 8, |_| {});
     assert_eq!(on_screen(&frame, &view, 2, 2), [0, 0, 255, 255]);
     let _ = Rect::EMPTY;
+}
+
+/// A 512x512 ramp: red climbs left to right, green top to bottom.
+fn ramp() -> TiledImage<Rgba> {
+    let mut img = TiledImage::new(512, 512, Rgba::TRANSPARENT);
+    for y in 0..512 {
+        for x in 0..512 {
+            img.set(x, y, Rgba::opaque((x / 2) as u8, (y / 2) as u8, 60));
+        }
+    }
+    img
+}
+
+/// A 32x32 document with one blue pixel at (20, 20) and the ramp as a
+/// reference covering the canvas, turned by `rotation`, under the art or
+/// over it.
+fn traced(rotation: f64, over: bool) -> Document {
+    let mut doc = Document::new(32, 32, ColorMode::Rgba).unwrap();
+    let art = doc.layers()[0].id;
+    paint(&mut doc, art, 20, 20, Rgba::opaque(0, 0, 255));
+    doc.add_layer(
+        NewLayer::Reference {
+            image: ramp(),
+            place: ReferencePlace {
+                center: (16.0, 16.0),
+                scale: (32.0 / 512.0, 32.0 / 512.0),
+                rotation,
+            },
+        },
+        "photo",
+        Placement {
+            parent: None,
+            index: Some(if over { 1 } else { 0 }),
+        },
+    )
+    .unwrap();
+    doc
+}
+
+/// The screen color at document position `(x, y)`, which need not be a
+/// pixel's middle.
+fn at_doc(frame: &Frame, view: &View, x: f64, y: f64) -> [u8; 4] {
+    let sx = f64::from(view.stage.0.x) + view.origin.0 + x * view.zoom;
+    let sy = f64::from(view.stage.0.y) + view.origin.1 + y * view.zoom;
+    frame.pixel(sx as u32, sy as u32).expect("inside the frame")
+}
+
+fn check_reference(backend: &str) {
+    let (frame, view) = render(backend, traced(0.0, false), 30, |_| {});
+    common::save(&frame, &format!("view-reference-{backend}"));
+    assert!(view.zoom >= 16.0);
+    // The art draws over a reference below it.
+    assert_eq!(on_screen(&frame, &view, 20, 20), [0, 0, 255, 255]);
+    // The ramp is where its place puts it: half way across, red is half
+    // way up; a quarter down, green a quarter.
+    let mid = at_doc(&frame, &view, 16.0, 8.0);
+    assert!(mid[0].abs_diff(128) <= 4, "red half way: {mid:?}");
+    assert!(mid[1].abs_diff(64) <= 4, "green a quarter: {mid:?}");
+    assert_eq!(mid[3], 255);
+    // Smooth at screen resolution: inside one document pixel the ramp
+    // still climbs, where a reference on the document's grid would show one
+    // color.
+    let left = at_doc(&frame, &view, 8.1, 8.5);
+    let right = at_doc(&frame, &view, 8.9, 8.5);
+    assert!(
+        right[0] >= left[0] + 4,
+        "the ramp climbs inside a pixel: {left:?} to {right:?}"
+    );
+
+    // Turned a quarter clockwise and over the art: red now climbs down
+    // the screen and the reference hides the blue pixel.
+    let (frame, view) = render(backend, traced(90.0, true), 30, |_| {});
+    common::save(&frame, &format!("view-reference-turned-{backend}"));
+    let (top, bottom) = (
+        at_doc(&frame, &view, 16.0, 4.0),
+        at_doc(&frame, &view, 16.0, 28.0),
+    );
+    assert!(top[0] < 50 && bottom[0] > 200, "{top:?} {bottom:?}");
+    assert_ne!(on_screen(&frame, &view, 20, 20), [0, 0, 255, 255]);
+}
+
+#[test]
+fn a_reference_draws_smooth_where_it_is_placed_on_the_cpu_renderer() {
+    check_reference("cpu");
+}
+
+#[test]
+fn a_reference_draws_smooth_where_it_is_placed_on_the_gpu_renderer() {
+    check_reference("gpu");
+}
+
+/// One-pixel black and white stripes, 2048 wide, shown at a tenth of a
+/// screen pixel each: a smooth view shows even gray where sampling the
+/// image at screen pixels would show bands of black and white.
+fn check_shrunk(backend: &str) {
+    let mut img = TiledImage::new(2048, 256, Rgba::TRANSPARENT);
+    for y in 0..256 {
+        for x in 0..2048 {
+            let v = if x % 2 == 0 { 0 } else { 255 };
+            img.set(x, y, Rgba::opaque(v, v, v));
+        }
+    }
+    let mut doc = Document::new(32, 32, ColorMode::Rgba).unwrap();
+    doc.add_layer(
+        NewLayer::Reference {
+            image: img,
+            place: ReferencePlace {
+                center: (16.0, 16.0),
+                scale: (1.0 / 256.0, 1.0 / 256.0),
+                rotation: 0.0,
+            },
+        },
+        "stripes",
+        Placement::default(),
+    )
+    .unwrap();
+    let (frame, view) = render(backend, doc, 30, |_| {});
+    common::save(&frame, &format!("view-reference-shrunk-{backend}"));
+    assert!(view.zoom * (1.0 / 256.0) < 0.2, "shrunk past a fifth");
+    // The stripes cover document x 12..20, y 15.5..16.5.
+    for i in 0..40 {
+        let x = 12.2 + f64::from(i) * 0.19;
+        let c = at_doc(&frame, &view, x, 16.0);
+        assert!(c[0].abs_diff(128) <= 24, "gray at {x}: {c:?}");
+    }
+}
+
+#[test]
+fn a_shrunk_reference_shows_its_average_on_the_cpu_renderer() {
+    check_shrunk("cpu");
+}
+
+#[test]
+fn a_shrunk_reference_shows_its_average_on_the_gpu_renderer() {
+    check_shrunk("gpu");
 }

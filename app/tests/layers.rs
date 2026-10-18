@@ -288,8 +288,21 @@ fn a_reference_image_shows_but_does_not_export() {
     let reference = out.doc.layers().last().unwrap();
     assert!(matches!(reference.kind, LayerKind::Reference { .. }));
     assert_eq!(reference.props.opacity, 128);
+    // The 4x4 image keeps its size, in the middle of the 16x16 canvas.
+    let (img, place) = out.doc.reference(reference.id).unwrap();
+    assert_eq!((img.width(), img.height()), (4, 4));
+    assert_eq!(place, pixl_core::ReferencePlace::fitted((4, 4), (16, 16)));
+    // Its blue pixel shows on screen, half opaque over the checkerboard.
+    let view = out.views.last().unwrap();
+    let sx = view.stage.0.x as f64 + view.origin.0 + 8.5 * view.zoom;
+    let sy = view.stage.0.y as f64 + view.origin.1 + 8.5 * view.zoom;
+    let [r, g, b, _] = out.frame.pixel(sx as u32, sy as u32).unwrap();
+    assert!(b > r + 40 && b > g + 40, "blue shows: {r} {g} {b}");
     let exported = pixl_core::composite_frame(&out.doc, 0, &pixl_core::CompositeOptions::EXPORT);
-    assert_eq!(exported[2 * 16 + 2].a, 0, "references stay out of exports");
+    assert!(
+        exported.iter().all(|c| c.b == 0),
+        "references stay out of exports"
+    );
 }
 
 #[test]

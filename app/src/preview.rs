@@ -119,7 +119,7 @@ pub fn draw_preview(
         ));
         ctx.fill_rect(x, y, w, h);
     }
-    layers.draw_document(&ctx, doc, &view, false);
+    layers.draw_document(&ctx, doc, &view, false, true);
     pane.drawn = Some(now);
     crate::repaint_soon(&wake);
 }

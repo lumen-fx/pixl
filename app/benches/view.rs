@@ -3,8 +3,9 @@
 //! after hiding a layer, stroke-to-screen latency on the top layer and on
 //! the bottom layer (a buffer of its own, or inside the CPU-flattened buffer
 //! when the layers do not fit the buffer budget), the frame after a pan and
-//! after a zoom step, and exporting the frame as a PNG and as a packed,
-//! trimmed sprite sheet.
+//! after a zoom step, the same with a 4000x3000 photo as a reference layer
+//! in the middle of the stack, and exporting the frame as a PNG and as a
+//! packed, trimmed sprite sheet.
 //!
 //! `cargo bench -p pixl --bench view -- cpu` or `-- gpu` picks the renderer;
 //! `side=N` and `layers=N` change the document from 4096 and 32, and
@@ -35,7 +36,9 @@ use lumenui::prelude::*;
 use pixl::Editor;
 use pixl::perf::SystemTimes;
 use pixl::view::{Layers, View};
-use pixl_core::{BlendMode, ColorMode, Document, NewLayer, Placement, Rect, Rgba};
+use pixl_core::{
+    BlendMode, ColorMode, Document, NewLayer, Placement, Rect, ReferencePlace, Rgba, TiledImage,
+};
 
 const STROKES: usize = 40;
 
@@ -90,6 +93,28 @@ fn document(side: u32, layers: usize) -> Document {
     doc
 }
 
+/// A 4000x3000 stand-in for a photo: smooth gradients under fine noise, so
+/// no two tiles are alike.
+fn photo() -> TiledImage<Rgba> {
+    let (w, h) = (4000u32, 3000u32);
+    let mut seed = 0x9e37_79b9_u32;
+    let mut px = Vec::with_capacity((w * h) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            let n = (seed & 31) as u8;
+            px.push(Rgba::opaque(
+                ((x * 200 / w) as u8).wrapping_add(n),
+                ((y * 200 / h) as u8).wrapping_add(n),
+                (((x + y) * 100 / (w + h)) as u8).wrapping_add(n),
+            ));
+        }
+    }
+    TiledImage::from_pixels(w, h, Rgba::TRANSPARENT, &px)
+}
+
 fn app_dir(backend: &str) -> PathBuf {
     let app = Path::new(env!("CARGO_MANIFEST_DIR"));
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("bench-{backend}"));
@@ -116,11 +141,28 @@ fn app_dir(backend: &str) -> PathBuf {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Phase {
     Opening,
-    Idle { n: usize },
-    Stroke { layer_top: bool, n: usize },
+    Idle {
+        n: usize,
+    },
+    Stroke {
+        layer_top: bool,
+        n: usize,
+    },
     Hiding,
-    Pan { n: usize },
-    Zoom { n: usize },
+    Pan {
+        n: usize,
+    },
+    Zoom {
+        n: usize,
+    },
+    /// A reference layer was added; waiting for its levels.
+    Reference,
+    RefPan {
+        n: usize,
+    },
+    RefZoom {
+        n: usize,
+    },
     Export,
     Done,
 }
@@ -137,6 +179,9 @@ impl Phase {
             Phase::Hiding => "hide a layer",
             Phase::Pan { .. } => "pan",
             Phase::Zoom { .. } => "zoom step",
+            Phase::Reference => "add a reference",
+            Phase::RefPan { .. } => "pan, with a reference",
+            Phase::RefZoom { .. } => "zoom step, with a reference",
             Phase::Export | Phase::Done => "export",
         }
     }
@@ -161,6 +206,12 @@ struct Results {
     bottom: Vec<Duration>,
     pan: Vec<Duration>,
     zoom: Vec<Duration>,
+    /// Adding the reference: until its buffer is in, and the longest tick
+    /// meanwhile.
+    reference: Option<(Duration, Duration)>,
+    reference_started: Option<Instant>,
+    ref_pan: Vec<Duration>,
+    ref_zoom: Vec<Duration>,
     export: Option<(Duration, usize)>,
     sheet: Option<(Duration, usize)>,
     hide_started: Option<Instant>,
@@ -238,6 +289,10 @@ fn main() {
     let bottom = doc.layers()[0].id;
     let top = doc.layers()[layers - 1].id;
     let middle = doc.layers()[layers / 2].id;
+    let t = Instant::now();
+    let mut reference = Some(photo());
+    let reference_index = layers / 2;
+    eprintln!("built the reference in {:?}", t.elapsed());
 
     let capture = SurfaceCapture::default();
     let stop = Arc::new(AtomicBool::new(false));
@@ -270,6 +325,7 @@ fn main() {
             let mut results = out.lock().unwrap();
             // The last tick's systems count toward the phase it ran in.
             let now = Instant::now();
+            let last_tick = last.map_or(now, |(_, at)| at);
             if let Some((was, at)) = *last {
                 let bucket = results.systems.entry(was.name()).or_default();
                 for (name, t) in &times.last {
@@ -402,7 +458,28 @@ fn main() {
                         results.zoom.push(lap);
                     }
                     if n == STROKES {
-                        *p = Phase::Export;
+                        // A photo over the middle of the stack, turned a
+                        // little and half transparent, covering the canvas.
+                        let image = reference.take().expect("added once");
+                        let k = f64::from(side) / 4000.0;
+                        let _ = editor.doc.add_layer(
+                            NewLayer::Reference {
+                                image,
+                                place: ReferencePlace {
+                                    center: (f64::from(side) / 2.0, f64::from(side) / 2.0),
+                                    scale: (k, k),
+                                    rotation: 7.0,
+                                },
+                            },
+                            "photo",
+                            Placement {
+                                parent: None,
+                                index: Some(reference_index),
+                            },
+                        );
+                        editor.touch();
+                        results.reference_started = Some(Instant::now());
+                        *p = Phase::Reference;
                         return;
                     }
                     // In two steps and out two, around the middle.
@@ -413,6 +490,56 @@ fn main() {
                     *watch.started.lock().unwrap() = Some(Instant::now());
                     cap.request();
                     *p = Phase::Zoom { n: n + 1 };
+                }
+                Phase::Reference => {
+                    let since = results.reference_started.expect("set when added");
+                    if let Some((_, longest)) = &mut results.reference {
+                        *longest = (*longest).max(now - last_tick);
+                    } else {
+                        results.reference = Some((Duration::ZERO, Duration::ZERO));
+                    }
+                    let (shown, _) = layers.reference_images.buffer_stats();
+                    if shown > 0 && layers.pending() == 0 {
+                        if let Some((until, _)) = &mut results.reference {
+                            *until = since.elapsed();
+                        }
+                        *p = Phase::RefPan { n: 0 };
+                    }
+                }
+                Phase::RefPan { n } => {
+                    if watch.started.lock().unwrap().is_some() {
+                        return;
+                    }
+                    if let Some(lap) = watch.lap.lock().unwrap().take() {
+                        results.ref_pan.push(lap);
+                    }
+                    if n == STROKES {
+                        *p = Phase::RefZoom { n: 0 };
+                        return;
+                    }
+                    view.pan(-7.0, 3.0);
+                    *watch.started.lock().unwrap() = Some(Instant::now());
+                    cap.request();
+                    *p = Phase::RefPan { n: n + 1 };
+                }
+                Phase::RefZoom { n } => {
+                    if watch.started.lock().unwrap().is_some() {
+                        return;
+                    }
+                    if let Some(lap) = watch.lap.lock().unwrap().take() {
+                        results.ref_zoom.push(lap);
+                    }
+                    if n == STROKES {
+                        *p = Phase::Export;
+                        return;
+                    }
+                    let inward = n % 4 < 2;
+                    let z = view.step(inward);
+                    let mid = view.middle();
+                    view.zoom_at(z, mid);
+                    *watch.started.lock().unwrap() = Some(Instant::now());
+                    cap.request();
+                    *p = Phase::RefZoom { n: n + 1 };
                 }
                 Phase::Export => {
                     let t = Instant::now();
@@ -474,6 +601,8 @@ fn main() {
         ("stroke, bottom layer", &r.bottom),
         ("pan", &r.pan),
         ("zoom step", &r.zoom),
+        ("pan, with a reference", &r.ref_pan),
+        ("zoom step, with a reference", &r.ref_zoom),
     ] {
         if !v.is_empty() {
             println!(
@@ -484,6 +613,13 @@ fn main() {
                 v.len()
             );
         }
+    }
+    if let Some((until, longest)) = r.reference {
+        println!(
+            "add a 4000x3000 reference: shows after {}, longest tick meanwhile {}",
+            ms(until),
+            ms(longest)
+        );
     }
     if let Some(frame) = r.hide_frame {
         println!("hide a layer: first frame {}", ms(frame));
@@ -542,12 +678,14 @@ fn main() {
 }
 
 /// The phase each gated number is measured in, for naming its systems.
-const GATED: [(&str, &str); 5] = [
+const GATED: [(&str, &str); 7] = [
     ("idle_systems_ms", "idle"),
     ("idle_tick_ms", "idle"),
     ("stroke_top_ms", "stroke, top layer"),
     ("stroke_bottom_ms", "stroke, bottom layer"),
     ("pan_ms", "pan"),
+    ("pan_reference_ms", "pan, with a reference"),
+    ("zoom_reference_ms", "zoom step, with a reference"),
 ];
 
 /// Checks the medians of the run against `benches/gate.json` for the
@@ -574,6 +712,8 @@ fn gate(r: &Results, backend: &str, side: u32, layers: usize, enforce: bool) -> 
         "stroke_top_ms" => median(&r.top),
         "stroke_bottom_ms" => median(&r.bottom),
         "pan_ms" => median(&r.pan),
+        "pan_reference_ms" => median(&r.ref_pan),
+        "zoom_reference_ms" => median(&r.ref_zoom),
         _ => None,
     };
     let mut passed = true;
