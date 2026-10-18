@@ -4,6 +4,8 @@
 //! never written. `tests/common/demo.rs` builds both with pixl-core, and
 //! `tests/demo.rs` checks the files here are what it builds.
 
+use std::sync::OnceLock;
+
 use pixl_core::Document;
 use pixl_core::native;
 
@@ -29,6 +31,22 @@ impl Shipped {
             Shipped::RigDemo => "rig demo",
             Shipped::RigLesson => "rig lesson",
         }
+    }
+
+    /// A short name for the files made from the document, such as its
+    /// thumbnail.
+    pub fn slug(self) -> &'static str {
+        match self {
+            Shipped::RigDemo => "rig-demo",
+            Shipped::RigLesson => "rig-lesson",
+        }
+    }
+
+    /// The document's width and height, read once.
+    pub fn size(self) -> (u32, u32) {
+        static SIZES: [OnceLock<(u32, u32)>; 2] = [OnceLock::new(), OnceLock::new()];
+        *SIZES[self as usize]
+            .get_or_init(|| self.load().map_or((0, 0), |d| (d.width(), d.height())))
     }
 
     /// A copy of the document.

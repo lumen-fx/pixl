@@ -386,3 +386,71 @@ fn every_preset_has_its_button() {
         pixl::files::PRESETS.len()
     );
 }
+
+#[test]
+fn the_rig_demo_is_listed_after_the_recent_documents() {
+    let (_, data) = seeded("demo-listed");
+    let recents = Recents::load(&data);
+    let now = std::time::SystemTime::now();
+    let all = pixl::home::recents_markup(&recents, "", now);
+    let demo = all
+        .find("<row id=\"home-rig-demo\"")
+        .expect("the demo is listed");
+    assert_eq!(all.matches("<row id=\"home-rig-demo\"").count(), 1);
+    let last_recent = all.rfind("<row id=\"recent-").unwrap();
+    assert!(demo > last_recent, "the demo comes after the recents");
+    assert!(all[demo..].contains("Rig demo") && all[demo..].contains("48 x 48 px"));
+    // The search finds it by name like any listed document, and leaves it
+    // out when it searches for another.
+    assert!(pixl::home::recents_markup(&recents, "RIG", now).contains("home-rig-demo"));
+    assert!(!pixl::home::recents_markup(&recents, "knight", now).contains("home-rig-demo"));
+    let none = pixl::home::recents_markup(&recents, "zzz", now);
+    assert!(none.contains("No recent document matches") && !none.contains("home-rig-demo"));
+    // With nothing opened yet it is the one entry, under the line saying so.
+    let empty = pixl::home::recents_markup(&Recents::in_memory(), "", now);
+    assert!(empty.contains("No recent documents yet"));
+    assert!(empty.contains("<row id=\"home-rig-demo\""));
+}
+
+#[test]
+fn the_rig_demo_thumbnail_is_drawn_once_into_the_data_folder() {
+    let data = scratch("demo-thumb").join("data");
+    let stale = data.join("thumbs").join("rig-demo-0000000000000000.png");
+    std::fs::create_dir_all(stale.parent().unwrap()).unwrap();
+    std::fs::write(&stale, b"old").unwrap();
+    let mut recents = Recents::load(&data);
+    assert_eq!(recents.shipped_thumb(pixl::shipped::Shipped::RigDemo), None);
+    recents.draw_shipped_thumb(pixl::shipped::Shipped::RigDemo);
+    recents.finish_thumbnails();
+    let thumb = recents
+        .shipped_thumb(pixl::shipped::Shipped::RigDemo)
+        .expect("drawn");
+    assert!(thumb.starts_with(data.join("thumbs")));
+    assert!(!stale.exists(), "an older picture of the demo is dropped");
+    assert!(
+        recents.entries.is_empty(),
+        "the demo is not a recent document"
+    );
+    let markup = pixl::home::recents_markup(&recents, "", std::time::SystemTime::now());
+    assert!(markup.contains(&*thumb.to_string_lossy()));
+}
+
+#[test]
+fn a_click_on_the_listed_demo_opens_an_untitled_copy() {
+    let data = scratch("demo-open").join("data");
+    let out = drive(
+        start_screen(&data),
+        vec![
+            Step::Wait,
+            Step::Wait,
+            Step::ClickInside("home-rig-demo"),
+            Step::Wait,
+            Step::Wait,
+        ],
+    );
+    assert!(!out.home_open);
+    assert_eq!(out.title, "rig demo");
+    assert_eq!(out.doc.frame_count(), 8);
+    assert!(out.recents.is_empty(), "an untitled copy is not listed");
+    assert!(Recents::load(&data).entries.is_empty());
+}

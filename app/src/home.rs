@@ -1,6 +1,7 @@
 //! The start screen: what pixl shows when it opens without a file, after
-//! File > Close, and from the Home button. It lists the recent documents
-//! and offers a new project or a file to open.
+//! File > Close, and from the Home button. It lists the recent documents,
+//! with the rig demo pixl ships after them, and offers a new project or a
+//! file to open.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -12,6 +13,7 @@ use pixl_core::native;
 use crate::editor::Editor;
 use crate::panels::escape;
 use crate::recents::{Recents, Thumb, key};
+use crate::shipped::Shipped;
 
 /// Whether the start screen shows, and what it last showed.
 #[derive(Resource, Debug, Default)]
@@ -96,6 +98,9 @@ pub fn show_home(
         home.seen_generation = editor.generation;
         home.open = false;
     }
+    if home.open {
+        recents.draw_shipped_thumb(Shipped::RigDemo);
+    }
     recents.collect_thumbnails();
     if recents.drawing()
         && let Some(wake) = &wake
@@ -122,23 +127,26 @@ pub fn show_home(
     }
 }
 
-/// The recent documents whose name or folder holds `filter`, as markup.
+/// The recent documents whose name or folder holds `filter`, as markup,
+/// and after them the rig demo, listed the same way.
 pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> String {
-    if recents.entries.is_empty() {
-        return r#"<label class="recent-empty" text="No recent documents yet. Start a new project or open a file."/>"#.to_string();
-    }
     let filter = filter.trim().to_lowercase();
+    let matches = |name: &str, folder: &str| {
+        filter.is_empty()
+            || name.to_lowercase().contains(&filter)
+            || folder.to_lowercase().contains(&filter)
+    };
     let mut out = String::new();
+    if recents.entries.is_empty() {
+        out.push_str(r#"<label class="recent-empty" text="No recent documents yet. Start a new project or open a file."/>"#);
+    }
     for entry in recents.shown() {
         let name = entry
             .path
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
         let folder = folder_of(&entry.path);
-        if !filter.is_empty()
-            && !name.to_lowercase().contains(&filter)
-            && !folder.to_lowercase().contains(&filter)
-        {
+        if !matches(&name, &folder) {
             continue;
         }
         let k = key(&entry.path);
@@ -153,13 +161,6 @@ pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> Strin
                 "Missing: the file is not there".to_string(),
             ),
         };
-        let thumb = match recents.thumb_path(entry) {
-            Some(t) => format!(
-                r#"<tile class="thumb-frame"><image class="thumb" src="{}" fit="contain" alt=""/></tile>"#,
-                escape(&t.to_string_lossy())
-            ),
-            None => r#"<tile class="thumb-frame empty"/>"#.to_string(),
-        };
         let mut actions = String::new();
         if modified.is_ok() && native::find_recovery(&entry.path).is_some() {
             actions.push_str(&format!(
@@ -171,10 +172,27 @@ pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> Strin
                 r#"<button id="recent-remove-{k}" class="small" text="Remove"/>"#
             ));
         }
-        out.push_str(&format!(
-            r#"<row id="recent-{k}" class="{class}">{thumb}<column class="recent-text"><label class="recent-name" text="{name}"/><label class="recent-folder" text="{folder}"/><label class="recent-meta" text="{meta}"/></column><spacer/>{actions}</row>"#,
-            name = escape(&name),
-            folder = escape(&folder),
+        out.push_str(&row(
+            &format!("recent-{k}"),
+            class,
+            recents.thumb_path(entry).as_deref(),
+            [&name, &folder, &meta],
+            &actions,
+        ));
+    }
+    let (name, folder) = ("Rig demo", "Example: a rigged character that walks");
+    if matches(name, folder) {
+        let (w, h) = Shipped::RigDemo.size();
+        out.push_str(&row(
+            "home-rig-demo",
+            "recent example",
+            recents.shipped_thumb(Shipped::RigDemo).as_deref(),
+            [
+                name,
+                folder,
+                &format!("{w} x {h} px, opens as an untitled copy"),
+            ],
+            "",
         ));
     }
     if out.is_empty() {
@@ -183,6 +201,22 @@ pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> Strin
         );
     }
     out
+}
+
+/// One document on the list: its thumbnail, its name, folder and details,
+/// and the buttons after them.
+fn row(id: &str, class: &str, thumb: Option<&Path>, text: [&str; 3], actions: &str) -> String {
+    let thumb = match thumb {
+        Some(t) => format!(
+            r#"<tile class="thumb-frame"><image class="thumb" src="{}" fit="contain" alt=""/></tile>"#,
+            escape(&t.to_string_lossy())
+        ),
+        None => r#"<tile class="thumb-frame empty"/>"#.to_string(),
+    };
+    let [name, folder, meta] = text.map(escape);
+    format!(
+        r#"<row id="{id}" class="{class}">{thumb}<column class="recent-text"><label class="recent-name" text="{name}"/><label class="recent-folder" text="{folder}"/><label class="recent-meta" text="{meta}"/></column><spacer/>{actions}</row>"#
+    )
 }
 
 /// The folder a document is in, with the home directory shown as `~`.

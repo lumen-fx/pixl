@@ -24,11 +24,13 @@ or saved most recently, each with a thumbnail of its first frame, its folder,
 its size and when it last changed, with a field that filters them by name or
 folder. A click opens one. A document that is no longer there shows as
 missing, with a button that takes it off the list; one with a recovery copy
-newer than its file offers to recover it. Beside the list are New project,
-Open and Open rig demo. The list and the thumbnails are kept in pixl's
-folder of the user data directory (`~/.local/share/lumen/pixl` on Linux),
-never beside the documents. File > Close (Ctrl+W) and the Home button in the menu row return
-to the start screen; Home keeps the open document to go back to.
+newer than its file offers to recover it. After the recent documents the
+list shows the rig demo, which opens as an untitled copy and never joins the
+recent documents. Beside the list are New project and Open. The list and the
+thumbnails are kept in pixl's folder of the user data directory
+(`~/.local/share/lumen/pixl` on Linux), never beside the documents. File >
+Close (Ctrl+W) and the Home button in the menu row return to the start
+screen; Home keeps the open document to go back to.
 
 The canvas view zooms from 1 to 6400 percent around the pointer (the wheel,
 or `+`, `-`, `0` to fit and `1` for 100 percent) and pans with the middle
@@ -323,7 +325,7 @@ mode, and picking a tool hands the canvas back to it. Outside the Rig layout
 (Window menu) the panel shows only its header until a mode starts; Bones or
 Pose with no skeleton yet unfolds it to New skeleton.
 
-Help > Open rig demo, also on the start screen, opens a character rigged and
+Help > Open rig demo, also listed on the start screen, opens a character rigged and
 keyed as an eight-frame walk; press Play to watch it. Help > Rig tutorial
 opens the same character with no skeleton and a card over the canvas that
 goes through rigging its arm: make a skeleton, draw a bone, bind the arm's

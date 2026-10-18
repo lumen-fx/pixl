@@ -14,6 +14,8 @@ use pixl_core::native::write_atomic;
 use pixl_core::{CompositeOptions, Document, Rgba, composite_frame};
 use serde_json::{Value, json};
 
+use crate::shipped::Shipped;
+
 /// The id pixl keeps its user data under, whatever directory it runs from.
 pub const APP_ID: &str = "pixl";
 
@@ -64,6 +66,8 @@ pub struct Recents {
     pub revision: u64,
     /// Thumbnails being drawn.
     work: Vec<JoinHandle<()>>,
+    /// The shipped documents whose thumbnail drawing has started.
+    shipped_started: Vec<Shipped>,
 }
 
 impl Recents {
@@ -86,6 +90,7 @@ impl Recents {
             limit: MAX_RECENTS,
             revision: 1,
             work: Vec::new(),
+            shipped_started: Vec::new(),
         }
     }
 
@@ -111,6 +116,47 @@ impl Recents {
             .join(THUMB_DIR)
             .join(entry.thumb.as_ref()?);
         path.is_file().then_some(path)
+    }
+
+    /// The thumbnail file of a document pixl ships, when it is drawn. Its
+    /// name holds a hash of the document, so a changed one gets a new
+    /// picture.
+    pub fn shipped_thumb(&self, which: Shipped) -> Option<PathBuf> {
+        let path = self
+            .dir
+            .as_ref()?
+            .join(THUMB_DIR)
+            .join(shipped_thumb_name(which));
+        path.is_file().then_some(path)
+    }
+
+    /// Draws the thumbnail of a document pixl ships on a worker thread,
+    /// once, when it is not on disk yet, and drops older pictures of it.
+    pub fn draw_shipped_thumb(&mut self, which: Shipped) {
+        let Some(dir) = self.dir.clone() else {
+            return;
+        };
+        if self.shipped_started.contains(&which) || self.shipped_thumb(which).is_some() {
+            return;
+        }
+        self.shipped_started.push(which);
+        let thumbs = dir.join(THUMB_DIR);
+        let name = shipped_thumb_name(which);
+        self.work.push(std::thread::spawn(move || {
+            let Ok(doc) = which.load() else {
+                return;
+            };
+            if write_thumbnail(&doc, &thumbs.join(&name)).is_err() {
+                return;
+            }
+            let prefix = format!("{}-", which.slug());
+            for old in std::fs::read_dir(&thumbs).into_iter().flatten().flatten() {
+                let file = old.file_name().to_string_lossy().into_owned();
+                if file.starts_with(&prefix) && file != name {
+                    let _ = std::fs::remove_file(old.path());
+                }
+            }
+        }));
     }
 
     /// The entry with this key (see [`key`]).
@@ -254,12 +300,21 @@ fn parse(v: &Value) -> Vec<Recent> {
 
 /// A short stable key for a listed path, for element ids.
 pub fn key(path: &Path) -> String {
+    format!("{:016x}", fnv1a(path.to_string_lossy().as_bytes()))
+}
+
+fn fnv1a(bytes: &[u8]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in path.to_string_lossy().bytes() {
-        h ^= u64::from(b);
+    for b in bytes {
+        h ^= u64::from(*b);
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
-    format!("{h:016x}")
+    h
+}
+
+/// The thumbnail file name of a document pixl ships.
+fn shipped_thumb_name(which: Shipped) -> String {
+    format!("{}-{:016x}.png", which.slug(), fnv1a(which.bytes()))
 }
 
 /// A fresh thumbnail file name for `path`: a new name each time, so a view

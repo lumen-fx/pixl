@@ -295,7 +295,6 @@
         <button id="home-new" class="primary home-action" text="New project..."/>
         <button id="home-open" class="home-action" text="Open..."/>
         <label class="home-hint" text="pixl, Aseprite, PNG and GIF files"/>
-        <tooltip text="A rigged character that walks, opened as an untitled copy"><button id="home-rig-demo" class="home-action" text="Open rig demo"/></tooltip>
         <spacer/>
         <label id="home-message" class="home-message" bind-text="status_message" text=""/>
       </column>
