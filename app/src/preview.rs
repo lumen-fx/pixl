@@ -11,6 +11,7 @@ use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, Context2d};
 
 use crate::editor::Editor;
+use crate::ids::ElementIds;
 use crate::tools::set_if_changed;
 use crate::view::{Layers, View, ViewColors};
 
@@ -60,10 +61,10 @@ pub fn preview_view(doc: (u32, u32), size: Vec2, fit: bool) -> View {
 pub fn preview_controls(
     mut pane: ResMut<PreviewPane>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
 ) {
     for c in clicks.read() {
-        if ids.get(c.entity).is_ok_and(|id| id.0 == "pv-zoom") {
+        if ids.of(c.entity).is_ok_and(|id| id.0 == "pv-zoom") {
             pane.fit = !pane.fit;
         }
     }

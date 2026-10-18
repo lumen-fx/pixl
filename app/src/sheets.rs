@@ -24,6 +24,7 @@ use pixl_core::{Document, Rgba};
 
 use crate::editor::Editor;
 use crate::files::{Files, Replace};
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::view::ViewColors;
@@ -254,17 +255,13 @@ pub fn sheet_commands(
     home: Res<crate::Home>,
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     mut commands: Commands,
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mut chosen: Vec<String> = menu.read().map(|m| m.id.clone()).collect();
-    chosen.extend(
-        clicks
-            .read()
-            .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone())),
-    );
+    chosen.extend(clicks.read().filter_map(|c| ids.id_of(c.entity)));
     for id in ["file-export-sheet", "file-import-sheet"] {
         if keys.ran(id, false) {
             chosen.push(id.to_string());

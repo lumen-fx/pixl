@@ -22,6 +22,7 @@ use pixl_core::native::write_atomic;
 
 use crate::editor::Editor;
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::settings::{Settings, Theme, UI_SCALES, UiFont};
@@ -380,7 +381,7 @@ pub fn theme_input(
     mut editor: ResMut<Editor>,
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     (home, keys): (Res<Home>, Res<KeyCommands>),
     mut commands: Commands,
     mut signals: Signals,
@@ -389,11 +390,7 @@ pub fn theme_input(
     if keys.ran("window-themes", false) {
         chosen.push("window-themes".to_string());
     }
-    chosen.extend(
-        clicks
-            .read()
-            .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone())),
-    );
+    chosen.extend(clicks.read().filter_map(|c| ids.id_of(c.entity)));
     if home.open {
         return;
     }

@@ -11,6 +11,7 @@ use pixl_core::{BlendMode, LayerId, Rgba, Scope};
 
 use crate::editor::Editor;
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::tools::{hex, set_if_changed};
 use crate::view::parse_hex;
@@ -248,11 +249,8 @@ pub fn show_panels(
 }
 
 /// The ids of the click messages this tick, primary button only.
-fn clicked(clicks: &mut MessageReader<ClickEvent>, ids: &Query<&LumenId>) -> Vec<String> {
-    clicks
-        .read()
-        .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone()))
-        .collect()
+fn clicked(clicks: &mut MessageReader<ClickEvent>, ids: &ElementIds) -> Vec<String> {
+    clicks.read().filter_map(|c| ids.id_of(c.entity)).collect()
 }
 
 /// The panel buttons, rows and swatches.
@@ -261,7 +259,7 @@ pub fn panel_clicks(
     mut panels: ResMut<Panels>,
     mut clicks: MessageReader<ClickEvent>,
     mut presses: MessageReader<PointerPressed>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     hovered: Query<&LumenId, With<Hovered>>,
 ) {
     let editor = &mut *editor;

@@ -5,7 +5,6 @@
 //! properties dialog. The Layer menu and a right-click on a layer reach the
 //! same commands.
 
-use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::ecs::system::SystemParam;
 use lumenui::ecs::world::World;
 use lumenui::glam::Vec2;
@@ -25,6 +24,7 @@ use pixl_core::history::Transaction;
 
 use crate::editor::Editor;
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::panels::{Panels, blend_from_name, blend_name, close_edit, escape};
 use crate::timeline::{LayerTree, rows};
 use crate::tools::hex;
@@ -492,38 +492,16 @@ pub struct LayerInput<'w, 's> {
     pressed: MessageReader<'w, 's, PointerPressed>,
     moved: MessageReader<'w, 's, PointerMoved>,
     released: MessageReader<'w, 's, PointerReleased>,
-    ids: Query<'w, 's, &'static LumenId>,
-    parents: Query<'w, 's, &'static ChildOf>,
+    ids: ElementIds<'w, 's>,
     hovered: Query<'w, 's, Entity, With<Hovered>>,
 }
 
 impl LayerInput<'_, '_> {
-    /// The id of `entity` or its nearest ancestor with one.
-    fn id_of(&self, mut entity: Entity) -> Option<String> {
-        loop {
-            if let Ok(id) = self.ids.get(entity) {
-                return Some(id.0.clone());
-            }
-            entity = self.parents.get(entity).ok()?.parent();
-        }
-    }
-
     /// The layer row the hovered element is in: `Some(None)` when the
     /// hovered element is elsewhere, `None` when nothing is hovered.
     fn hovered_row(&self) -> Option<Option<LayerId>> {
         let e = self.hovered.iter().next()?;
-        let mut e = e;
-        loop {
-            if let Ok(id) = self.ids.get(e)
-                && let Some(row) = row_id(&id.0)
-            {
-                return Some(Some(row));
-            }
-            match self.parents.get(e) {
-                Ok(p) => e = p.parent(),
-                Err(_) => return Some(None),
-            }
-        }
+        Some(self.ids.up(e).find_map(row_id))
     }
 }
 
@@ -864,7 +842,9 @@ pub fn layer_input(
     let mut chosen: Vec<String> = input.chosen.read().map(|m| m.id.clone()).collect();
     let clicked: Vec<Entity> = input.clicks.read().map(|c| c.entity).collect();
     for e in clicked {
-        let Some(id) = input.id_of(e) else { continue };
+        let Some(id) = input.ids.id_of(e) else {
+            continue;
+        };
         if let Some(layer) = row_id(&id) {
             if editor.doc.layer(layer).is_some() && editor.layer != layer {
                 editor.mask_edit = false;
@@ -900,7 +880,7 @@ pub fn layer_input(
     // A double click on a row opens its properties.
     let doubles: Vec<Entity> = input.doubles.read().map(|d| d.entity).collect();
     for e in doubles {
-        if let Some(layer) = input.id_of(e).as_deref().and_then(row_id)
+        if let Some(layer) = input.ids.id_of(e).as_deref().and_then(row_id)
             && editor.doc.layer(layer).is_some()
         {
             editor.layer = layer;
@@ -911,7 +891,7 @@ pub fn layer_input(
     // A right click on a row opens the Layer menu for it.
     let menus: Vec<ContextMenuEvent> = input.menus.read().cloned().collect();
     for m in menus {
-        if let Some(layer) = input.id_of(m.entity).as_deref().and_then(row_id)
+        if let Some(layer) = input.ids.id_of(m.entity).as_deref().and_then(row_id)
             && editor.doc.layer(layer).is_some()
         {
             if editor.layer != layer {

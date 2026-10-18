@@ -29,6 +29,7 @@ use pixl_core::{
 };
 
 use crate::editor::{BrushShape, Editor, Tool};
+use crate::ids::ElementIds;
 use crate::input::{Pointer, PointerInput};
 use crate::jobs::{PaintJob, WRITE_BUDGET, tiles_of};
 use crate::tools::{Place, context, paint_color, refuse};
@@ -1183,7 +1184,7 @@ pub struct BoxKeys<'w> {
 pub struct BoxButtons<'w, 's> {
     chosen: Res<'w, crate::menus::Chosen>,
     clicks: MessageReader<'w, 's, ClickEvent>,
-    ids: Query<'w, 's, &'static LumenId>,
+    ids: ElementIds<'w, 's>,
     commands: Commands<'w, 's>,
 }
 
@@ -1514,7 +1515,7 @@ pub fn toolbox_options(
         *last_tool = Some(editor.tool);
     }
     for click in clicks.read() {
-        let Ok(id) = ids.get(click.entity) else {
+        let Ok(id) = ids.of(click.entity) else {
             continue;
         };
         match id.0.as_str() {

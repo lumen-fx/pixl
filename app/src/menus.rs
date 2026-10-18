@@ -7,6 +7,7 @@ use lumenui::lumen_core::input::MenuClicked;
 use lumenui::prelude::*;
 
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 
 /// The command ids chosen this tick: menu items, keys, the palette, and the
@@ -42,15 +43,12 @@ pub fn collect(
     keys: Res<KeyCommands>,
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     home: Res<Home>,
     mut signals: Signals,
 ) {
     chosen.0.clear();
-    let clicked: Vec<String> = clicks
-        .read()
-        .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone()))
-        .collect();
+    let clicked: Vec<String> = clicks.read().filter_map(|c| ids.id_of(c.entity)).collect();
     let menus: Vec<String> = menu.read().map(|m| m.id.clone()).collect();
     if home.open {
         return;

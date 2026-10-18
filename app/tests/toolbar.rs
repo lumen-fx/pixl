@@ -6,7 +6,8 @@ pub mod common;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use common::drive::{Step, drive, editor_over};
+use common::drive::{At, Step, drive, editor_over};
+use lumenui::lumen_core::input::PointerButton;
 use pixl::Tool;
 use pixl_core::io::decode_png;
 use pixl_core::{ColorMode, Document};
@@ -94,4 +95,23 @@ fn the_resting_icons_are_drawn_in_the_text_ink() {
     let tail: BTreeSet<(u32, u32)> =
         normalize(resting.iter().copied().filter(|p| p.1 >= top).collect());
     assert_eq!(tail, slice_icon);
+}
+
+/// The pointer comes down on the middle of the button, over its icon:
+/// Lumen names the icon as the clicked element, and the button's tool is
+/// picked all the same.
+#[test]
+fn a_press_on_a_tool_s_icon_picks_the_tool() {
+    let out = drive(
+        editor_over(Document::new(32, 32, ColorMode::Rgba).unwrap()),
+        vec![
+            Step::Sleep(DECODED),
+            Step::Wait,
+            Step::Move(At::Element("tool-eraser")),
+            Step::Down(At::Element("tool-eraser"), PointerButton::Primary),
+            Step::Up(At::Element("tool-eraser"), PointerButton::Primary),
+            Step::Wait,
+        ],
+    );
+    assert_eq!(out.tool, Tool::Eraser);
 }

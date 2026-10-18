@@ -16,6 +16,7 @@ use lumenui::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::store::Store;
 
 /// The settings file in pixl's data folder.
@@ -540,12 +541,12 @@ impl Look {
 /// clicked.
 pub fn look_switches(
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     mut settings: ResMut<Settings>,
 ) {
     for click in clicks.read() {
         let i = &mut settings.interface;
-        match ids.get(click.entity).map(|id| id.0.as_str()) {
+        match ids.of(click.entity).map(|id| id.0.as_str()) {
             Ok("toggle-theme") => {
                 i.theme = match i.theme {
                     Theme::Light => Theme::Dark,

@@ -20,6 +20,7 @@ use pixl_core::{
 
 use crate::editor::{Editor, Tool};
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::input::{Navigation, Pointer, PointerInput};
 use crate::keymap::KeyCommands;
 use crate::settings::{PenSettings, Settings};
@@ -204,13 +205,13 @@ pub fn pick_tool(
     mut editor: ResMut<Editor>,
     keys: Res<KeyCommands>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     gesture: Res<Gesture>,
     home: Res<Home>,
 ) {
     let mut picked = None;
     for click in clicks.read() {
-        if let Ok(id) = ids.get(click.entity)
+        if let Ok(id) = ids.of(click.entity)
             && let Some(tool) = Tool::from_button_id(&id.0)
         {
             picked = Some(tool);

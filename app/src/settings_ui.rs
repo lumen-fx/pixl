@@ -5,12 +5,12 @@
 
 use std::collections::HashMap;
 
-use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use lumenui_canvas::Context2d;
 
+use crate::ids::ElementIds;
 use crate::keymap::{self, Chord, KeyCommands, Keymap, Kind, Preset};
 use crate::panels::escape;
 use crate::settings::{Settings, Theme, UiFont, WheelMode};
@@ -480,16 +480,6 @@ fn page_of(id: &str) -> Option<usize> {
         .position(|p| id.strip_prefix("settings-page-") == Some(p))
 }
 
-/// The id of `entity` or of its nearest ancestor that has one.
-fn id_of(ids: &Query<&LumenId>, parents: &Query<&ChildOf>, mut e: Entity) -> Option<String> {
-    loop {
-        if let Ok(id) = ids.get(e) {
-            return Some(id.0.clone());
-        }
-        e = parents.get(e).ok()?.parent();
-    }
-}
-
 /// Opens and closes the dialog, switches its pages, resets a page, and
 /// opens the Edit menu.
 #[allow(clippy::too_many_arguments)]
@@ -499,14 +489,13 @@ pub fn settings_commands(
     mut keys: ResMut<KeyCommands>,
     mut clicks: MessageReader<ClickEvent>,
     mut menu: MessageReader<MenuClicked>,
-    ids: Query<&LumenId>,
-    parents: Query<&ChildOf>,
+    ids: ElementIds,
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mut chosen: Vec<String> = menu.read().map(|m| m.id.clone()).collect();
     let clicked: Vec<Entity> = clicks.read().map(|c| c.entity).collect();
-    chosen.extend(clicked.into_iter().filter_map(|e| id_of(&ids, &parents, e)));
+    chosen.extend(clicked.into_iter().filter_map(|e| ids.id_of(e)));
     if keys.ran("settings", false) {
         chosen.push("settings".into());
     }
@@ -736,13 +725,13 @@ pub fn keys_page(
     mut keys: ResMut<KeyCommands>,
     map: Res<Keymap>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mut message: Option<String> = None;
     for click in clicks.read() {
-        let Ok(id) = ids.get(click.entity) else {
+        let Ok(id) = ids.of(click.entity) else {
             continue;
         };
         let id = id.0.as_str();

@@ -37,9 +37,11 @@ fn a_group_takes_a_dragged_layer_and_folds() {
         vec![
             Step::Click("layer-group"),
             Step::Wait,
-            // Layer 1, at the bottom, dragged onto the middle of the group.
-            Step::Move(At::Element("layer-row-1")),
-            Step::Down(At::Element("layer-row-1"), PointerButton::Primary),
+            // Layer 3, the row under the group, dragged onto the middle of
+            // the group. The bottom rows are scrolled out of the panel's
+            // view at the default layout.
+            Step::Move(At::Element("layer-row-3")),
+            Step::Down(At::Element("layer-row-3"), PointerButton::Primary),
             Step::Move(At::Element("layer-row-4")),
             Step::Move(At::Element("layer-row-4")),
             Step::Up(At::Element("layer-row-4"), PointerButton::Primary),
@@ -52,7 +54,7 @@ fn a_group_takes_a_dragged_layer_and_folds() {
         out.doc.layer(group).unwrap().kind,
         LayerKind::Group { .. }
     ));
-    assert_eq!(out.doc.parent_of(LayerId(1)), Some(group));
+    assert_eq!(out.doc.parent_of(LayerId(3)), Some(group));
     assert_eq!(out.undo, ["New group", "Move layer"]);
 }
 

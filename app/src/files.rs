@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use lumenui::ecs::change_detection::Mut;
-use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::ecs::system::SystemParam;
 use lumenui::ecs::world::World;
 use lumenui::lumen_core::input::MenuClicked;
@@ -20,6 +19,7 @@ use pixl_core::{Background, ColorMode, Document, aseprite};
 
 use crate::editor::Editor;
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::recents::Recents;
 use crate::settings::Settings;
@@ -436,29 +436,17 @@ fn export(commands: &mut Commands, gif: bool) {
 pub struct FileInput<'w, 's> {
     menu: MessageReader<'w, 's, MenuClicked>,
     clicks: MessageReader<'w, 's, ClickEvent>,
-    ids: Query<'w, 's, &'static LumenId>,
-    parents: Query<'w, 's, &'static ChildOf>,
+    ids: ElementIds<'w, 's>,
     keys: Res<'w, KeyCommands>,
 }
 
 impl FileInput<'_, '_> {
-    /// The id of `entity` or of its nearest ancestor that has one: a click
-    /// on a part of a start screen row is a click on the row.
-    fn id_of(&self, mut entity: Entity) -> Option<String> {
-        loop {
-            if let Ok(id) = self.ids.get(entity) {
-                return Some(id.0.clone());
-            }
-            entity = self.parents.get(entity).ok()?.parent();
-        }
-    }
-
     /// The ids of the commands chosen this tick. A shortcut runs the
     /// command of the menu item with its id.
     fn chosen(&mut self) -> Vec<String> {
         let mut chosen: Vec<String> = self.menu.read().map(|m| m.id.clone()).collect();
         let clicked: Vec<Entity> = self.clicks.read().map(|c| c.entity).collect();
-        chosen.extend(clicked.into_iter().filter_map(|e| self.id_of(e)));
+        chosen.extend(clicked.into_iter().filter_map(|e| self.ids.id_of(e)));
         chosen.extend(
             self.keys
                 .pressed
@@ -658,12 +646,12 @@ pub fn file_commands(
 /// background is a color. A preset's button fills in its size.
 pub fn new_form(
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     mut signals: Signals,
     mut shown: Local<Option<(String, String, String)>>,
 ) {
     for click in clicks.read() {
-        let Ok(id) = ids.get(click.entity) else {
+        let Ok(id) = ids.of(click.entity) else {
             continue;
         };
         if let Some((w, h)) = id.0.strip_prefix("preset-").and_then(|s| s.split_once('x')) {

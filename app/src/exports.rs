@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::editor::Editor;
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::store::Store;
@@ -602,15 +603,11 @@ fn read_fields(signals: &Signals, base: &Preset) -> Preset {
 fn chosen(
     menu: &mut MessageReader<MenuClicked>,
     clicks: &mut MessageReader<ClickEvent>,
-    ids: &Query<&LumenId>,
+    ids: &ElementIds,
     keys: &KeyCommands,
 ) -> Vec<String> {
     let mut out: Vec<String> = menu.read().map(|m| m.id.clone()).collect();
-    out.extend(
-        clicks
-            .read()
-            .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone())),
-    );
+    out.extend(clicks.read().filter_map(|c| ids.id_of(c.entity)));
     for id in ["file-export-presets", "file-export-all"] {
         if keys.ran(id, false) {
             out.push(id.to_string());
@@ -626,7 +623,7 @@ pub fn export_input(
     mut editor: ResMut<Editor>,
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     keys: Res<KeyCommands>,
     home: Res<Home>,
     mut signals: Signals,

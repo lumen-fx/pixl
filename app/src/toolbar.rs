@@ -8,7 +8,6 @@
 //! order is the default, and a tool the arrangement does not name joins at
 //! the end, so a new tool always shows.
 
-use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::lumen_core::input::{ContextMenuEvent, LongPressEvent, MenuClicked};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
@@ -16,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::editor::{Editor, Tool};
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::store::Store;
@@ -280,20 +280,9 @@ impl Toolbar {
 }
 
 /// The tool a pressed element belongs to: the button or its icon.
-fn tool_button(
-    mut entity: Entity,
-    ids: &Query<&LumenId>,
-    parents: &Query<&ChildOf>,
-) -> Option<String> {
-    for _ in 0..3 {
-        if let Ok(id) = ids.get(entity)
-            && Tool::from_button_id(&id.0).is_some()
-        {
-            return Some(id.0.clone());
-        }
-        entity = parents.get(entity).ok()?.parent();
-    }
-    None
+fn tool_button(entity: Entity, ids: &ElementIds) -> Option<String> {
+    ids.id_of(entity)
+        .filter(|id| Tool::from_button_id(id).is_some())
 }
 
 /// The dialog, the flyout, and the menu item.
@@ -305,8 +294,7 @@ pub fn toolbar_input(
     mut clicks: MessageReader<ClickEvent>,
     mut context: MessageReader<ContextMenuEvent>,
     mut long: MessageReader<LongPressEvent>,
-    ids: Query<&LumenId>,
-    parents: Query<&ChildOf>,
+    ids: ElementIds,
     (home, keys): (Res<Home>, Res<KeyCommands>),
     mut signals: Signals,
 ) {
@@ -314,10 +302,7 @@ pub fn toolbar_input(
     if keys.ran("window-toolbar", false) {
         chosen.push("window-toolbar".into());
     }
-    let clicked: Vec<String> = clicks
-        .read()
-        .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone()))
-        .collect();
+    let clicked: Vec<String> = clicks.read().filter_map(|c| ids.id_of(c.entity)).collect();
     let mut asked: Vec<(Entity, Option<(f32, f32)>)> = context
         .read()
         .map(|c| (c.entity, Some((c.position.x, c.position.y))))
@@ -328,7 +313,7 @@ pub fn toolbar_input(
     }
     // A right-click or long press on a grouped button opens its flyout.
     for (entity, at) in asked {
-        let Some(tool) = tool_button(entity, &ids, &parents) else {
+        let Some(tool) = tool_button(entity, &ids) else {
             continue;
         };
         if let Some(g) = bar.arrangement.group_of(&tool) {

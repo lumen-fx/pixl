@@ -8,13 +8,13 @@
 //! default place. A layout names the panels it places and leaves the rest
 //! where the markup put them, so a panel added later joins every layout.
 
-use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::lumen_core::input::{ContextMenuEvent, MenuClicked, PointerReleased};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::store::Store;
@@ -631,21 +631,10 @@ fn put_on_screen(places: &[Place], sizes: &Sizes) {
 }
 
 /// The panel an element belongs to, through its ancestors' ids.
-fn panel_of(
-    mut entity: Entity,
-    ids: &Query<&LumenId>,
-    parents: &Query<&ChildOf>,
-    ws: &Workspace,
-) -> Option<String> {
-    for _ in 0..64 {
-        if let Ok(id) = ids.get(entity)
-            && ws.known.iter().any(|k| k.id == id.0)
-        {
-            return Some(id.0.clone());
-        }
-        entity = parents.get(entity).ok()?.parent();
-    }
-    None
+fn panel_of(entity: Entity, ids: &ElementIds, ws: &Workspace) -> Option<String> {
+    ids.up(entity)
+        .find(|id| ws.known.iter().any(|k| k.id == *id))
+        .map(str::to_owned)
 }
 
 /// The Window menu, the panel menu, the panel headers' buttons and the
@@ -657,8 +646,7 @@ pub fn workspace_input(
     mut clicks: MessageReader<ClickEvent>,
     mut context: MessageReader<ContextMenuEvent>,
     mut released: MessageReader<PointerReleased>,
-    ids: Query<&LumenId>,
-    parents: Query<&ChildOf>,
+    ids: ElementIds,
     (home, keys): (Res<Home>, Res<KeyCommands>),
     mut signals: Signals,
 ) {
@@ -670,13 +658,9 @@ pub fn workspace_input(
             .filter(|(id, repeat)| !repeat && id.starts_with("window-"))
             .map(|(id, _)| id.clone()),
     );
-    chosen.extend(
-        clicks
-            .read()
-            .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone())),
-    );
+    chosen.extend(clicks.read().filter_map(|c| ids.id_of(c.entity)));
     for request in context.read() {
-        if let Some(panel) = panel_of(request.entity, &ids, &parents, &ws) {
+        if let Some(panel) = panel_of(request.entity, &ids, &ws) {
             ws.menu_panel = Some(panel);
             signals.open_menu_at("panel-menu", request.position.x, request.position.y);
         }

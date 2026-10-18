@@ -7,6 +7,7 @@ pub mod editor;
 pub mod exports;
 pub mod files;
 pub mod home;
+pub mod ids;
 pub mod image_menu;
 pub mod input;
 pub mod jobs;

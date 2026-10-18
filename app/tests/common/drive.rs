@@ -9,6 +9,7 @@ use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
     ContextMenuEvent, Key, MenuClicked, Modifiers, ModifiersState, MouseWheel, NamedKey,
     PointerButton, PointerData, PointerKind, PointerMoved, PointerPressed, PointerReleased,
+    PointerState,
 };
 use lumenui::prelude::*;
 use pixl::recents::Recent;
@@ -140,6 +141,17 @@ fn key(name: &str) -> Key {
 /// Runs `editor` (the app, possibly with a document inserted) through
 /// `steps`, one per tick from the fifth on; a [`Step::Until`] holds its
 /// turn until it is met.
+/// Puts the pointer where a scripted pointer step happens, as a window does
+/// before it sends the step, so Lumen hit-tests it: hover, press and click
+/// all follow. `down` is the primary button's state after the step, or
+/// `None` for a move.
+fn press(state: &mut PointerState, at: Vec2, down: Option<bool>) {
+    state.position = Some(at);
+    if let Some(down) = down {
+        state.primary_down = down;
+    }
+}
+
 pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
     let _turn = super::turn();
     let waits = steps.iter().filter(|s| matches!(s, Step::Until(_))).count() as u64;
@@ -154,7 +166,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    mut held: Local<(bool, bool)>,
                    mut editor: ResMut<Editor>,
                    view: Res<View>,
-                   mut modifiers: ResMut<ModifiersState>,
+                   (mut modifiers, mut pointer_state): (
+                ResMut<ModifiersState>,
+                ResMut<PointerState>,
+            ),
                    mut wheel: MessageWriter<MouseWheel>,
                    mut keys: MessageWriter<KeyPressed>,
                    mut keys_up: MessageWriter<KeyReleased>,
@@ -249,6 +264,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         });
                     }
                     Step::Down(at, button) => {
+                        press(&mut pointer_state, place(at), Some(true));
                         down.write(PointerPressed {
                             position: place(at),
                             button,
@@ -257,6 +273,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         });
                     }
                     Step::Move(at) => {
+                        press(&mut pointer_state, place(at), None);
                         moved.write(PointerMoved {
                             position: place(at),
                             local: None,
@@ -264,6 +281,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         });
                     }
                     Step::Up(at, button) => {
+                        press(&mut pointer_state, place(at), Some(false));
                         up.write(PointerReleased {
                             position: place(at),
                             button,
@@ -272,6 +290,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         });
                     }
                     Step::PenDown(at, p) => {
+                        press(&mut pointer_state, place(at), Some(true));
                         down.write(PointerPressed {
                             position: place(at),
                             button: PointerButton::Primary,
@@ -280,6 +299,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         });
                     }
                     Step::PenMove(at, p) => {
+                        press(&mut pointer_state, place(at), None);
                         moved.write(PointerMoved {
                             position: place(at),
                             local: None,
@@ -287,6 +307,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         });
                     }
                     Step::PenUp(at) => {
+                        press(&mut pointer_state, place(at), Some(false));
                         up.write(PointerReleased {
                             position: place(at),
                             button: PointerButton::Primary,

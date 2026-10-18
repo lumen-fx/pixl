@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::editor::{BrushShape, Editor, Tool};
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::panels::escape;
 use crate::settings::Settings;
 use crate::store::Store;
@@ -574,7 +575,7 @@ pub fn presets_input(
     mut settings: ResMut<Settings>,
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     home: Res<Home>,
     mut commands: Commands,
     mut signals: Signals,
@@ -588,11 +589,7 @@ pub fn presets_input(
         }
     }
     let mut chosen: Vec<String> = menu.read().map(|m| m.id.clone()).collect();
-    chosen.extend(
-        clicks
-            .read()
-            .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone())),
-    );
+    chosen.extend(clicks.read().filter_map(|c| ids.id_of(c.entity)));
     if home.open {
         return;
     }

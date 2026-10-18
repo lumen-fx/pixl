@@ -14,7 +14,6 @@ use std::collections::{BTreeSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::hierarchy::ChildOf;
 use lumenui::ecs::query::Added;
 use lumenui::ecs::system::SystemParam;
 use lumenui::lumen_core::input::{
@@ -28,6 +27,7 @@ use pixl_core::{Document, LayerId, LayerKind, LoopDirection, OnionSkin, Rgba, Sc
 
 use crate::editor::Editor;
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
 use crate::tools::{hex, set_if_changed};
@@ -600,44 +600,28 @@ pub struct TimelineInput<'w, 's> {
     moved: MessageReader<'w, 's, PointerMoved>,
     released: MessageReader<'w, 's, PointerReleased>,
     modifiers: Res<'w, ModifiersState>,
-    ids: Query<'w, 's, &'static LumenId>,
-    parents: Query<'w, 's, &'static ChildOf>,
+    ids: ElementIds<'w, 's>,
     hovered: Query<'w, 's, Entity, With<Hovered>>,
     committed: Query<'w, 's, &'static LumenId, Added<EditCommitted>>,
     focused: Query<'w, 's, &'static LumenId, With<Focused>>,
 }
 
 impl TimelineInput<'_, '_> {
-    /// The id of `entity` or its nearest ancestor with one.
-    fn id_of(&self, mut entity: Entity) -> Option<String> {
-        loop {
-            if let Ok(id) = self.ids.get(entity) {
-                return Some(id.0.clone());
-            }
-            entity = self.parents.get(entity).ok()?.parent();
-        }
-    }
-
     /// What the hovered element is, as far as the timeline goes.
     fn hovered_spot(&self) -> Hovering {
-        let Some(mut e) = self.hovered.iter().next() else {
+        let Some(e) = self.hovered.iter().next() else {
             return Hovering::Nothing;
         };
         let mut spot = None;
-        loop {
-            if let Ok(id) = self.ids.get(e) {
-                if spot.is_none() {
-                    spot = Spot::parse(&id.0);
-                }
-                if id.0 == "panel-timeline" {
-                    return spot.map_or(Hovering::Timeline, Hovering::Spot);
-                }
+        for id in self.ids.up(e) {
+            if spot.is_none() {
+                spot = Spot::parse(id);
             }
-            match self.parents.get(e) {
-                Ok(p) => e = p.parent(),
-                Err(_) => return Hovering::Elsewhere,
+            if id == "panel-timeline" {
+                return spot.map_or(Hovering::Timeline, Hovering::Spot);
             }
         }
+        Hovering::Elsewhere
     }
 }
 
@@ -915,7 +899,7 @@ pub fn timeline_input(
         let entities: Vec<Entity> = input.clicks.read().map(|c| c.entity).collect();
         entities
             .into_iter()
-            .filter_map(|e| input.id_of(e))
+            .filter_map(|e| input.ids.id_of(e))
             .collect()
     };
     let mut commands: Vec<String> = clicked;
@@ -927,7 +911,7 @@ pub fn timeline_input(
     // Double-clicks on a tag open its dialog.
     let doubles: Vec<Entity> = input.doubles.read().map(|d| d.entity).collect();
     for e in doubles {
-        if let Some(Spot::Tag(index, _)) = input.id_of(e).and_then(|id| Spot::parse(&id)) {
+        if let Some(Spot::Tag(index, _)) = input.ids.id_of(e).and_then(|id| Spot::parse(&id)) {
             open_tag_dialog(tl, editor, Some(index), &mut signals);
         }
     }
@@ -935,7 +919,7 @@ pub fn timeline_input(
     // Context menus.
     let menus: Vec<ContextMenuEvent> = input.menus.read().cloned().collect();
     for m in menus {
-        let Some(spot) = input.id_of(m.entity).and_then(|id| Spot::parse(&id)) else {
+        let Some(spot) = input.ids.id_of(m.entity).and_then(|id| Spot::parse(&id)) else {
             continue;
         };
         match spot {

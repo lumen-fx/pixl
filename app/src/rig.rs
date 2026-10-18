@@ -26,6 +26,7 @@ use pixl_core::{ColorMode, Document, LayerId, LayerKind, NewLayer, Rgba, Scope};
 
 use crate::editor::{Editor, Tool};
 use crate::home::Home;
+use crate::ids::ElementIds;
 use crate::input::{Navigation, Pointer, PointerInput};
 use crate::keymap::KeyCommands;
 use crate::panels::escape;
@@ -396,7 +397,7 @@ pub fn rig_clicks(
     mut editor: ResMut<Editor>,
     mut ui: ResMut<RigUi>,
     mut clicks: MessageReader<ClickEvent>,
-    ids: Query<&LumenId>,
+    ids: ElementIds,
     keys: Res<KeyCommands>,
     workspace: Option<ResMut<crate::workspace::Workspace>>,
     signals: Signals,
@@ -404,10 +405,7 @@ pub fn rig_clicks(
     let editor = &mut *editor;
     let ui = &mut *ui;
     let was = ui.mode;
-    let mut clicked: Vec<String> = clicks
-        .read()
-        .filter_map(|c| ids.get(c.entity).ok().map(|id| id.0.clone()))
-        .collect();
+    let mut clicked: Vec<String> = clicks.read().filter_map(|c| ids.id_of(c.entity)).collect();
     // The mode keys run what the mode buttons do.
     for id in ["rig-mode-bones", "rig-mode-pose"] {
         if keys.ran(id, false) {
