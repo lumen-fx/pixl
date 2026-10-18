@@ -6,6 +6,7 @@
 pub mod common;
 
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
@@ -66,12 +67,14 @@ fn drive(steps: Vec<Step>) -> Vec<View> {
                         key: Key::from(c),
                         modifiers: m,
                         repeat: false,
+                        time_stamp: Instant::now(),
                     });
                 }
                 Step::CharUp(c) => {
                     keys_up.write(KeyReleased {
                         key: Key::from(c),
                         modifiers: Modifiers::default(),
+                        time_stamp: Instant::now(),
                     });
                 }
                 Step::Shift(held) => {
@@ -85,6 +88,7 @@ fn drive(steps: Vec<Step>) -> Vec<View> {
                         delta: Vec2::new(0.0, dy),
                         position: at,
                         local: None,
+                        time_stamp: Instant::now(),
                     });
                 }
                 Step::KeyDown(k) => {
@@ -92,12 +96,14 @@ fn drive(steps: Vec<Step>) -> Vec<View> {
                         key: Key::Named(k),
                         modifiers: Modifiers::default(),
                         repeat: false,
+                        time_stamp: Instant::now(),
                     });
                 }
                 Step::KeyUp(k) => {
                     keys_up.write(KeyReleased {
                         key: Key::Named(k),
                         modifiers: Modifiers::default(),
+                        time_stamp: Instant::now(),
                     });
                 }
                 Step::Down(at, button) => {

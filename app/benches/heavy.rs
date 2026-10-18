@@ -215,6 +215,7 @@ fn main() {
                                     ..Modifiers::default()
                                 },
                                 repeat: false,
+                                time_stamp: Instant::now(),
                             });
                         }
                         (1, 1) => {}
@@ -224,6 +225,7 @@ fn main() {
                                 key: Key::Named(lumenui::lumen_core::input::NamedKey::Enter),
                                 modifiers: Modifiers::default(),
                                 repeat: false,
+                                time_stamp: Instant::now(),
                             });
                             started = true;
                         }

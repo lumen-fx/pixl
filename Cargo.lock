@@ -236,6 +236,8 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 [[package]]
 name = "lumenui"
 version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b405e22674687113af503318ffc86d1baeedf73614ff9a0f76705595d8ce2c44"
 dependencies = [
  "ruzstd",
  "serde_json",
@@ -247,6 +249,8 @@ dependencies = [
 [[package]]
 name = "lumenui-canvas"
 version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8909e3298260e2891ddb612341974d5a4af6042e2b6863eea4940ecc2c65ec90"
 dependencies = [
  "lumenui",
 ]

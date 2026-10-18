@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use lumenui::ecs::hierarchy::Children;
 use lumenui::glam::Vec2;
@@ -267,6 +268,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             delta: Vec2::new(0.0, dy),
                             position: place(at),
                             local: None,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::Key(name, with_shift) => {
@@ -278,10 +280,12 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             key: key(name),
                             modifiers: m,
                             repeat: false,
+                            time_stamp: Instant::now(),
                         });
                         keys_up.write(KeyReleased {
                             key: key(name),
                             modifiers: m,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::KeyDown(k) => {
@@ -289,12 +293,14 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             key: Key::Named(k),
                             modifiers: mods,
                             repeat: false,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::KeyUp(k) => {
                         keys_up.write(KeyReleased {
                             key: Key::Named(k),
                             modifiers: mods,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::Hold(name) => {
@@ -302,12 +308,14 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             key: key(name),
                             modifiers: mods,
                             repeat: false,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::Release(name) => {
                         keys_up.write(KeyReleased {
                             key: key(name),
                             modifiers: mods,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::Down(at, button) => {
@@ -384,10 +392,12 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             key: key(name),
                             modifiers: m,
                             repeat: false,
+                            time_stamp: Instant::now(),
                         });
                         keys_up.write(KeyReleased {
                             key: key(name),
                             modifiers: m,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::Click(id) | Step::ClickInside(id) => {
@@ -442,10 +452,12 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             key: Key::Named(k),
                             modifiers: m,
                             repeat: false,
+                            time_stamp: Instant::now(),
                         });
                         keys_up.write(KeyReleased {
                             key: Key::Named(k),
                             modifiers: m,
+                            time_stamp: Instant::now(),
                         });
                     }
                     Step::Number(name, v) => signals.set(name, v),
