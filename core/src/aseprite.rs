@@ -8,15 +8,18 @@
 //!
 //! Import reads RGBA, indexed and grayscale sprites (grayscale opens as
 //! RGBA), normal, group and reference layers, linked cels, the palette, tags
-//! and slices, and the colors of layers, tags and slices. The text and
-//! properties of user data are skipped. What pixl cannot represent (tilemap
-//! layers, the divide blend mode, cel z-index, per-frame slice keys) is
-//! listed in [`AsepriteImport::warnings`].
+//! and slices, and the colors of layers, tags and slices. A reference
+//! layer's first cel opens as a reference image at the cel's own size and
+//! position, scaled to the cel's precise bounds when Aseprite stored them.
+//! The text and properties of user data are skipped. What pixl cannot
+//! represent (tilemap layers, the divide blend mode, cel z-index, per-frame
+//! slice keys, scaled cels on other layers) is listed in
+//! [`AsepriteImport::warnings`].
 //!
 //! Export writes everything Aseprite can hold; [`AsepriteExport::warnings`]
 //! lists what it cannot: layer masks, clipping, alpha locks and the document
-//! background color. In indexed documents a reference layer is reduced to the
-//! palette, since Aseprite stores every cel in the sprite's color mode.
+//! background color. Reference layers are not exported, like everything a
+//! pixl export writes; each one left out is listed.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -30,6 +33,7 @@ use crate::document::{
 use crate::error::Error;
 use crate::geom::{Point, Rect};
 use crate::image::{Raster, TiledImage};
+use crate::reference::ReferencePlace;
 
 const MAGIC: u16 = 0xA5E0;
 const FRAME_MAGIC: u16 = 0xF1FA;
@@ -155,8 +159,8 @@ pub enum ExportWarning {
     AlphaLockDropped { layer: String },
     /// Aseprite has no document background color.
     BackgroundDropped,
-    /// A reference layer in an indexed document was reduced to the palette.
-    ReferenceReduced { layer: String },
+    /// Reference layers are never exported; this one is not saved.
+    ReferenceSkipped { layer: String },
     /// A frame longer than 65535 ms was shortened to 65535 ms.
     DurationClamped { frame: usize },
     /// Aseprite has no skeletons; the skeleton layer is not saved.
@@ -178,8 +182,8 @@ impl fmt::Display for ExportWarning {
             ExportWarning::BackgroundDropped => {
                 f.write_str("the document background color is not saved")
             }
-            ExportWarning::ReferenceReduced { layer } => {
-                write!(f, "reference layer \"{layer}\" is saved in palette colors")
+            ExportWarning::ReferenceSkipped { layer } => {
+                write!(f, "reference layer \"{layer}\" is not saved")
             }
             ExportWarning::DurationClamped { frame } => {
                 write!(f, "frame {frame} is saved with a duration of 65535 ms")
@@ -236,6 +240,9 @@ struct AseCel {
     y: i16,
     opacity: u8,
     data: CelData,
+    /// Aseprite's precise bounds of a scaled cel: x, y, width, height in
+    /// sprite pixels.
+    precise: Option<[f64; 4]>,
 }
 
 #[derive(Clone, Copy)]
@@ -439,11 +446,19 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
                         y,
                         opacity,
                         data,
+                        precise: None,
                     });
                 }
                 CHUNK_CEL_EXTRA => {
                     if c.u32()? & 1 != 0 {
-                        warn(&mut warnings, ImportWarning::CelScaleIgnored);
+                        // 16.16 fixed point; the chunk follows its cel.
+                        let mut fixed = [0.0; 4];
+                        for v in &mut fixed {
+                            *v = f64::from(c.i32()?) / 65536.0;
+                        }
+                        if let Some(cel) = cels.last_mut() {
+                            cel.precise = Some(fixed);
+                        }
                     }
                 }
                 CHUNK_TAGS => {
@@ -644,19 +659,20 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
             (d, _) => d.rgba(px).to_u32(),
         }
     };
-    let paint = |raster: &mut Raster, cel: &AseCel| {
+    // Writes a cel's pixels with its top-left at `at`, cut to the raster.
+    let paint = |raster: &mut Raster, cel: &AseCel, at: (i32, i32)| {
         let CelData::Image { w, h, pixels } = &cel.data else {
             return;
         };
         let bpp = depth.bytes();
         let (cw, ch) = (raster.width() as i32, raster.height() as i32);
         for row in 0..*h as i32 {
-            let y = cel.y as i32 + row;
+            let y = at.1 + row;
             if y < 0 || y >= ch {
                 continue;
             }
             for col in 0..*w as i32 {
-                let x = cel.x as i32 + col;
+                let x = at.0 + col;
                 if x < 0 || x >= cw {
                     continue;
                 }
@@ -690,14 +706,46 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
         let kind = match l.kind {
             LAYER_GROUP => NewLayer::Group,
             LAYER_IMAGE if l.flags & LAYER_REFERENCE != 0 => {
-                let mut raster = Raster::Rgba(TiledImage::new(width, height, Rgba::TRANSPARENT));
-                if let Some(cel) = image_cel(i) {
-                    paint(&mut raster, cel);
-                }
-                let Raster::Rgba(img) = raster else {
-                    unreachable!()
+                // The cel at its own size, where Aseprite placed it.
+                let (image, place) = match image_cel(i) {
+                    Some(
+                        cel @ AseCel {
+                            data: CelData::Image { w, h, .. },
+                            ..
+                        },
+                    ) if *w > 0
+                        && *h > 0
+                        && u32::from(*w) <= crate::document::MAX_SIZE
+                        && u32::from(*h) <= crate::document::MAX_SIZE =>
+                    {
+                        let (w, h) = (u32::from(*w), u32::from(*h));
+                        let mut raster = Raster::Rgba(TiledImage::new(w, h, Rgba::TRANSPARENT));
+                        paint(&mut raster, cel, (0, 0));
+                        let Raster::Rgba(img) = raster else {
+                            unreachable!()
+                        };
+                        let (x, y, pw, ph) = match cel.precise {
+                            Some([x, y, pw, ph]) if pw > 0.0 && ph > 0.0 => (x, y, pw, ph),
+                            _ => (
+                                f64::from(cel.x),
+                                f64::from(cel.y),
+                                f64::from(w),
+                                f64::from(h),
+                            ),
+                        };
+                        let place = ReferencePlace {
+                            center: (x + pw / 2.0, y + ph / 2.0),
+                            scale: (pw / f64::from(w), ph / f64::from(h)),
+                            rotation: 0.0,
+                        };
+                        (img, place)
+                    }
+                    _ => (
+                        TiledImage::new(width, height, Rgba::TRANSPARENT),
+                        ReferencePlace::top_left((width, height)),
+                    ),
                 };
-                NewLayer::Reference(img)
+                NewLayer::Reference { image, place }
             }
             LAYER_IMAGE => NewLayer::Raster,
             _ => {
@@ -763,7 +811,14 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
         let Some(id) = raster_layer(&doc, cel.layer) else {
             continue;
         };
-        paint(doc.target(id, cel.frame)?.raster, cel);
+        if cel.precise.is_some() {
+            warn(&mut warnings, ImportWarning::CelScaleIgnored);
+        }
+        paint(
+            doc.target(id, cel.frame)?.raster,
+            cel,
+            (cel.x.into(), cel.y.into()),
+        );
         if cel.opacity != 255 {
             doc.set_cel_opacity(id, cel.frame, cel.opacity)?;
         }
@@ -852,13 +907,12 @@ fn color_user_data(out: &mut Vec<Vec<u8>>, color: Option<Rgba>) {
 }
 
 /// One cel's pixels cropped to `bounds`, in the sprite's pixel format.
-fn cel_pixels(raster: &Raster, bounds: Rect, to_index: Option<&dyn Fn(Rgba) -> u8>) -> Vec<u8> {
+fn cel_pixels(raster: &Raster, bounds: Rect) -> Vec<u8> {
     let mut out = Vec::new();
     for p in bounds.points() {
         let raw = raster.get_raw(p.x, p.y);
-        match (raster, to_index) {
-            (Raster::Rgba(_), Some(f)) => out.push(f(Rgba::from_u32(raw))),
-            (Raster::Rgba(_), None) => out.extend_from_slice(&raw.to_le_bytes()),
+        match raster {
+            Raster::Rgba(_) => out.extend_from_slice(&raw.to_le_bytes()),
             _ => out.push(raw as u8),
         }
     }
@@ -895,8 +949,8 @@ enum CelBody {
     Image(Rect, Vec<u8>),
 }
 
-/// Encodes a document as an Aseprite file. Reference layers are kept:
-/// Aseprite has them too.
+/// Encodes a document as an Aseprite file. Reference layers are left out,
+/// each listed in the warnings.
 pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
     let frames = doc.frame_count();
     if frames > u16::MAX as usize {
@@ -908,28 +962,27 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
     let indexed = doc.mode() == ColorMode::Indexed;
     let ti = doc.transparent_index();
     let palette = doc.palette();
-    let to_index = |c: Rgba| {
-        if c.a == 0 {
-            ti
-        } else {
-            palette.nearest(c, Some(ti))
-        }
-    };
     if let Background::Color(_) = doc.background() {
         warnings.push(ExportWarning::BackgroundDropped);
     }
 
     // Aseprite has no skeletons: the posed frames export as pixels, the rig
-    // stays behind.
+    // stays behind. References are never exported.
     let mut layers = doc.walk();
-    layers.retain(|(_, l)| {
-        let rig = matches!(l.kind, LayerKind::Skeleton { .. });
-        if rig {
+    layers.retain(|(_, l)| match l.kind {
+        LayerKind::Skeleton { .. } => {
             warnings.push(ExportWarning::SkeletonDropped {
                 layer: l.props.name.clone(),
             });
+            false
         }
-        !rig
+        LayerKind::Reference { .. } => {
+            warnings.push(ExportWarning::ReferenceSkipped {
+                layer: l.props.name.clone(),
+            });
+            false
+        }
+        _ => true,
     });
     let mut per_frame: Vec<Vec<Vec<u8>>> = vec![Vec::new(); frames];
     {
@@ -961,16 +1014,7 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
             let kind = match &l.kind {
                 LayerKind::Group { .. } => LAYER_GROUP,
                 // Filtered out above.
-                LayerKind::Skeleton { .. } => continue,
-                LayerKind::Reference { .. } => {
-                    flags |= LAYER_REFERENCE;
-                    if indexed {
-                        warnings.push(ExportWarning::ReferenceReduced {
-                            layer: p.name.clone(),
-                        });
-                    }
-                    LAYER_IMAGE
-                }
+                LayerKind::Skeleton { .. } | LayerKind::Reference { .. } => continue,
                 LayerKind::Raster { mask, .. } => {
                     if mask.is_some() {
                         warnings.push(ExportWarning::MaskDropped {
@@ -1082,7 +1126,7 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
                                 written.insert(cel.image, None);
                                 continue;
                             }
-                            let px = cel_pixels(raster, b, None);
+                            let px = cel_pixels(raster, b);
                             cel_chunk(
                                 out,
                                 index,
@@ -1095,29 +1139,7 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
                     }
                 }
             }
-            LayerKind::Reference { image } => {
-                let raster = &doc.images[image];
-                let b = raster.content_bounds();
-                if b.is_empty() {
-                    continue;
-                }
-                let px = if indexed {
-                    cel_pixels(raster, b, Some(&to_index))
-                } else {
-                    cel_pixels(raster, b, None)
-                };
-                cel_chunk(
-                    &mut per_frame[0],
-                    index,
-                    Point::new(b.x, b.y),
-                    255,
-                    CelBody::Image(b, px),
-                );
-                for out in per_frame.iter_mut().skip(1) {
-                    cel_chunk(out, index, Point::new(b.x, b.y), 255, CelBody::Linked(0));
-                }
-            }
-            LayerKind::Group { .. } | LayerKind::Skeleton { .. } => {}
+            LayerKind::Group { .. } | LayerKind::Skeleton { .. } | LayerKind::Reference { .. } => {}
         }
     }
 
@@ -1210,10 +1232,10 @@ mod tests {
                         );
                     }
                 }
-                LayerKind::Reference { image } => {
+                LayerKind::Reference { image, place } => {
                     let r = &d.images[image];
                     let px: Vec<u32> = r.bounds().points().map(|p| r.get_raw(p.x, p.y)).collect();
-                    out += &format!("  reference {:x}\n", fnv(&px));
+                    out += &format!("  reference {:x} at {place:?}\n", fnv(&px));
                 }
                 LayerKind::Group { .. } | LayerKind::Skeleton { .. } => {}
             }
@@ -1300,10 +1322,17 @@ mod tests {
             p.opacity = 200;
         })
         .unwrap();
-        let mut reference = TiledImage::new(40, 30, Rgba::TRANSPARENT);
+        let mut reference = TiledImage::new(400, 30, Rgba::TRANSPARENT);
         reference.set(5, 6, d.palette().get(4));
-        d.add_layer(NewLayer::Reference(reference), "ref", Placement::default())
-            .unwrap();
+        d.add_layer(
+            NewLayer::Reference {
+                image: reference,
+                place: ReferencePlace::fitted((400, 30), (d.width(), d.height())),
+            },
+            "ref",
+            Placement::default(),
+        )
+        .unwrap();
         d.tags_mut().push(Tag {
             name: "walk".into(),
             from: 0,
@@ -1334,17 +1363,19 @@ mod tests {
     #[test]
     fn round_trips_layers_cels_tags_and_slices() {
         for mode in [ColorMode::Rgba, ColorMode::Indexed] {
-            let d = sample(mode);
+            let mut d = sample(mode);
             let out = export_aseprite(&d).unwrap();
-            let expected = match mode {
-                ColorMode::Rgba => vec![],
-                ColorMode::Indexed => vec![ExportWarning::ReferenceReduced {
+            assert_eq!(
+                out.warnings,
+                vec![ExportWarning::ReferenceSkipped {
                     layer: "ref".into(),
-                }],
-            };
-            assert_eq!(out.warnings, expected);
+                }]
+            );
             let back = import_aseprite(&out.bytes).unwrap();
             assert!(back.warnings.is_empty(), "{:?}", back.warnings);
+            // Everything but the reference comes back.
+            let reference = d.layers().last().unwrap().id;
+            d.remove_layer(reference).unwrap();
             assert_eq!(summary(&back.document), summary(&d), "{mode:?}");
         }
     }
@@ -1398,6 +1429,9 @@ mod tests {
             w,
             vec![
                 ExportWarning::BackgroundDropped,
+                ExportWarning::ReferenceSkipped {
+                    layer: "ref".into()
+                },
                 ExportWarning::SkeletonDropped {
                     layer: "rig".into()
                 },
@@ -1409,9 +1443,6 @@ mod tests {
                 },
                 ExportWarning::AlphaLockDropped {
                     layer: "Layer 1".into()
-                },
-                ExportWarning::ReferenceReduced {
-                    layer: "ref".into()
                 },
                 ExportWarning::DurationClamped { frame: 1 },
             ]
@@ -1508,6 +1539,93 @@ mod tests {
                     layer: "tiles".into()
                 },
             ]
+        );
+    }
+
+    /// A one-frame RGBA sprite of `chunks` (layers and cels, bottom first).
+    fn sprite(width: u16, height: u16, chunks: &[Vec<u8>]) -> Vec<u8> {
+        let mut f = Writer::new();
+        f.u32(0);
+        f.u16(MAGIC);
+        f.u16(1);
+        f.u16(width);
+        f.u16(height);
+        f.u16(32);
+        f.u32(HEADER_OPACITY_VALID);
+        f.u16(100);
+        f.zeros(8 + 4 + 2);
+        f.u8(1);
+        f.u8(1);
+        f.zeros(8 + 84);
+        f.u32(16 + chunks.iter().map(Vec::len).sum::<usize>() as u32);
+        f.u16(FRAME_MAGIC);
+        f.u16(chunks.len() as u16);
+        f.u16(100);
+        f.zeros(2);
+        f.u32(0);
+        for c in chunks {
+            f.bytes(c);
+        }
+        f.buf
+    }
+
+    #[test]
+    fn a_reference_layer_opens_at_its_own_size_and_precise_bounds() {
+        // An 8x8 sprite with a reference layer whose 20x10 cel Aseprite
+        // scaled into a 4x2 box at (1.5, 3).
+        let mut chunks = Vec::new();
+        let mut w = Writer::new();
+        w.u16(LAYER_VISIBLE | LAYER_EDITABLE | LAYER_REFERENCE);
+        w.u16(LAYER_IMAGE);
+        w.u16(0);
+        w.zeros(4);
+        w.u16(0);
+        w.u8(255);
+        w.zeros(3);
+        ase_string(&mut w, "photo");
+        chunk(&mut chunks, CHUNK_LAYER, w);
+        let mut w = Writer::new();
+        w.u16(0);
+        w.i16(1);
+        w.i16(3);
+        w.u8(255);
+        w.u16(CEL_RAW);
+        w.i16(0);
+        w.zeros(5);
+        w.u16(20);
+        w.u16(10);
+        for i in 0..200u32 {
+            w.bytes(&[i as u8, 0, 0, 255]);
+        }
+        chunk(&mut chunks, CHUNK_CEL, w);
+        let mut w = Writer::new();
+        w.u32(1);
+        for v in [1.5, 3.0, 4.0, 2.0] {
+            w.i32((v * 65536.0) as i32);
+        }
+        w.zeros(16);
+        chunk(&mut chunks, CHUNK_CEL_EXTRA, w);
+        let imp = import_aseprite(&sprite(8, 8, &chunks)).unwrap();
+        assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
+        let d = &imp.document;
+        let id = d.layers().last().unwrap().id;
+        let (img, place) = d.reference(id).unwrap();
+        assert_eq!((img.width(), img.height()), (20, 10), "the cel's own size");
+        assert_eq!(img.get(19, 9), Rgba::new(199, 0, 0, 255));
+        assert_eq!(place.scale, (0.2, 0.2));
+        assert_eq!(place.center, (3.5, 4.0));
+        // Without precise bounds it opens one to one where the cel was.
+        let unscaled = &chunks[..2];
+        let imp = import_aseprite(&sprite(8, 8, unscaled)).unwrap();
+        let d = &imp.document;
+        let (_, place) = d.reference(d.layers().last().unwrap().id).unwrap();
+        assert_eq!(
+            place,
+            ReferencePlace {
+                center: (11.0, 8.0),
+                scale: (1.0, 1.0),
+                rotation: 0.0,
+            }
         );
     }
 

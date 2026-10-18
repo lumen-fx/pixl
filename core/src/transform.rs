@@ -8,6 +8,7 @@ use crate::document::{Document, LayerId};
 use crate::error::Error;
 use crate::geom::{Point, Rect};
 use crate::image::Raster;
+use crate::reference::ReferencePlace;
 use crate::rig::{Region, Vec2};
 
 /// A dense row-major buffer of raw pixel values (see [`Raster::get_raw`]).
@@ -656,7 +657,9 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
             }
         }
     };
-    for raster in doc.images.values_mut() {
+    // References keep their pixels: their place follows the canvas instead.
+    let refs = doc.reference_images();
+    for (_, raster) in doc.images.iter_mut().filter(|(id, _)| !refs.contains(id)) {
         let px = Pixels::from_raster(raster, raster.bounds());
         let out = match op {
             CanvasTransform::FlipH => px.flip_h(),
@@ -740,14 +743,32 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
     for rig in doc.rigs_mut() {
         rig.map(point, flip, turn, region);
     }
+    let canvas = match op {
+        CanvasTransform::FlipH => Affine::scale(-1.0, 1.0).then(&Affine::translate(fw, 0.0)),
+        CanvasTransform::FlipV => Affine::scale(1.0, -1.0).then(&Affine::translate(0.0, fh)),
+        CanvasTransform::Rotate90(q) => match q.rem_euclid(4) {
+            0 => Affine::IDENTITY,
+            1 => Affine::rotate(90.0).then(&Affine::translate(fh, 0.0)),
+            2 => Affine::rotate(180.0).then(&Affine::translate(fw, fh)),
+            _ => Affine::rotate(270.0).then(&Affine::translate(0.0, fw)),
+        },
+        CanvasTransform::Scale(sw, sh, _) => Affine::scale(sw as f64 / fw, sh as f64 / fh),
+    };
+    doc.for_each_reference(|size, place| {
+        let moved = place.matrix(size).then(&canvas);
+        if let Some(p) = ReferencePlace::from_matrix(&moved, size) {
+            *place = p;
+        }
+    });
     doc.s.width = nw;
     doc.s.height = nh;
     Ok(doc.bounds())
 }
 
 /// Gives the canvas a new size, with what was at the top-left corner now at
-/// `offset` (negative cuts off the left or top). Images, masks and
-/// references all move; what falls outside is cut off, new area is empty.
+/// `offset` (negative cuts off the left or top). Images and masks move;
+/// what falls outside is cut off, new area is empty. References move by
+/// the offset and keep all their pixels.
 /// Slices move too. Run it in a [`crate::History`] transaction with
 /// [`crate::Scope::All`] to make it undoable.
 pub fn resize_canvas(
@@ -763,7 +784,8 @@ pub fn resize_canvas(
     {
         return Err(Error::InvalidSize { width, height });
     }
-    for raster in doc.images.values_mut() {
+    let refs = doc.reference_images();
+    for (_, raster) in doc.images.iter_mut().filter(|(id, _)| !refs.contains(id)) {
         let px = Pixels::from_raster(raster, raster.bounds());
         let mut fresh = match raster {
             Raster::Rgba(i) => Raster::Rgba(crate::image::TiledImage::new(width, height, i.fill())),
@@ -781,6 +803,9 @@ pub fn resize_canvas(
         slice.bounds.y += offset.y;
     }
     let (dx, dy) = (offset.x as f64, offset.y as f64);
+    doc.for_each_reference(|_, place| {
+        place.center = (place.center.0 + dx, place.center.1 + dy);
+    });
     for rig in doc.rigs_mut() {
         rig.map(
             |p| Vec2::new(p.x + dx, p.y + dy),
@@ -1087,5 +1112,49 @@ mod tests {
         let r = d.cel_raster(l, 0).unwrap().unwrap();
         assert_eq!(r.content_bounds(), Rect::new(0, 0, 2, 2));
         assert!(transform_canvas(&mut d, CanvasTransform::Scale(0, 8, Resample::Nearest)).is_err());
+    }
+
+    #[test]
+    fn canvas_edits_move_references_and_keep_their_pixels() {
+        use crate::document::{NewLayer, Placement};
+        let mut d = Document::new(64, 32, ColorMode::Rgba).unwrap();
+        let mut img = crate::image::TiledImage::new(400, 300, Rgba::TRANSPARENT);
+        img.set(399, 299, Rgba::WHITE);
+        let place = ReferencePlace {
+            center: (20.0, 10.0),
+            scale: (0.1, 0.1),
+            rotation: 30.0,
+        };
+        let r = d
+            .add_layer(
+                NewLayer::Reference { image: img, place },
+                "photo",
+                Placement::default(),
+            )
+            .unwrap();
+        // Where the image's bottom-right corner lands on the canvas.
+        let corner = |d: &Document| {
+            let (img, p) = d.reference(r).unwrap();
+            assert_eq!((img.width(), img.height()), (400, 300), "full size kept");
+            assert_eq!(img.get(399, 299), Rgba::WHITE);
+            p.matrix((400, 300)).apply(400.0, 300.0)
+        };
+        let near =
+            |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6;
+        let c0 = corner(&d);
+        resize_canvas(&mut d, 80, 40, Point::new(5, -2)).unwrap();
+        let c1 = corner(&d);
+        assert!(near(c1, (c0.0 + 5.0, c0.1 - 2.0)));
+        transform_canvas(&mut d, CanvasTransform::FlipH).unwrap();
+        let c2 = corner(&d);
+        assert!(near(c2, (80.0 - c1.0, c1.1)));
+        transform_canvas(&mut d, CanvasTransform::Rotate90(1)).unwrap();
+        let c3 = corner(&d);
+        assert!(near(c3, (40.0 - c2.1, c2.0)));
+        transform_canvas(&mut d, CanvasTransform::Scale(80, 160, Resample::Nearest)).unwrap();
+        let c4 = corner(&d);
+        assert!(near(c4, (c3.0 * 2.0, c3.1 * 2.0)));
+        crop(&mut d, Rect::new(10, 10, 20, 20)).unwrap();
+        assert!(near(corner(&d), (c4.0 - 10.0, c4.1 - 10.0)));
     }
 }

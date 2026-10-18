@@ -376,15 +376,22 @@ shows it again; opening another document ends the tutorial. The start screen
 lists Getting started after the rig demo.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
-stores each distinct tile once. Saves are atomic, and autosave keeps a
-recovery copy beside the document. A file from a newer pixl opens in an older
-one when the newer data is optional; what the older version cannot read is
-skipped with a warning.
+stores each distinct tile once. Reference images are embedded at their full
+resolution with their place over the canvas, so a file carries everything it
+shows. Saves are atomic, and autosave keeps a recovery copy beside the
+document. A file from a newer pixl opens in an older one when the newer data
+is optional; what the older version cannot read is skipped with a warning.
+Format 1.2 added full-resolution reference images: a pixl that reads format
+1.1 opens such a file without its references, and references in older files
+open where they were, one image pixel to a canvas pixel.
 
 Aseprite `.ase` and `.aseprite` files open and save as a first-class format:
 layers and groups, linked cels, RGBA and indexed color, the palette, tags and
-slices carry over. What one side cannot hold (pixl's layer masks and clipping,
-Aseprite's tilemaps) is listed as a warning instead of dropped silently.
+slices carry over. An Aseprite reference layer opens as a reference at the
+cel's own size and place. What one side cannot hold (pixl's layer masks and
+clipping, Aseprite's tilemaps) is listed as a warning instead of dropped
+silently. Saving as Aseprite leaves reference layers out, as every export
+does, and lists each one.
 
 Animations export as GIF with each frame's duration. One palette covers the
 whole animation; past 256 colors it is reduced by median cut, without

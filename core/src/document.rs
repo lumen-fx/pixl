@@ -11,6 +11,7 @@ use crate::color::{ColorMode, Palette, Rgba};
 use crate::error::Error;
 use crate::geom::{Point, Rect};
 use crate::image::{Raster, TiledImage};
+use crate::reference::ReferencePlace;
 use crate::rig::Rig;
 
 /// Identifies a layer for the life of a document.
@@ -201,8 +202,13 @@ pub enum LayerKind {
     },
     /// Children composited in isolation, bottom first, then blended as one.
     Group { children: Vec<Layer> },
-    /// An image to trace over; shown in the editor, never exported.
-    Reference { image: ImageId },
+    /// An image to trace over, kept at its own resolution and placed over
+    /// the canvas; the editor shows it, nothing exports it. Its image is
+    /// RGBA, of any size up to [`MAX_SIZE`] a side, and no tool paints on it.
+    Reference {
+        image: ImageId,
+        place: ReferencePlace,
+    },
     /// A rig of bones posing raster layers; draws nothing itself (the
     /// editor shows its bones as an overlay).
     Skeleton { rig: Box<Rig> },
@@ -233,7 +239,10 @@ impl Layer {
 pub enum NewLayer {
     Raster,
     Group,
-    Reference(TiledImage<Rgba>),
+    Reference {
+        image: TiledImage<Rgba>,
+        place: ReferencePlace,
+    },
     Skeleton,
 }
 
@@ -609,15 +618,11 @@ impl Document {
             NewLayer::Skeleton => LayerKind::Skeleton {
                 rig: Box::new(Rig::new(self.s.frames.len())),
             },
-            NewLayer::Reference(img) => {
-                if img.width() != self.s.width || img.height() != self.s.height {
-                    return Err(Error::InvalidSize {
-                        width: img.width(),
-                        height: img.height(),
-                    });
-                }
+            NewLayer::Reference { image, place } => {
+                place.check()?;
                 LayerKind::Reference {
-                    image: self.alloc_image(Raster::Rgba(img)),
+                    image: self.alloc_image(Raster::Rgba(image)),
+                    place,
                 }
             }
         };
@@ -708,13 +713,74 @@ impl Document {
                     used.extend(cels.iter().flatten().map(|c| c.image));
                     used.extend(mask.map(|m| m.image));
                 }
-                LayerKind::Reference { image } => {
+                LayerKind::Reference { image, .. } => {
                     used.insert(*image);
                 }
                 LayerKind::Group { .. } | LayerKind::Skeleton { .. } => {}
             }
         }
         self.images.retain(|id, _| used.contains(id));
+    }
+
+    // ---- references ----
+
+    /// A reference layer's image and place.
+    pub fn reference(&self, layer: LayerId) -> Result<(&TiledImage<Rgba>, ReferencePlace), Error> {
+        match &self.layer(layer).ok_or(Error::LayerNotFound(layer))?.kind {
+            LayerKind::Reference { image, place } => match self.images.get(image) {
+                Some(Raster::Rgba(img)) => Ok((img, *place)),
+                _ => Err(Error::NotReference(layer)),
+            },
+            _ => Err(Error::NotReference(layer)),
+        }
+    }
+
+    /// Moves, scales or turns a reference layer's image. A reference paints
+    /// none of the document's pixels, so no canvas area changes. Refused
+    /// when the layer or a group holding it locks position.
+    pub fn set_reference_place(&mut self, layer: LayerId, to: ReferencePlace) -> Result<(), Error> {
+        to.check()?;
+        let locked = self.effective_locks(layer)?.position;
+        match &mut self
+            .layer_mut(layer)
+            .ok_or(Error::LayerNotFound(layer))?
+            .kind
+        {
+            LayerKind::Reference { place, .. } => {
+                if locked {
+                    return Err(Error::Locked(layer));
+                }
+                *place = to;
+                Ok(())
+            }
+            _ => Err(Error::NotReference(layer)),
+        }
+    }
+
+    /// Every reference layer's place, for whole-canvas edits that move
+    /// them all.
+    pub(crate) fn for_each_reference(
+        &mut self,
+        mut f: impl FnMut((u32, u32), &mut ReferencePlace),
+    ) {
+        fn go(
+            layers: &mut [Layer],
+            images: &BTreeMap<ImageId, Raster>,
+            f: &mut dyn FnMut((u32, u32), &mut ReferencePlace),
+        ) {
+            for l in layers {
+                match &mut l.kind {
+                    LayerKind::Reference { image, place } => {
+                        if let Some(r) = images.get(image) {
+                            f((r.width(), r.height()), place);
+                        }
+                    }
+                    LayerKind::Group { children } => go(children, images, f),
+                    _ => {}
+                }
+            }
+        }
+        go(&mut self.s.layers, &self.images, &mut f);
     }
 
     // ---- skeletons ----
@@ -1160,7 +1226,7 @@ impl Document {
         self.walk()
             .into_iter()
             .filter_map(|(_, l)| match l.kind {
-                LayerKind::Reference { image } => Some(image),
+                LayerKind::Reference { image, .. } => Some(image),
                 _ => None,
             })
             .collect()
@@ -1391,17 +1457,54 @@ mod tests {
         d.mask_target(id).unwrap().raster.set_raw(3, 3, 0);
         d.remove_layer_mask(id).unwrap();
         assert!(d.image(m).is_none());
+        // A reference keeps its own size, whatever the canvas's.
+        let place = ReferencePlace::top_left((300, 20));
         let r = d
             .add_layer(
-                NewLayer::Reference(TiledImage::new(100, 80, Rgba::WHITE)),
+                NewLayer::Reference {
+                    image: TiledImage::new(300, 20, Rgba::WHITE),
+                    place,
+                },
                 "ref",
                 Placement::default(),
             )
             .unwrap();
         assert!(matches!(d.target(r, 0), Err(Error::NotRaster(_))));
+        let (img, at) = d.reference(r).unwrap();
+        assert_eq!((img.width(), img.height(), at), (300, 20, place));
+        assert_eq!(d.reference(id), Err(Error::NotReference(id)));
+        let moved = ReferencePlace {
+            center: (5.0, 6.0),
+            scale: (0.25, 0.25),
+            rotation: 45.0,
+        };
+        d.set_reference_place(r, moved).unwrap();
+        assert_eq!(d.reference(r).unwrap().1, moved);
+        assert_eq!(
+            d.set_reference_place(id, moved),
+            Err(Error::NotReference(id))
+        );
+        assert_eq!(
+            d.set_reference_place(
+                r,
+                ReferencePlace {
+                    scale: (0.0, 1.0),
+                    ..moved
+                }
+            ),
+            Err(Error::InvalidPlace)
+        );
+        d.update_layer(r, |p| p.locks.position = true).unwrap();
+        assert_eq!(d.set_reference_place(r, place), Err(Error::Locked(r)));
         assert!(
             d.add_layer(
-                NewLayer::Reference(TiledImage::new(5, 5, Rgba::WHITE)),
+                NewLayer::Reference {
+                    image: TiledImage::new(5, 5, Rgba::WHITE),
+                    place: ReferencePlace {
+                        scale: (f64::INFINITY, 1.0),
+                        ..place
+                    },
+                },
                 "bad",
                 Placement::default()
             )

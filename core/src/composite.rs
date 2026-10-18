@@ -20,11 +20,11 @@ use crate::document::{Background, BlendMode, Document, Layer, LayerKind};
 use crate::geom::Rect;
 use crate::image::{Raster, TILE_SIZE, TiledImage};
 
-/// What a composite includes.
+/// What a composite includes. Reference layers never take part: the
+/// editor draws them over its own view of the composite, and nothing
+/// exports them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompositeOptions {
-    /// Show reference layers. The editor view does; exports do not.
-    pub include_reference: bool,
     /// Start from the document background color instead of transparency.
     pub background: bool,
     /// Ghosts of neighboring frames.
@@ -32,9 +32,8 @@ pub struct CompositeOptions {
 }
 
 impl CompositeOptions {
-    /// What an export writes: no reference layers, no onion skin.
+    /// What an export writes: the background, no onion skin.
     pub const EXPORT: CompositeOptions = CompositeOptions {
-        include_reference: false,
         background: true,
         onion: None,
     };
@@ -277,7 +276,6 @@ struct Ctx<'a> {
     doc: &'a Document,
     frame: usize,
     rect: Rect,
-    include_reference: bool,
 }
 
 /// How a layer's pixels reach the band: color plus coverage per pixel.
@@ -354,9 +352,15 @@ fn composite_layers(ctx: &Ctx, layers: &[Layer], buf: &mut [Px]) {
     let palette = doc.palette();
     let ti = doc.transparent_index();
     let n = buf.len();
+    // References are not art: they neither paint nor take part in a
+    // clipping chain.
+    let layers: Vec<&Layer> = layers
+        .iter()
+        .filter(|l| !matches!(l.kind, LayerKind::Reference { .. }))
+        .collect();
     // Coverage of the current clip base, when a clipped layer follows it.
     let mut clip_base: Option<Vec<f32>> = None;
-    for (i, layer) in layers.iter().enumerate() {
+    for (i, &layer) in layers.iter().enumerate() {
         let next_clips = layers.get(i + 1).is_some_and(|l| l.props.clip);
         let p = &layer.props;
         let clip = if p.clip { clip_base.as_deref() } else { None };
@@ -416,19 +420,7 @@ fn composite_layers(ctx: &Ctx, layers: &[Layer], buf: &mut [Px]) {
                     }
                 }
             }
-            LayerKind::Skeleton { .. } => {}
-            LayerKind::Reference { image } => {
-                if ctx.include_reference
-                    && shown
-                    && let Some(img) = doc.image(*image)
-                {
-                    sample_image(img, palette, ti, rect, |idx, c| {
-                        let mut s = Px::from_rgba(c);
-                        s.a *= opacity * clip.map_or(1.0, |b| b[idx]);
-                        blend_px(&mut buf[idx], s, p.blend);
-                    });
-                }
-            }
+            LayerKind::Skeleton { .. } | LayerKind::Reference { .. } => {}
         }
         if !p.clip {
             clip_base = coverage.take();
@@ -489,12 +481,7 @@ fn ghost_band(ctx: &Ctx, onion: &OnionSkin) -> Vec<Px> {
 
 fn composite_band(doc: &Document, frame: usize, rect: Rect, opts: &CompositeOptions) -> Vec<Px> {
     let n = rect.area() as usize;
-    let ctx = Ctx {
-        doc,
-        frame,
-        rect,
-        include_reference: opts.include_reference,
-    };
+    let ctx = Ctx { doc, frame, rect };
     let bg = background_px(doc, opts);
     let Some(onion) = &opts.onion else {
         let mut buf = vec![bg; n];
@@ -544,7 +531,6 @@ pub fn composite_ghosts(
     frame: usize,
     rect: Rect,
     onion: &OnionSkin,
-    include_reference: bool,
     threads: usize,
 ) -> Vec<Rgba> {
     in_bands(rect, threads, |band| {
@@ -552,7 +538,6 @@ pub fn composite_ghosts(
             doc,
             frame,
             rect: band,
-            include_reference,
         };
         ghost_band(&ctx, onion)
     })
@@ -854,17 +839,42 @@ mod tests {
             Rgba::TRANSPARENT
         );
         d.add_layer(
-            NewLayer::Reference(TiledImage::new(4, 4, BLUE)),
+            NewLayer::Reference {
+                image: TiledImage::new(4, 4, BLUE),
+                place: crate::reference::ReferencePlace::top_left((4, 4)),
+            },
             "ref",
             Placement::default(),
         )
         .unwrap();
-        assert_eq!(px(&d, 1, 0), Rgba::WHITE, "exports skip references");
-        let view = CompositeOptions {
-            include_reference: true,
-            ..CompositeOptions::EXPORT
-        };
-        assert_eq!(composite(&d, 0, Rect::pixel(1, 0), &view)[0], BLUE);
+        assert_eq!(px(&d, 1, 0), Rgba::WHITE, "a composite skips references");
+    }
+
+    #[test]
+    fn a_reference_between_a_clip_base_and_its_clipped_layer_changes_nothing() {
+        let mut d = Document::new(4, 4, ColorMode::Rgba).unwrap();
+        let base = d.layers()[0].id;
+        paint(&mut d, base, 0, 0, 0, RED);
+        let top = d
+            .add_layer(NewLayer::Raster, "top", Placement::default())
+            .unwrap();
+        paint(&mut d, top, 0, 0, 0, BLUE);
+        paint(&mut d, top, 0, 1, 0, BLUE);
+        d.update_layer(top, |p| p.clip = true).unwrap();
+        let before = composite_frame(&d, 0, &CompositeOptions::EXPORT);
+        d.add_layer(
+            NewLayer::Reference {
+                image: TiledImage::new(4, 4, Rgba::WHITE),
+                place: crate::reference::ReferencePlace::top_left((4, 4)),
+            },
+            "ref",
+            Placement {
+                parent: None,
+                index: Some(1),
+            },
+        )
+        .unwrap();
+        assert_eq!(composite_frame(&d, 0, &CompositeOptions::EXPORT), before);
     }
 
     #[test]
@@ -900,7 +910,7 @@ mod tests {
         assert_eq!(row[2], Rgba::WHITE, "the current frame");
         assert_eq!(row[3], Rgba::new(0, 0, 255, 200), "tinted later frame");
         let onion = opts.onion.as_ref().unwrap();
-        let ghosts = composite_ghosts(&d, 2, Rect::new(0, 0, 4, 1), onion, false, 2);
+        let ghosts = composite_ghosts(&d, 2, Rect::new(0, 0, 4, 1), onion, 2);
         assert_eq!(ghosts[0], row[0]);
         assert_eq!(ghosts[1], row[1]);
         assert_eq!(ghosts[2], Rgba::TRANSPARENT, "the frame itself is left out");

@@ -274,7 +274,7 @@ fn add_reference(e: &mut pixl::Editor) {
         .raster
         .set_raw(2, 2, Rgba::opaque(0, 0, 255).to_u32());
     std::fs::write(&path, pixl_core::io::export_frame_png(&src, 0, 1).unwrap()).unwrap();
-    let img = pixl::layers::reference_image(&path, (16, 16)).unwrap();
+    let img = pixl::layers::reference_image(&path).unwrap();
     e.add_reference(img, "ref".into());
 }
 

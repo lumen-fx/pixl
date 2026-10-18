@@ -30,8 +30,8 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::{
     BlendMode, CompositeOptions, Error, ImageId, LayerId, LayerKind, LayerProps, Locks, NewLayer,
-    Placement, Rect, Rgba, Scope, Target, TiledImage, ToolContext, composite_frame, edit_cel,
-    edit_mask,
+    Placement, Rect, ReferencePlace, Rgba, Scope, Target, TiledImage, ToolContext, composite_frame,
+    edit_cel, edit_mask,
 };
 
 use pixl_core::history::Transaction;
@@ -246,11 +246,17 @@ impl Editor {
     }
 
     /// Adds an image as a reference layer above the active layer, half
-    /// transparent, for tracing over. It is never exported.
+    /// transparent, for tracing over. It keeps its full resolution, sits in
+    /// the middle of the canvas scaled down to fit inside it, and is never
+    /// exported.
     pub fn add_reference(&mut self, image: TiledImage<Rgba>, name: String) {
         let at = self.placement_above(self.layer);
+        let place = ReferencePlace::fitted(
+            (image.width(), image.height()),
+            (self.doc.width(), self.doc.height()),
+        );
         if let Some(id) = self.layer_edit("Reference image", |doc| {
-            let id = doc.add_layer(NewLayer::Reference(image), name, at)?;
+            let id = doc.add_layer(NewLayer::Reference { image, place }, name, at)?;
             doc.update_layer(id, |p| p.opacity = 128)?;
             Ok(id)
         }) {
@@ -332,26 +338,13 @@ fn mask_of(doc: &pixl_core::Document, id: LayerId) -> Option<pixl_core::LayerMas
     }
 }
 
-/// An image read from a file, fitted to `size`: its first frame placed at
-/// the top left, cut where it is larger and transparent where it is
-/// smaller.
-pub fn reference_image(
-    path: &std::path::Path,
-    size: (u32, u32),
-) -> std::result::Result<TiledImage<Rgba>, String> {
+/// The first frame of an image read from a file, at its full size: what a
+/// reference layer shows.
+pub fn reference_image(path: &std::path::Path) -> std::result::Result<TiledImage<Rgba>, String> {
     let opened = crate::files::read_document(path)?;
     let src = &opened.doc;
     let px = composite_frame(src, 0, &CompositeOptions::EXPORT);
-    let mut img = TiledImage::new(size.0, size.1, Rgba::TRANSPARENT);
-    let (w, h) = (src.width().min(size.0), src.height().min(size.1));
-    for y in 0..h {
-        for x in 0..w {
-            let c = px[(y * src.width() + x) as usize];
-            if c.a != 0 {
-                img.set(x as i32, y as i32, c);
-            }
-        }
-    }
+    let mut img = TiledImage::from_pixels(src.width(), src.height(), Rgba::TRANSPARENT, &px);
     img.compact();
     Ok(img)
 }
@@ -1084,8 +1077,7 @@ fn import_reference(commands: &mut Commands) {
                     return;
                 };
                 let mut editor = world.resource_mut::<Editor>();
-                let size = (editor.doc.width(), editor.doc.height());
-                match reference_image(&path, size) {
+                match reference_image(&path) {
                     Ok(img) => {
                         let name = path.file_stem().map_or_else(
                             || "Reference".into(),

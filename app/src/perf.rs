@@ -450,7 +450,7 @@ pub fn document_bytes(doc: &Document) -> u64 {
                 .map(|c| c.image)
                 .chain(mask.map(|m| m.image))
                 .collect(),
-            LayerKind::Reference { image } => vec![*image],
+            LayerKind::Reference { image, .. } => vec![*image],
             _ => Vec::new(),
         };
         for id in ids {

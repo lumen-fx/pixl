@@ -191,8 +191,8 @@ pub fn color_at(editor: &Editor, p: Point) -> Option<Rgba> {
     if !editor.doc.bounds().contains(p.x, p.y) {
         return None;
     }
+    // The art alone: references are not part of the composite.
     let opts = CompositeOptions {
-        include_reference: false,
         background: true,
         onion: None,
     };

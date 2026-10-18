@@ -25,9 +25,13 @@
 //! - `TILE` a run of the tile pool. Every distinct 64x64 tile in the document
 //!   is stored once, keyed by its content, so linked cels, copied frames and
 //!   repeated tiles cost one copy.
-//! - `IMAG` one pool image: its kind, size, fill value, and for every tile
-//!   slot either 0 (empty) or 1 + its tile pool index.
+//! - `IMAG` one pool image of the canvas's size: its kind, size, fill
+//!   value, and for every tile slot either 0 (empty) or 1 + its tile pool
+//!   index.
 //! - `LAYR` the layer tree, bottom first, a group followed by its children.
+//!   Files before 1.2 hold reference layers here, pointing at a canvas-sized
+//!   `IMAG`; they open placed at the top-left, one image pixel to a canvas
+//!   pixel.
 //! - `CELS` which image each raster layer shows on each frame.
 //! - `MASK` layer masks.
 //! - `TAGS` frame tags, `SLCE` slices.
@@ -36,6 +40,12 @@
 //!   edited, the pose library, keyed and generated frames). Skeleton layers
 //!   are left out of `LAYR`, so a 1.0 reader skips them with a warning and
 //!   opens the rest.
+//! - `REFS` (since 1.2) reference layers: each one's place in the layer
+//!   tree, its layer properties, its image at the image's own size (kind,
+//!   size, fill and tile slots into the shared tile pool, as an `IMAG`
+//!   holds them) and where it sits over the canvas (center, scale per axis,
+//!   turn). They are left out of `LAYR` and their images out of `IMAG`, so a
+//!   1.1 reader skips them with a warning and opens the rest.
 //!
 //! Compression is zlib (deflate) through `flate2`: pure Rust, already used by
 //! PNG and needed for Aseprite cels, so pixl carries one codec for all three.
@@ -55,6 +65,7 @@ use crate::document::{
 use crate::error::Error;
 use crate::geom::{Point, Rect};
 use crate::image::{Raster, TILE_AREA, Tile, TileSnap, TiledImage};
+use crate::reference::ReferencePlace;
 use crate::rig::{
     Binding, Bone, BoneId, BonePose, Easing, NamedPose, Pose, PoseKey, Region, Rig, RigFrame, Vec2,
 };
@@ -63,7 +74,7 @@ use crate::rig::{
 pub const SIGNATURE: [u8; 8] = *b"\x89PXL\r\n\x1a\n";
 /// The format version this build writes. It reads every file of the same
 /// major version.
-pub const VERSION: (u16, u16) = (1, 1);
+pub const VERSION: (u16, u16) = (1, 2);
 
 const CRITICAL: u32 = 1;
 const COMPRESSED: u32 = 2;
@@ -326,22 +337,24 @@ fn write_layer(w: &mut Writer, l: &Layer) {
         LayerKind::Raster { .. } => w.u8(KIND_RASTER),
         LayerKind::Group { children } => {
             w.u8(KIND_GROUP);
-            let children: Vec<&Layer> = children.iter().filter(|c| !is_skeleton(c)).collect();
+            let children: Vec<&Layer> = children.iter().filter(|c| in_layr(c)).collect();
             w.u32(children.len() as u32);
             for c in children {
                 write_layer(w, c);
             }
         }
-        LayerKind::Reference { image } => {
-            w.u8(KIND_REFERENCE);
-            w.u32(image.0);
-        }
+        LayerKind::Reference { .. } => unreachable!("references are written in REFS"),
         LayerKind::Skeleton { .. } => unreachable!("skeletons are written in RIGS"),
     }
 }
 
-fn is_skeleton(l: &Layer) -> bool {
-    matches!(l.kind, LayerKind::Skeleton { .. })
+/// Whether a layer is written in `LAYR`: skeletons and references have
+/// chunks of their own, which older readers skip.
+fn in_layr(l: &Layer) -> bool {
+    !matches!(
+        l.kind,
+        LayerKind::Skeleton { .. } | LayerKind::Reference { .. }
+    )
 }
 
 fn write_props(w: &mut Writer, l: &Layer) {
@@ -378,7 +391,7 @@ fn read_f64(r: &mut Reader) -> Result<f64, Error> {
     if v.is_finite() {
         Ok(v)
     } else {
-        Err(corrupt("a rig number is not finite"))
+        Err(corrupt("a stored number is not finite"))
     }
 }
 
@@ -423,15 +436,43 @@ fn read_pose(r: &mut Reader) -> Result<Pose, Error> {
     Ok(pose)
 }
 
-/// Where a skeleton layer sits: its parent group (0 for the root) and its
-/// index among the parent's children.
-fn skeleton_places<'a>(layers: &'a [Layer], parent: u32, out: &mut Vec<(u32, u32, &'a Layer)>) {
+/// Where each layer `pick` takes sits: its parent group (0 for the root)
+/// and its index among the parent's children.
+fn side_places<'a>(
+    layers: &'a [Layer],
+    parent: u32,
+    pick: fn(&Layer) -> bool,
+    out: &mut Vec<(u32, u32, &'a Layer)>,
+) {
     for (i, l) in layers.iter().enumerate() {
-        match &l.kind {
-            LayerKind::Skeleton { .. } => out.push((parent, i as u32, l)),
-            LayerKind::Group { children } => skeleton_places(children, l.id.0, out),
-            _ => {}
+        if pick(l) {
+            out.push((parent, i as u32, l));
         }
+        if let LayerKind::Group { children } = &l.kind {
+            side_places(children, l.id.0, pick, out);
+        }
+    }
+}
+
+/// An image's kind, size, fill and tile slots, as `IMAG` and `REFS` hold
+/// it; its tiles go to the pool.
+fn write_image_body(w: &mut Writer, raster: &Raster, pool: &mut TilePool, out: &mut ChunkWriter) {
+    w.u8(match raster {
+        Raster::Rgba(_) => RASTER_RGBA,
+        Raster::Indexed(_) => RASTER_INDEXED,
+        Raster::Mask(_) => RASTER_MASK,
+    });
+    w.u32(raster.width());
+    w.u32(raster.height());
+    w.u32(raster.fill_raw());
+    for t in 0..raster.tile_count() {
+        let snap = raster.tile_snap(t);
+        let present = matches!(snap, TileSnap::Rgba(Some(_)) | TileSnap::Byte(Some(_)));
+        w.u32(if present {
+            pool.intern(snap, out) + 1
+        } else {
+            0
+        });
     }
 }
 
@@ -627,32 +668,18 @@ pub fn save(doc: &Document, opts: SaveOptions) -> Vec<u8> {
     out.chunk(b"FRMS", true, w.buf);
 
     let mut pool = TilePool::new();
-    for (id, raster) in &doc.images {
+    // Reference images are written with their layers, in REFS.
+    let refs = doc.reference_images();
+    for (id, raster) in doc.images.iter().filter(|(id, _)| !refs.contains(id)) {
         let mut w = Writer::new();
         w.u32(id.0);
-        w.u8(match raster {
-            Raster::Rgba(_) => RASTER_RGBA,
-            Raster::Indexed(_) => RASTER_INDEXED,
-            Raster::Mask(_) => RASTER_MASK,
-        });
-        w.u32(raster.width());
-        w.u32(raster.height());
-        w.u32(raster.fill_raw());
-        for t in 0..raster.tile_count() {
-            let snap = raster.tile_snap(t);
-            let present = matches!(snap, TileSnap::Rgba(Some(_)) | TileSnap::Byte(Some(_)));
-            w.u32(if present {
-                pool.intern(snap, &mut out) + 1
-            } else {
-                0
-            });
-        }
+        write_image_body(&mut w, raster, &mut pool, &mut out);
         pool.flush(&mut out);
         out.chunk(b"IMAG", true, w.buf);
     }
 
     let mut w = Writer::new();
-    let roots: Vec<&Layer> = s.layers.iter().filter(|l| !is_skeleton(l)).collect();
+    let roots: Vec<&Layer> = s.layers.iter().filter(|l| in_layr(l)).collect();
     w.u32(roots.len() as u32);
     for l in roots {
         write_layer(&mut w, l);
@@ -718,7 +745,12 @@ pub fn save(doc: &Document, opts: SaveOptions) -> Vec<u8> {
     out.chunk(b"SLCE", false, w.buf);
 
     let mut places = Vec::new();
-    skeleton_places(&s.layers, 0, &mut places);
+    side_places(
+        &s.layers,
+        0,
+        |l| matches!(l.kind, LayerKind::Skeleton { .. }),
+        &mut places,
+    );
     if !places.is_empty() {
         let mut w = Writer::new();
         w.u32(places.len() as u32);
@@ -731,6 +763,34 @@ pub fn save(doc: &Document, opts: SaveOptions) -> Vec<u8> {
             }
         }
         out.chunk(b"RIGS", false, w.buf);
+    }
+
+    let mut places = Vec::new();
+    side_places(
+        &s.layers,
+        0,
+        |l| matches!(l.kind, LayerKind::Reference { .. }),
+        &mut places,
+    );
+    if !places.is_empty() {
+        let mut w = Writer::new();
+        w.u32(places.len() as u32);
+        for (parent, index, l) in places {
+            let LayerKind::Reference { image, place } = &l.kind else {
+                unreachable!("only references are picked")
+            };
+            w.u32(parent);
+            w.u32(index);
+            write_props(&mut w, l);
+            w.u32(image.0);
+            write_image_body(&mut w, &doc.images[image], &mut pool, &mut out);
+            vec2(&mut w, Vec2::new(place.center.0, place.center.1));
+            vec2(&mut w, Vec2::new(place.scale.0, place.scale.1));
+            f64v(&mut w, place.rotation);
+        }
+        // The images' tiles go before the chunk that points at them.
+        pool.flush(&mut out);
+        out.chunk(b"REFS", false, w.buf);
     }
 
     out.chunk(b"END ", true, Vec::new());
@@ -760,6 +820,8 @@ struct Parts {
     tags: Option<Vec<Tag>>,
     slices: Option<Vec<Slice>>,
     rigs: Option<Vec<(u32, u32, Layer)>>,
+    /// Reference layers with their images, from `REFS`.
+    refs: Option<Vec<(u32, u32, Layer, RawImage)>>,
 }
 
 fn once<T>(slot: &mut Option<T>, value: T, tag: &str) -> Result<(), Error> {
@@ -842,6 +904,10 @@ fn read_tiles(r: &mut Reader, pool: &mut Vec<TileSnap>) -> Result<(), Error> {
 
 fn read_image(r: &mut Reader) -> Result<(ImageId, RawImage), Error> {
     let id = ImageId(r.u32()?);
+    Ok((id, read_image_body(r)?))
+}
+
+fn read_image_body(r: &mut Reader) -> Result<RawImage, Error> {
     let kind = r.u8()?;
     if kind > RASTER_MASK {
         return Err(corrupt(format!("unknown image kind {kind}")));
@@ -857,16 +923,13 @@ fn read_image(r: &mut Reader) -> Result<(ImageId, RawImage), Error> {
         return Err(corrupt("image tile table is truncated"));
     }
     let slots = (0..slots).map(|_| r.u32()).collect::<Result<_, _>>()?;
-    Ok((
-        id,
-        RawImage {
-            kind,
-            width,
-            height,
-            fill,
-            slots,
-        },
-    ))
+    Ok(RawImage {
+        kind,
+        width,
+        height,
+        fill,
+        slots,
+    })
 }
 
 fn read_layer(r: &mut Reader, depth: usize) -> Result<Layer, Error> {
@@ -887,8 +950,11 @@ fn read_layer(r: &mut Reader, depth: usize) -> Result<Layer, Error> {
             }
             LayerKind::Group { children }
         }
+        // A reference of a file before 1.2: its image is the canvas's size,
+        // placed one to one at the top-left once the size is known.
         KIND_REFERENCE => LayerKind::Reference {
             image: ImageId(r.u32()?),
+            place: ReferencePlace::top_left((0, 0)),
         },
         k => return Err(corrupt(format!("unknown layer kind {k}"))),
     };
@@ -1048,6 +1114,39 @@ fn read_chunk_payload(tag: &[u8; 4], r: &mut Reader, parts: &mut Parts) -> Resul
             }
             once(&mut parts.rigs, rigs, "RIGS")?;
         }
+        b"REFS" => {
+            let n = r.count(40)?;
+            let mut refs = Vec::with_capacity(n);
+            for _ in 0..n {
+                let parent = r.u32()?;
+                let index = r.u32()?;
+                let (id, props) = read_props(r)?;
+                let image = ImageId(r.u32()?);
+                let raw = read_image_body(r)?;
+                let center = read_vec2(r)?;
+                let scale = read_vec2(r)?;
+                let rotation = read_f64(r)?;
+                let place = ReferencePlace {
+                    center: (center.x, center.y),
+                    scale: (scale.x, scale.y),
+                    rotation,
+                };
+                if raw.kind != RASTER_RGBA || !place.is_valid() {
+                    return Err(corrupt("a reference layer is damaged"));
+                }
+                refs.push((
+                    parent,
+                    index,
+                    Layer {
+                        id,
+                        props,
+                        kind: LayerKind::Reference { image, place },
+                    },
+                    raw,
+                ));
+            }
+            once(&mut parts.refs, refs, "REFS")?;
+        }
         _ => unreachable!("only known tags reach the payload reader"),
     }
     if !r.is_empty() {
@@ -1059,9 +1158,9 @@ fn read_chunk_payload(tag: &[u8; 4], r: &mut Reader, parts: &mut Parts) -> Resul
     Ok(())
 }
 
-const KNOWN: [&[u8; 4]; 12] = [
+const KNOWN: [&[u8; 4]; 13] = [
     b"HEAD", b"PLTE", b"FRMS", b"TILE", b"IMAG", b"LAYR", b"CELS", b"MASK", b"TAGS", b"SLCE",
-    b"RIGS", b"END ",
+    b"RIGS", b"REFS", b"END ",
 ];
 
 /// Decodes a `.pixl` file. A truncated or corrupt file is an error, never a
@@ -1143,45 +1242,19 @@ fn assemble(parts: Parts) -> Result<Document, Error> {
         if raw.width != s.width || raw.height != s.height {
             return Err(corrupt(format!("image {} has the wrong size", id.0)));
         }
-        let tile = |slot: u32, want: u8| -> Result<Option<&TileSnap>, Error> {
-            if slot == 0 {
-                return Ok(None);
-            }
-            let t = parts
-                .tiles
-                .get(slot as usize - 1)
-                .ok_or_else(|| corrupt("image refers to a missing tile"))?;
-            let kind = match t {
-                TileSnap::Rgba(_) => TILE_RGBA,
-                TileSnap::Byte(_) => TILE_BYTE,
-            };
-            if kind != want {
-                return Err(corrupt("image refers to a tile of another kind"));
-            }
-            Ok(Some(t))
-        };
-        let want = if raw.kind == RASTER_RGBA {
-            TILE_RGBA
-        } else {
-            TILE_BYTE
-        };
-        let mut raster = match raw.kind {
-            RASTER_RGBA => Raster::Rgba(TiledImage::new(
-                raw.width,
-                raw.height,
-                Rgba::from_u32(raw.fill),
-            )),
-            RASTER_INDEXED => {
-                Raster::Indexed(TiledImage::new(raw.width, raw.height, raw.fill as u8))
-            }
-            _ => Raster::Mask(TiledImage::new(raw.width, raw.height, raw.fill as u8)),
-        };
-        for (i, slot) in raw.slots.iter().enumerate() {
-            if let Some(t) = tile(*slot, want)? {
-                raster.restore_tile(i, t);
-            }
+        images.insert(id, build_raster(&raw, &parts.tiles)?);
+    }
+    // Reference images keep their own size.
+    let mut side = Vec::new();
+    for (parent, index, layer, raw) in parts.refs.unwrap_or_default() {
+        if let LayerKind::Reference { image, .. } = layer.kind
+            && images
+                .insert(image, build_raster(&raw, &parts.tiles)?)
+                .is_some()
+        {
+            return Err(corrupt(format!("image {} appears twice", image.0)));
         }
-        images.insert(id, raster);
+        side.push((parent, index, layer));
     }
 
     s.layers = parts.layers.ok_or_else(|| missing("LAYR"))?;
@@ -1190,7 +1263,7 @@ fn assemble(parts: Parts) -> Result<Document, Error> {
         if !ids.insert(l.id) {
             return Err(corrupt(format!("layer id {} appears twice", l.id.0)));
         }
-        if let LayerKind::Reference { image } = l.kind
+        if let LayerKind::Reference { image, .. } = l.kind
             && !matches!(images.get(&image), Some(Raster::Rgba(_)))
         {
             return Err(corrupt("reference layer without an RGBA image"));
@@ -1200,22 +1273,27 @@ fn assemble(parts: Parts) -> Result<Document, Error> {
     fn visit(
         layers: &mut [Layer],
         frames: usize,
+        canvas: (u32, u32),
         f: &mut dyn FnMut(&Layer) -> Result<(), Error>,
     ) -> Result<(), Error> {
         for l in layers {
             f(l)?;
             match &mut l.kind {
                 LayerKind::Raster { cels, .. } => *cels = vec![None; frames],
-                LayerKind::Group { children } => visit(children, frames, f)?,
-                LayerKind::Reference { .. } | LayerKind::Skeleton { .. } => {}
+                LayerKind::Group { children } => visit(children, frames, canvas, f)?,
+                // Only files before 1.2 hold references in LAYR.
+                LayerKind::Reference { place, .. } => *place = ReferencePlace::top_left(canvas),
+                LayerKind::Skeleton { .. } => {}
             }
         }
         Ok(())
     }
-    visit(&mut s.layers, frames, &mut check)?;
-    let mut rigs = parts.rigs.unwrap_or_default();
-    rigs.sort_by_key(|(_, index, _)| *index);
-    for (parent, index, layer) in rigs {
+    visit(&mut s.layers, frames, (s.width, s.height), &mut check)?;
+    // Skeletons and references go back where they were, lowest index first
+    // so each lands among the siblings already placed.
+    side.extend(parts.rigs.unwrap_or_default());
+    side.sort_by_key(|(_, index, _)| *index);
+    for (parent, index, layer) in side {
         check(&layer)?;
         if let LayerKind::Skeleton { rig } = &layer.kind
             && rig.frames().len() != frames
@@ -1238,7 +1316,8 @@ fn assemble(parts: Parts) -> Result<Document, Error> {
                 }
                 None
             }
-            group(&mut s.layers, parent).ok_or_else(|| corrupt("a skeleton's group is missing"))?
+            group(&mut s.layers, parent)
+                .ok_or_else(|| corrupt("the group of a skeleton or reference layer is missing"))?
         };
         let at = (index as usize).min(siblings.len());
         siblings.insert(at, layer);
@@ -1308,6 +1387,41 @@ fn assemble(parts: Parts) -> Result<Document, Error> {
     doc.s.tags = tags;
     doc.s.slices = parts.slices.unwrap_or_default();
     Ok(doc)
+}
+
+/// A pool image from its stored kind, size, fill and tile slots.
+fn build_raster(raw: &RawImage, tiles: &[TileSnap]) -> Result<Raster, Error> {
+    let want = if raw.kind == RASTER_RGBA {
+        TILE_RGBA
+    } else {
+        TILE_BYTE
+    };
+    let mut raster = match raw.kind {
+        RASTER_RGBA => Raster::Rgba(TiledImage::new(
+            raw.width,
+            raw.height,
+            Rgba::from_u32(raw.fill),
+        )),
+        RASTER_INDEXED => Raster::Indexed(TiledImage::new(raw.width, raw.height, raw.fill as u8)),
+        _ => Raster::Mask(TiledImage::new(raw.width, raw.height, raw.fill as u8)),
+    };
+    for (i, &slot) in raw.slots.iter().enumerate() {
+        if slot == 0 {
+            continue;
+        }
+        let t = tiles
+            .get(slot as usize - 1)
+            .ok_or_else(|| corrupt("image refers to a missing tile"))?;
+        let kind = match t {
+            TileSnap::Rgba(_) => TILE_RGBA,
+            TileSnap::Byte(_) => TILE_BYTE,
+        };
+        if kind != want {
+            return Err(corrupt("image refers to a tile of another kind"));
+        }
+        raster.restore_tile(i, t);
+    }
+    Ok(raster)
 }
 
 // ---- files ----
@@ -1478,14 +1592,38 @@ mod tests {
             p.opacity = 128;
         })
         .unwrap();
-        let mut reference = TiledImage::new(130, 70, Rgba::TRANSPARENT);
+        // A reference larger than the canvas, scaled down, turned and
+        // mirrored, inside a group.
+        let mut reference = TiledImage::new(300, 200, Rgba::TRANSPARENT);
         reference.set(9, 9, Rgba::opaque(1, 2, 3));
+        reference.set(299, 199, Rgba::new(4, 5, 6, 7));
         d.add_layer(
-            NewLayer::Reference(reference),
+            NewLayer::Reference {
+                image: reference,
+                place: ReferencePlace {
+                    center: (61.25, -4.5),
+                    scale: (0.375, -0.25),
+                    rotation: 12.5,
+                },
+            },
             "ref",
             Placement {
                 parent: Some(inner),
                 index: Some(0),
+            },
+        )
+        .unwrap();
+        let mut root_ref = TiledImage::new(64, 64, Rgba::TRANSPARENT);
+        root_ref.set(63, 0, Rgba::WHITE);
+        d.add_layer(
+            NewLayer::Reference {
+                image: root_ref,
+                place: ReferencePlace::top_left((64, 64)),
+            },
+            "root ref",
+            Placement {
+                parent: None,
+                index: Some(1),
             },
         )
         .unwrap();
@@ -1754,6 +1892,83 @@ mod tests {
         // A document without skeletons writes no RIGS chunk at all.
         let plain = save(&without, SaveOptions::default());
         assert!(chunks(&plain).iter().all(|(tag, ..)| tag != b"RIGS"));
+    }
+
+    #[test]
+    fn older_readers_skip_references() {
+        // A reader that does not know REFS (as pixl 1.1) skips the chunk and
+        // opens the document without its reference layers.
+        let d = rich(ColorMode::Indexed);
+        let mut bytes = save(&d, SaveOptions::default());
+        let (_, flags, range) = chunks(&bytes)
+            .into_iter()
+            .find(|(tag, ..)| tag == b"REFS")
+            .expect("a REFS chunk");
+        assert_eq!(flags & CRITICAL, 0, "REFS is optional");
+        bytes[range.start - 12..range.start - 8].copy_from_slice(b"REFZ");
+        fix_crc(&mut bytes, range);
+        let loaded = load(&bytes).unwrap();
+        assert_eq!(
+            loaded.warnings,
+            vec![LoadWarning::UnknownChunk { tag: "REFZ".into() }]
+        );
+        let mut without = d.clone();
+        for (_, l) in d.walk() {
+            if matches!(l.kind, LayerKind::Reference { .. }) {
+                without.remove_layer(l.id).unwrap();
+            }
+        }
+        assert_eq!(loaded.document.walk(), without.walk());
+        assert_eq!(loaded.document, without, "no stray reference images");
+        // Reference images are not canvas-sized IMAG chunks, which a 1.1
+        // reader would refuse.
+        let stored = save(&d, SaveOptions { compression: 0 });
+        for (tag, _, p) in chunks(&stored) {
+            if &tag == b"IMAG" {
+                // After the image id and its kind.
+                let at = p.start + 5;
+                let size = |i: usize| u32::from_le_bytes(stored[i..i + 4].try_into().unwrap());
+                assert_eq!((size(at), size(at + 4)), (d.width(), d.height()));
+            }
+        }
+    }
+
+    #[test]
+    fn a_1_1_file_opens_its_references_where_they_were() {
+        // Written by pixl with format 1.1: a raster layer, a group holding a
+        // half-opaque reference, a reference at the root and a skeleton.
+        let bytes = include_bytes!("../tests/data/references-1.1.pixl");
+        assert_eq!(&bytes[8..12], &[1, 0, 1, 0], "format 1.1");
+        let loaded = load(bytes).unwrap();
+        assert!(loaded.warnings.is_empty());
+        let d = loaded.document;
+        let names: Vec<(usize, &str)> = d
+            .walk()
+            .iter()
+            .map(|(depth, l)| (*depth, l.props.name.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                (0, "Layer 1"),
+                (0, "group"),
+                (1, "photo"),
+                (0, "sketch"),
+                (0, "rig")
+            ]
+        );
+        let photo = d.walk()[2].1.id;
+        let (img, place) = d.reference(photo).unwrap();
+        assert_eq!((img.width(), img.height()), (64, 32));
+        assert_eq!(place, ReferencePlace::top_left((64, 32)));
+        assert_eq!(img.get(10, 3), Rgba::new(40, 24, 100, 255));
+        assert_eq!(d.layer(photo).unwrap().props.opacity, 128);
+        let sketch = d.walk()[3].1.id;
+        assert_eq!(d.reference(sketch).unwrap().0.get(63, 31), Rgba::BLACK);
+        // Saved again it is a 1.2 file that holds the same document.
+        let again = save(&d, SaveOptions::default());
+        assert_eq!(&again[8..12], &[1, 0, 2, 0]);
+        assert_eq!(load(&again).unwrap().document, d);
     }
 
     #[test]

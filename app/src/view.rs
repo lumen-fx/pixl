@@ -661,8 +661,12 @@ pub fn plan_within(doc: &Document, frame: usize, budget: u64) -> Vec<PlanItem> {
         None => 0,
     };
     for (layer, class) in roots.iter().zip(&classes).skip(first) {
-        // A skeleton paints nothing; its bones are drawn by the rig.
-        if matches!(layer.kind, LayerKind::Skeleton { .. }) {
+        // A skeleton paints nothing; its bones are drawn by the rig. A
+        // reference is not part of the document's pixels.
+        if matches!(
+            layer.kind,
+            LayerKind::Skeleton { .. } | LayerKind::Reference { .. }
+        ) {
             continue;
         }
         let opacity = f64::from(layer.props.opacity) / 255.0;
@@ -704,7 +708,6 @@ pub fn prepared(doc: &Document, source: &ItemSource, onion: bool) -> (Document, 
     let mut doc = doc.clone();
     let roots: Vec<LayerId> = doc.layers().iter().map(|l| l.id).collect();
     let mut opts = CompositeOptions {
-        include_reference: true,
         background: true,
         onion: None,
     };
@@ -726,7 +729,7 @@ pub fn prepared(doc: &Document, source: &ItemSource, onion: bool) -> (Document, 
             }
             opts.background = !onion;
         }
-        ItemSource::Ghosts => opts.include_reference = false,
+        ItemSource::Ghosts => {}
     }
     (doc, opts)
 }
@@ -756,7 +759,7 @@ fn layer_images(
             let mask = mask.and_then(|m| doc.image(m.image).cloned());
             (cel, mask)
         }
-        LayerKind::Reference { image } => (doc.image(*image).cloned(), None),
+        LayerKind::Reference { image, .. } => (doc.image(*image).cloned(), None),
         LayerKind::Group { .. } | LayerKind::Skeleton { .. } => (None, None),
     }
 }

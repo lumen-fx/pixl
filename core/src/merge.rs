@@ -46,8 +46,8 @@ fn layer_bounds(doc: &Document, layer: &Layer, frame: usize) -> Rect {
         LayerKind::Group { children } => children
             .iter()
             .fold(Rect::EMPTY, |r, c| r.union(&layer_bounds(doc, c, frame))),
-        LayerKind::Reference { image } => doc.image(*image).map_or(Rect::EMPTY, tile_bounds),
-        LayerKind::Skeleton { .. } => Rect::EMPTY,
+        // Neither paints the document's pixels.
+        LayerKind::Reference { .. } | LayerKind::Skeleton { .. } => Rect::EMPTY,
     }
 }
 
@@ -116,8 +116,9 @@ fn deep_copy(doc: &mut Document, layer: &Layer) -> Layer {
         LayerKind::Group { children } => LayerKind::Group {
             children: children.iter().map(|c| deep_copy(doc, c)).collect(),
         },
-        LayerKind::Reference { image } => LayerKind::Reference {
+        LayerKind::Reference { image, place } => LayerKind::Reference {
             image: copy(doc, *image),
+            place: *place,
         },
         LayerKind::Skeleton { rig } => LayerKind::Skeleton { rig: rig.clone() },
     };
@@ -223,7 +224,6 @@ impl Document {
         top.props.clip = upper.props.clip && !below.props.clip;
         scratch.s.layers = vec![lower, top];
         let opts = CompositeOptions {
-            include_reference: false,
             background: false,
             onion: None,
         };
@@ -278,7 +278,6 @@ impl Document {
     /// layers stay as they are. Returns the new layer's id.
     pub fn flatten(&mut self) -> Result<LayerId, Error> {
         let opts = CompositeOptions {
-            include_reference: false,
             background: false,
             onion: None,
         };
@@ -480,7 +479,10 @@ mod tests {
         paint(&mut d, top, 0, 1, 0, RED);
         let reference = d
             .add_layer(
-                NewLayer::Reference(TiledImage::new(8, 8, RED)),
+                NewLayer::Reference {
+                    image: TiledImage::new(8, 8, RED),
+                    place: crate::reference::ReferencePlace::top_left((8, 8)),
+                },
                 "ref",
                 Placement::default(),
             )

@@ -47,6 +47,11 @@ pub enum Error {
     BindingNotFound(usize),
     /// A pose cannot render over the rig's source frame.
     SourceFrame(usize),
+    /// The operation needs a reference layer.
+    NotReference(LayerId),
+    /// A reference placement has a zero or non-finite scale, or a
+    /// non-finite position or angle.
+    InvalidPlace,
 }
 
 impl fmt::Display for Error {
@@ -67,6 +72,8 @@ impl fmt::Display for Error {
             Error::Format(msg) => write!(f, "file error: {msg}"),
             Error::Io(msg) => write!(f, "i/o error: {msg}"),
             Error::NotSkeleton(id) => write!(f, "layer {} is not a skeleton layer", id.0),
+            Error::NotReference(id) => write!(f, "layer {} is not a reference layer", id.0),
+            Error::InvalidPlace => f.write_str("a reference needs a finite place and a scale"),
             Error::BoneNotFound(id) => write!(f, "no bone with id {}", id.0),
             Error::CyclicBone(id) => write!(f, "bone {} cannot move under itself", id.0),
             Error::NoIkChain(id) => write!(f, "bone {} has no parent to bend with", id.0),

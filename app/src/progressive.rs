@@ -55,7 +55,7 @@ impl Source {
                 rgba8(&px)
             }
             Source::Ghosts { doc, frame, onion } => {
-                rgba8(&composite_ghosts(doc, *frame, rect, onion, false, 1))
+                rgba8(&composite_ghosts(doc, *frame, rect, onion, 1))
             }
         }
     }
