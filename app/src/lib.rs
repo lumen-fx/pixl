@@ -59,23 +59,18 @@ pub use workspace::Workspace;
 pub const MAX_VIEW_SIDE: u32 = 8192;
 
 /// pixl as the `pixl` program runs it, with its markup and stylesheets from
-/// `src/` (read from disk with hot reload in a debug build, compiled in for
-/// a release build) and the user's recent documents: `file` opens in the
-/// editor, and with no file the start screen shows.
+/// [`ui`] and the user's recent documents: `file` opens in the editor, and
+/// with no file the start screen shows.
 pub fn app(file: Option<PathBuf>) -> App {
     let (settings, store) = SettingsStore::user();
-    starting(
-        editor(lumen_source!("src/main.lmn", "src/main.css")),
-        Recents::user(),
-        file,
-    )
-    .insert_resource(settings)
-    .insert_resource(store)
-    .insert_resource(Workspace::user())
-    .insert_resource(Themes::user())
-    .insert_resource(exports::Exports::user())
-    .insert_resource(presets::Presets::user())
-    .insert_resource(toolbar::Toolbar::user())
+    starting(editor(ui()), Recents::user(), file)
+        .insert_resource(settings)
+        .insert_resource(store)
+        .insert_resource(Workspace::user())
+        .insert_resource(Themes::user())
+        .insert_resource(exports::Exports::user())
+        .insert_resource(presets::Presets::user())
+        .insert_resource(toolbar::Toolbar::user())
 }
 
 /// `app` (an [`editor`]) starting on the start screen over `recents`, or on
@@ -86,6 +81,22 @@ pub fn starting(app: App, recents: Recents, file: Option<PathBuf>) -> App {
         None => Home::start(),
     };
     app.insert_resource(recents).insert_resource(home)
+}
+
+/// pixl's markup and stylesheets. A debug build reads them from `src/` with
+/// hot reload. A release build embeds them with every `<include>` and
+/// `@import` spliced in by the build script, so a shipped `pixl.exe` reads
+/// nothing from `src/`.
+pub fn ui() -> Source {
+    #[cfg(debug_assertions)]
+    let source = lumen_source!("src/main.lmn", "src/main.css");
+    #[cfg(not(debug_assertions))]
+    let source = Source::embedded_from(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.lmn"),
+        include_str!(concat!(env!("OUT_DIR"), "/main.lmn")),
+        Some(include_str!(concat!(env!("OUT_DIR"), "/main.css"))),
+    );
+    source
 }
 
 /// The editor over another copy of the UI sources, open on a blank

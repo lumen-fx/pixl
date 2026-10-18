@@ -39,22 +39,20 @@ jobs:
       - name: Build
         run: cargo build --release --locked -p pixl
 
-      # The UI markup and stylesheet are compiled into the executable; what
-      # they name (the stylesheets they import, the parts of the markup, the
-      # icons and the font) is read at run time from the executable's own
-      # folder, which lumen.toml beside it marks as the app folder.
+      # The markup and stylesheets are compiled into the executable, every
+      # part and import spliced in by app/build.rs. The icons and the font
+      # they name are read at run time from the executable's own folder,
+      # which lumen.toml beside it marks as the app folder.
       - name: Lay out the package
         run: |
           dir="dist/$PACKAGE"
           mkdir -p "$dir/assets/icons" "$dir/assets/fonts"
           cp target/release/pixl.exe app/lumen.toml LICENSE "$dir/"
-          (cd app && find src -type f \( -name '*.lmn' -o -name '*.css' \) \
-            -exec cp --parents {} "../$dir/" \;)
           cp app/assets/icons/*.png "$dir/assets/icons/"
           cp app/assets/fonts/* "$dir/assets/fonts/"
           # Every file a stylesheet names with url() is in the package.
           missing=0
-          for f in $(grep -rhoE 'url\("[^"]+"\)' "$dir/src" | sed -E 's/url\("([^"]+)"\)/\1/' | sort -u); do
+          for f in $(grep -rhoE 'url\("[^"]+"\)' app/src | sed -E 's/url\("([^"]+)"\)/\1/' | sort -u); do
             if [ ! -f "$dir/$f" ]; then
               echo "missing from the package: $f" >&2
               missing=1

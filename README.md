@@ -14,8 +14,8 @@ Rust SDK.
 Windows (x86_64) builds are on the
 [releases page](https://github.com/lumen-fx/pixl/releases) as pre-releases.
 Unzip `pixl-<version>-windows-x86_64.zip` anywhere and run `pixl.exe`; keep
-the files beside it, since pixl reads its stylesheets, icons and font from
-that folder at start. The executable is not signed, so Windows SmartScreen
+the files beside it, since pixl reads its icons and font from that folder at
+start. The executable is not signed, so Windows SmartScreen
 may ask before it runs the first time. On Linux and macOS, build it from
 source (see Quick start).
 
@@ -314,11 +314,7 @@ folder, beside the recent list. UI scale grows the text and the sizes the
 theme keeps as tokens; a few fixed sizes (list rows, swatches) stay as they
 are.
 
-The editor builds against Lumen 0.0.10, which is not on crates.io yet. Until it
-is, building `pixl` needs `lumenui` and `lumenui-canvas` patched in from a Lumen
-checkout, and CI fails on the app crate. A release build reads its
-stylesheets, font, icons and `lumen.toml` from the directory it starts in, so
-run it from `app/`: `cd app && ../target/release/pixl`.
+The editor builds against Lumen 0.0.10 from crates.io.
 
 A skeleton layer rigs a character so it can be posed instead of redrawn:
 bones in a tree, with raster layers (or selected regions of them) bound to
@@ -415,13 +411,14 @@ cargo run -p pixl -- art.pixl     # straight into a document
 cargo test
 ```
 
-A release build (`cargo build --release -p pixl`) compiles the markup and
-its main stylesheet in. The rest of the UI, the stylesheets `src/main.css`
-imports, the markup parts in `src/parts/`, and the icons and font in
-`assets/`, it reads from the folder beside the executable when that folder
-holds a `lumen.toml`, and from `app/` in the source tree otherwise. The
-Windows zip is that folder: `pixl.exe`, `lumen.toml`, `src/` without the Rust
-sources, and `assets/icons` and `assets/fonts`. Pushing a `v*` tag that
+A release build (`cargo build --release -p pixl`) compiles all of the markup
+and stylesheets in: `app/build.rs` splices every `<include>` and `@import`
+into one markup file and one stylesheet, which the executable embeds. A debug
+build reads `src/` from disk instead, for hot reload. The icons and font in
+`assets/` stay files, read from the folder beside the executable when that
+folder holds a `lumen.toml`, and from `app/` in the source tree otherwise. The
+Windows zip is that folder: `pixl.exe`, `lumen.toml`, `LICENSE`, and
+`assets/icons` and `assets/fonts`. Pushing a `v*` tag that
 matches the workspace version builds it on CI and publishes it as a
 pre-release.
 

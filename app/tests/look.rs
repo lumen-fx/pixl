@@ -15,7 +15,7 @@ fn shot(edit: fn(&mut Settings), name: &str) -> Frame {
     let _turn = ONE_APP_AT_A_TIME
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let frame = pixl::editor(lumen_source!("src/main.lmn", "src/main.css"))
+    let frame = pixl::editor(pixl::ui())
         .add_systems(TickStage::Systems, move |mut settings: ResMut<Settings>| {
             edit(&mut settings);
         })
