@@ -1,3 +1,7 @@
+// A release build on Windows is a desktop program: started from Explorer it
+// opens its window and no console beside it.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::path::PathBuf;
 
 use pixl::perf::{Perf, PerfLog, take_perf_log};
