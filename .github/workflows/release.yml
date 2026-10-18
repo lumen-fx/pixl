@@ -1,0 +1,104 @@
+name: release
+
+# A `v*` tag builds pixl for Windows and publishes the zip on a GitHub
+# pre-release. A manual run builds and checks the same zip and keeps it as a
+# workflow artifact only, without creating a release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain rust-toolchain.toml names
+        run: rustup toolchain install
+
+      - name: Read the version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "pixl") | .version')
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match the workspace version $version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "PACKAGE=pixl-$version-windows-x86_64" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: cargo build --release --locked -p pixl
+
+      # The UI markup and stylesheet are compiled into the executable; what
+      # they name (the stylesheets they import, the parts of the markup, the
+      # icons and the font) is read at run time from the executable's own
+      # folder, which lumen.toml beside it marks as the app folder.
+      - name: Lay out the package
+        run: |
+          dir="dist/$PACKAGE"
+          mkdir -p "$dir/assets/icons" "$dir/assets/fonts"
+          cp target/release/pixl.exe app/lumen.toml LICENSE "$dir/"
+          (cd app && find src -type f \( -name '*.lmn' -o -name '*.css' \) \
+            -exec cp --parents {} "../$dir/" \;)
+          cp app/assets/icons/*.png "$dir/assets/icons/"
+          cp app/assets/fonts/* "$dir/assets/fonts/"
+          # Every file a stylesheet names with url() is in the package.
+          missing=0
+          for f in $(grep -rhoE 'url\("[^"]+"\)' "$dir/src" | sed -E 's/url\("([^"]+)"\)/\1/' | sort -u); do
+            if [ ! -f "$dir/$f" ]; then
+              echo "missing from the package: $f" >&2
+              missing=1
+            fi
+          done
+          [ "$missing" = 0 ]
+          (cd dist && 7z a -tzip "$PACKAGE.zip" "$PACKAGE" > /dev/null)
+          7z l "dist/$PACKAGE.zip"
+
+      # Unzip into a fresh folder and run the editor without a window from a
+      # different working directory, as a double-click from Explorer would.
+      - name: Smoke test the zip
+        run: |
+          smoke="$RUNNER_TEMP/smoke"
+          elsewhere="$RUNNER_TEMP/elsewhere"
+          mkdir -p "$smoke" "$elsewhere"
+          7z x "dist/$PACKAGE.zip" -o"$smoke" > /dev/null
+          cp app/assets/demo/rig-demo.pixl "$elsewhere/"
+          cd "$elsewhere"
+          status=0
+          LUMEN_HEADLESS=1 LUMEN_HEADLESS_TICKS=60 \
+            "$smoke/$PACKAGE/pixl.exe" rig-demo.pixl 2> stderr.txt || status=$?
+          cat stderr.txt
+          if [ "$status" != 0 ]; then
+            echo "pixl.exe exited with $status" >&2
+            exit 1
+          fi
+          if grep -iqE 'not found|no such file|cannot find' stderr.txt; then
+            echo "pixl.exe could not find a file it needs" >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: dist/${{ env.PACKAGE }}.zip
+          if-no-files-found: error
+
+      - name: Publish the pre-release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "dist/$PACKAGE.zip" \
+            --prerelease \
+            --title "pixl $VERSION" \
+            --notes "A pre-release of pixl for Windows (x86_64). Unzip it anywhere and run pixl.exe; keep the files beside it, pixl reads them at start."

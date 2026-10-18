@@ -9,6 +9,16 @@ frames and a timeline, tools that behave correctly at the pixel grid, and
 pixel-art-aware transforms. It is also the flagship showcase for the Lumen
 Rust SDK.
 
+## Download
+
+Windows (x86_64) builds are on the
+[releases page](https://github.com/lumen-fx/pixl/releases) as pre-releases.
+Unzip `pixl-<version>-windows-x86_64.zip` anywhere and run `pixl.exe`; keep
+the files beside it, since pixl reads its stylesheets, icons and font from
+that folder at start. The executable is not signed, so Windows SmartScreen
+may ask before it runs the first time. On Linux and macOS, build it from
+source (see Quick start).
+
 ## Status
 
 Early. `pixl-core` (in `core/`) holds the editor core with no UI: the document
@@ -404,6 +414,16 @@ cargo run -p pixl                 # the start screen
 cargo run -p pixl -- art.pixl     # straight into a document
 cargo test
 ```
+
+A release build (`cargo build --release -p pixl`) compiles the markup and
+its main stylesheet in. The rest of the UI, the stylesheets `src/main.css`
+imports, the markup parts in `src/parts/`, and the icons and font in
+`assets/`, it reads from the folder beside the executable when that folder
+holds a `lumen.toml`, and from `app/` in the source tree otherwise. The
+Windows zip is that folder: `pixl.exe`, `lumen.toml`, `src/` without the Rust
+sources, and `assets/icons` and `assets/fonts`. Pushing a `v*` tag that
+matches the workspace version builds it on CI and publishes it as a
+pre-release.
 
 The rig demo and the tutorials' documents are built by
 `app/tests/common/demo.rs`, and a test checks the files shipped in
