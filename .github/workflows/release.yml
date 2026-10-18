@@ -89,6 +89,35 @@ jobs:
             exit 1
           fi
 
+      # The same zip with a real window on the runner's desktop: pixl.exe
+      # starts as a double-click would, the screen is captured after it has
+      # had time to draw, and the run fails if the editor exited early.
+      - name: Run the zip with a window
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP\smoke\$env:PACKAGE"
+          $log = "$env:RUNNER_TEMP\windowed"
+          New-Item -ItemType Directory -Force -Path $log | Out-Null
+          $p = Start-Process -FilePath "$dir\pixl.exe" -WorkingDirectory $log `
+            -RedirectStandardError "$log\stderr.txt" -RedirectStandardOutput "$log\stdout.txt" -PassThru
+          Start-Sleep -Seconds 45
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$log\screen.png")
+          $alive = -not $p.HasExited
+          if ($alive) { Stop-Process -Id $p.Id -Force } else { "pixl.exe exited with $($p.ExitCode)" | Tee-Object -Append "$log\stderr.txt" }
+          Get-Content "$log\stderr.txt", "$log\stdout.txt" -ErrorAction SilentlyContinue
+          if (-not $alive) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windowed-run
+          path: ${{ runner.temp }}/windowed
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PACKAGE }}
