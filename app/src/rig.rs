@@ -1345,7 +1345,9 @@ pub fn show_rig(
             format!("Rest art: frame {source}"),
         );
         let hint = match ui.mode {
-            Some(RigMode::Bones) => "Drag to draw a bone; drag joints and pivots",
+            Some(RigMode::Bones) => {
+                "Drag to draw a bone; start on the selected bone's end to join it, or set its Parent below"
+            }
             Some(RigMode::Pose) if frame == rig.source_frame() => {
                 "Rest frame: the bones move, the art stays"
             }

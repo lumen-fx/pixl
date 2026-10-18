@@ -28,7 +28,8 @@
 .rig-section { gap: var(--space-2); }
 .rig-row { align: center; gap: var(--space-2); min-height: 22; }
 .rig-info { text-color: var(--text); font-size: var(--font-size-small); text-overflow: ellipsis; }
-.rig-hint { text-color: var(--text-faint); font-size: var(--font-size-small); text-overflow: ellipsis; }
+.rig-status { min-width: 0; gap: var(--space-2); padding: var(--space-3) var(--space-3) 0 var(--space-3); }
+.rig-hint { text-color: var(--text-faint); font-size: var(--font-size-small); wrap: word; min-width: 0; }
 .rig-empty { text-color: var(--text-faint); font-size: var(--font-size-small); padding: var(--space-2); }
 .rig-list { height: 84; min-height: 84; bg: var(--surface-1); border: 1px solid var(--edge); }
 .rig-list.library { height: 94; min-height: 94; }

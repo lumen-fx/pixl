@@ -115,9 +115,22 @@ pub struct Outcome {
     pub perf_lines: Vec<String>,
     /// The pixels the tool preview draws over the document.
     pub preview: usize,
-    /// For each tick from the fifth on: how many steps had run, the rig
-    /// tutorial's step, and whether its card showed.
-    pub tutorial: Vec<(usize, usize, bool)>,
+    /// The rig tutorial on each tick from the fifth on.
+    pub tutorial: Vec<Tutor>,
+}
+
+/// The rig tutorial on one tick.
+#[derive(Clone, Debug)]
+pub struct Tutor {
+    /// How many scripted steps had run.
+    pub ran: usize,
+    /// The tutorial's step.
+    pub step: usize,
+    /// Whether its card showed.
+    pub open: bool,
+    /// The control outlined, and whether it had the outline's class.
+    pub target: Option<String>,
+    pub outlined: bool,
 }
 
 /// The editor's state at the end of a tick.
@@ -165,7 +178,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
     let _turn = super::turn();
     let waits = steps.iter().filter(|s| matches!(s, Step::Until(_))).count() as u64;
     let views: Arc<Mutex<Vec<View>>> = Arc::default();
-    let tutorial: Arc<Mutex<Vec<(usize, usize, bool)>>> = Arc::default();
+    let tutorial: Arc<Mutex<Vec<Tutor>>> = Arc::default();
     let ran: Arc<AtomicUsize> = Arc::default();
     let (tutorial_out, ran_in, ran_out) =
         (Arc::clone(&tutorial), Arc::clone(&ran), Arc::clone(&ran));
@@ -454,11 +467,18 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 recents.finish_thumbnails();
                 if *tick >= 5 {
                     views_out.lock().unwrap().push(view.clone());
-                    tutorial_out.lock().unwrap().push((
-                        ran_out.load(Ordering::Relaxed),
-                        tutor.step,
-                        signals.get::<bool>("tutor_open").unwrap_or(false),
-                    ));
+                    let target = tutor.target().map(str::to_string);
+                    let outlined = target
+                        .as_deref()
+                        .and_then(dom::get_by_id)
+                        .is_some_and(|n| n.has_class("tutor-target"));
+                    tutorial_out.lock().unwrap().push(Tutor {
+                        ran: ran_out.load(Ordering::Relaxed),
+                        step: tutor.step,
+                        open: signals.get::<bool>("tutor_open").unwrap_or(false),
+                        target,
+                        outlined,
+                    });
                 }
                 *end_out.lock().unwrap() = Some(Snapshot {
                     doc: editor.doc.clone(),
@@ -489,7 +509,8 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 });
             })
             .after(pixl::view::draw_stage)
-            .after(pixl::home::show_home),
+            .after(pixl::home::show_home)
+            .after(pixl::tutorial::run_tutorial),
         )
         .screenshot(HeadlessOptions {
             dpr: 1.0,

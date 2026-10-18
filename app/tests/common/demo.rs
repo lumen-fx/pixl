@@ -1,7 +1,7 @@
 //! The documents pixl ships, built from code: the rig demo, a small character
 //! rigged and keyed as a walk, and the rig lesson the tutorial opens, the same
-//! character with no skeleton. `tests/demo.rs` checks the files in
-//! `assets/demo/` are what this builds.
+//! character with no skeleton, its arm held out and no far arm. `tests/demo.rs`
+//! checks the files in `assets/demo/` are what this builds.
 
 use pixl_core::rig::{BonePose, Easing, NamedPose, Pose, PoseKey, RenderOptions, Vec2};
 use pixl_core::{Binding, ColorMode, Document, LayerId, NewLayer, Placement, Rgba};
@@ -14,10 +14,19 @@ const WALK_MS: u32 = 100;
 pub const LESSON_FRAMES: usize = 5;
 const LESSON_MS: u32 = 150;
 
-/// The front arm hangs from its shoulder to its hand along this column.
-pub const ARM_X: i32 = 24;
-pub const SHOULDER_Y: i32 = 19;
-pub const HAND_Y: i32 = 27;
+/// The demo's front arm hangs from its shoulder to its hand along this
+/// column.
+const ARM_X: i32 = 24;
+const SHOULDER_Y: i32 = 19;
+const HAND_Y: i32 = 27;
+
+/// The lesson's landmarks, the pixels the tutorial's bones run between: the
+/// body from the hips up to the neck, the head from the neck up to its top,
+/// and the arm held out from the neck to the hand.
+pub const HIPS: (i32, i32) = (24, 29);
+pub const NECK: (i32, i32) = (24, 18);
+pub const HEAD_TOP: (i32, i32) = (24, 10);
+pub const HAND: (i32, i32) = (31, 19);
 
 /// One body part: its layer's name, its pixels as rows of palette keys
 /// placed with their top-left at `at`, and whether it is on the far side.
@@ -29,50 +38,64 @@ struct Part {
 }
 
 /// The character, facing right, in paint order from the back.
-const PARTS: [Part; 6] = [
-    Part {
-        layer: "Back arm",
-        at: (23, 19),
-        rows: ARM,
-        far: true,
-    },
-    Part {
-        layer: "Back leg",
-        at: (23, 30),
-        rows: LEG,
-        far: true,
-    },
-    Part {
-        layer: "Body",
-        at: (21, 18),
-        rows: &[
-            "oooooo", "obbbbo", "obbbBo", "obbbBo", "obbbBo", "obbbBo", "obbbBo", "obbbBo",
-            "obbbBo", "obbbBo", "opppPo", "opppPo",
-        ],
-        far: false,
-    },
-    Part {
-        layer: "Front leg",
-        at: (23, 30),
-        rows: LEG,
-        far: false,
-    },
-    Part {
-        layer: "Head",
-        at: (20, 10),
-        rows: &[
-            ".oooooo.", "ohhhhhho", "ohhhssso", "ohhsseso", "ohssssso", ".ossssSo", "..osSSo.",
-            "...oo...",
-        ],
-        far: false,
-    },
+const PARTS: [Part; 6] = [BACK_ARM, BACK_LEG, BODY, FRONT_LEG, HEAD, FRONT_ARM];
+
+/// The lesson's character: no far arm, and the near one held out in front.
+const LESSON_PARTS: [Part; 5] = [
+    BACK_LEG,
+    BODY,
+    FRONT_LEG,
+    HEAD,
     Part {
         layer: "Front arm",
-        at: (23, 19),
-        rows: ARM,
+        at: (24, 18),
+        rows: &["ooooooooo", "bbbbbbsso", "ooooooooo"],
         far: false,
     },
 ];
+
+const BACK_ARM: Part = Part {
+    layer: "Back arm",
+    at: (23, 19),
+    rows: ARM,
+    far: true,
+};
+const BACK_LEG: Part = Part {
+    layer: "Back leg",
+    at: (23, 30),
+    rows: LEG,
+    far: true,
+};
+const BODY: Part = Part {
+    layer: "Body",
+    at: (21, 18),
+    rows: &[
+        "oooooo", "obbbbo", "obbbBo", "obbbBo", "obbbBo", "obbbBo", "obbbBo", "obbbBo", "obbbBo",
+        "obbbBo", "opppPo", "opppPo",
+    ],
+    far: false,
+};
+const FRONT_LEG: Part = Part {
+    layer: "Front leg",
+    at: (23, 30),
+    rows: LEG,
+    far: false,
+};
+const HEAD: Part = Part {
+    layer: "Head",
+    at: (20, 10),
+    rows: &[
+        ".oooooo.", "ohhhhhho", "ohhhssso", "ohhsseso", "ohssssso", ".ossssSo", "..osSSo.",
+        "...oo...",
+    ],
+    far: false,
+};
+const FRONT_ARM: Part = Part {
+    layer: "Front arm",
+    at: (23, 19),
+    rows: ARM,
+    far: false,
+};
 
 const ARM: &[&str] = &[
     "obo", "obo", "obo", "obo", "obo", "obo", "obo", "oso", "oso", "ooo",
@@ -105,16 +128,17 @@ fn color(key: char, far: bool) -> Option<Rgba> {
     Some(Rgba::opaque(dim(c.r), dim(c.g), dim(c.b)))
 }
 
-/// The character on frame 0 of a document of `frames` frames, each part on
-/// its own layer. Returns the document and the layers in [`PARTS`] order.
-fn character(frames: usize, ms: u32) -> (Document, Vec<LayerId>) {
+/// The character made of `parts` on frame 0 of a document of `frames`
+/// frames, each part on its own layer. Returns the document and the layers
+/// in `parts` order.
+fn character(parts: &[Part], frames: usize, ms: u32) -> (Document, Vec<LayerId>) {
     let mut d = Document::new(SIDE, SIDE, ColorMode::Rgba).expect("a valid size");
     d.set_frame_duration(0, ms).expect("frame 0");
     for f in 1..frames {
         d.insert_frame(f, ms).expect("a new frame");
     }
     let mut layers = Vec::new();
-    for (i, part) in PARTS.iter().enumerate() {
+    for (i, part) in parts.iter().enumerate() {
         let layer = if i == 0 {
             let first = d.layers()[0].id;
             d.update_layer(first, |p| p.name = part.layer.into())
@@ -141,7 +165,7 @@ fn character(frames: usize, ms: u32) -> (Document, Vec<LayerId>) {
 /// The lesson: the character on every frame (each frame's cels linked to
 /// frame 0's) and no skeleton yet.
 pub fn rig_lesson() -> Document {
-    let (mut d, layers) = character(LESSON_FRAMES, LESSON_MS);
+    let (mut d, layers) = character(&LESSON_PARTS, LESSON_FRAMES, LESSON_MS);
     for layer in layers {
         for f in 1..LESSON_FRAMES {
             d.link_cel(layer, 0, f).expect("a frame");
@@ -153,7 +177,7 @@ pub fn rig_lesson() -> Document {
 /// The demo: the character on a skeleton, its walk keyed on eight frames
 /// and rendered into them, with the contact and passing poses saved.
 pub fn rig_demo() -> Document {
-    let (mut d, layers) = character(8, WALK_MS);
+    let (mut d, layers) = character(&PARTS, 8, WALK_MS);
     let skel = d
         .add_layer(NewLayer::Skeleton, "Skeleton", Placement::default())
         .expect("a skeleton layer");

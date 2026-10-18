@@ -304,36 +304,41 @@ one bone each as rigid parts. Rendering a pose draws every part at its
 bone's place with RotSprite, so turned parts keep clean one-pixel outlines,
 into frames of ordinary pixels to touch up.
 
-The Rig panel works on the document's skeleton (New skeleton makes one).
-In Bones mode a drag on the canvas draws a bone, starting from the selected
-bone's end to chain one to it; dragging a joint or a binding's pivot moves
-it, and Shift moves the selected bone's end. The panel lists the bones,
-renames and reparents the selected one, and binds the active layer, or the
-selected pixels of it, to it. The rig reads its parts from its rest frame,
-which "Use this frame" sets. In Pose mode a drag turns a bone, its head
-moves it, and with IK on the end of a bone bends it together with its
-parent; Shift snaps turns to 15 degrees. Posing a frame other than the rest
-frame draws the pose into that frame as it changes and keys it there; on
-the rest frame only the bones move. Poses save to a library with
-thumbnails, mirror left to right by bone name (`arm.L` and `arm.R`,
-`leg_l` and `leg_r`), and reset to rest. A frame's key has an easing toward
-the next key. Render to new frame adds a frame holding the pose; Render
-keyed fills a range of frames from the keys, eased; Regenerate renders
-every generated frame again after the rig changes. Bones are drawn over the
-art in the theme's colors and are never part of it. Escape leaves either
-mode, and picking a tool hands the canvas back to it. Outside the Rig layout
-(Window menu) the panel shows only its header until a mode starts; Bones or
-Pose with no skeleton yet unfolds it to New skeleton.
+The Rig panel works on the document's skeleton (New skeleton makes one). In
+Bones mode a drag on the canvas draws a bone, joined to the selected bone
+when there is one; starting the drag on the selected bone's end joins the
+new bone there. Dragging a joint or a binding's pivot moves it, and Shift
+moves the selected bone's end. The line under the panel's header says what a
+drag does in the current mode. The panel lists the bones, renames and
+reparents the selected one, and binds the active layer, or the selected
+pixels of it, to it. The rig reads its parts from its rest frame, which "Use
+this frame" sets. In Pose mode a drag turns a bone and the bones joined to
+it, its head moves it, and with IK on the end of a bone bends it together
+with its parent; Shift snaps turns to 15 degrees. Posing a frame other than
+the rest frame draws the pose into that frame as it changes and keys it
+there; on the rest frame only the bones move. Poses save to a library with
+thumbnails, mirror left to right by bone name (`arm.L` and `arm.R`, `leg_l`
+and `leg_r`), and reset to rest. A frame's key has an easing toward the next
+key. Render to new frame adds a frame holding the pose; Render keyed fills a
+range of frames from the keys, eased; Regenerate renders every generated
+frame again after the rig changes. Bones are drawn over the art in the
+theme's colors and are never part of it. Escape leaves either mode, and
+picking a tool hands the canvas back to it. Outside the Rig layout (Window
+menu) the panel shows only its header until a mode starts; Bones or Pose
+with no skeleton yet unfolds it to New skeleton.
 
-Help > Open rig demo, also listed on the start screen, opens a character rigged and
-keyed as an eight-frame walk; press Play to watch it. Help > Rig tutorial
-opens the same character with no skeleton and a card over the canvas that
-goes through rigging its arm: make a skeleton, draw a bone, bind the arm's
-layer, pose it on two frames, render the frames between and play. Each step
-outlines the control it uses and ticks itself off once done. The tutorial
-switches to the Rig layout; closing its card keeps the place, and Help > Rig
-tutorial shows it again. Both open as untitled copies, so what pixl ships is
-never changed.
+Help > Open rig demo, also listed on the start screen, opens a character
+rigged and keyed as an eight-frame walk; press Play to watch it. Help > Rig
+tutorial opens a plainer copy of that character, its arm held out and no
+skeleton, with a card over the canvas that goes through building one: draw a
+body bone, draw the head and the arm from the body's end so they join it,
+bind each part's layer to its bone, raise the arm on one frame and turn the
+body on another, which carries the head and arm along, then render the
+frames between and play. Each step says where to drag or outlines the
+control to click next, and ticks itself off once done. The tutorial switches
+to the Rig layout; closing its card keeps the place, and Help > Rig tutorial
+shows it again. Both open as untitled copies, so what pixl ships is never
+changed.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a

@@ -29,3 +29,4 @@
 .tutor-step.current .tutor-step-name { text-color: var(--text); }
 
 button.tutor-target, button.flat.tutor-target { border: 2px solid var(--tutor-mark); text-color: var(--text); }
+.layer-row.tutor-target, .rig-bone.tutor-target { border: 2px solid var(--tutor-mark); }

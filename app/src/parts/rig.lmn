@@ -5,6 +5,12 @@
     <tooltip text="Draw bones and bind layers to them"><button id="rig-mode-bones" class="flat small" text="Bones"/></tooltip>
     <tooltip text="Pose the bones"><button id="rig-mode-pose" class="flat small" text="Pose"/></tooltip>
   </row>
+  <if signal="rig_some" mode="hide">
+    <column class="rig-status">
+      <label id="rig-frame-info" class="rig-info" bind-text="rig_frame_info" text=""/>
+      <label id="rig-hint" class="rig-hint" bind-text="rig_hint" text=""/>
+    </column>
+  </if>
   <scroll id="rig-scroll" class="rig-scroll" bind-scroll="rig_scroll">
     <column id="rig-body" class="panel-body">
       <if signal="rig_none" mode="hide">
@@ -13,12 +19,6 @@
           <spacer/>
           <button id="rig-new" class="flat small" text="New skeleton"/>
         </row>
-      </if>
-      <if signal="rig_some" mode="hide">
-        <column class="rig-section">
-          <label id="rig-frame-info" class="rig-info" bind-text="rig_frame_info" text=""/>
-          <label id="rig-hint" class="rig-hint" bind-text="rig_hint" text=""/>
-        </column>
       </if>
       <if signal="rig_bones" mode="hide">
         <column class="rig-section">
