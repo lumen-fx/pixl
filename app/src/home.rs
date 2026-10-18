@@ -147,13 +147,13 @@ const EXAMPLES: [(Shipped, &str, &str); 2] = [
 
 /// The recent documents whose name or folder holds `filter`, as markup,
 /// and after them the rig demo and the Getting started tutorial, listed the
-/// same way.
+/// same way. Case does not matter, and `/` and `\` match each other, so a
+/// folder typed either way finds it on any system.
 pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> String {
-    let filter = filter.trim().to_lowercase();
+    let fold = |s: &str| s.to_lowercase().replace('\\', "/");
+    let filter = fold(filter.trim());
     let matches = |name: &str, folder: &str| {
-        filter.is_empty()
-            || name.to_lowercase().contains(&filter)
-            || folder.to_lowercase().contains(&filter)
+        filter.is_empty() || fold(name).contains(&filter) || fold(folder).contains(&filter)
     };
     let mut out = String::new();
     if recents.entries.is_empty() {

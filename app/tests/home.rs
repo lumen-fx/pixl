@@ -153,6 +153,8 @@ fn the_search_field_filters_by_name_and_folder() {
             .count()
     };
     assert_eq!(rows(&by_folder), 4);
+    let other_slash = pixl::home::recents_markup(&recents, "filter\\art", now);
+    assert_eq!(rows(&other_slash), 4);
     let none = pixl::home::recents_markup(&recents, "zzz", now);
     assert!(none.contains("No recent document matches"));
 }
