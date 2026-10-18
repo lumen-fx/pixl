@@ -110,6 +110,8 @@ pub struct Outcome {
     pub perf_frames: u64,
     pub last_stroke: Option<std::time::Duration>,
     pub perf_lines: Vec<String>,
+    /// The pixels the tool preview draws over the document.
+    pub preview: usize,
 }
 
 /// The editor's state at the end of a tick.
@@ -132,6 +134,7 @@ struct Snapshot {
     perf_frames: u64,
     last_stroke: Option<std::time::Duration>,
     perf_lines: Vec<String>,
+    preview: usize,
 }
 
 fn key(name: &str) -> Key {
@@ -421,7 +424,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    home: Res<Home>,
                    mut recents: ResMut<Recents>,
                    settings: Res<Settings>,
-                   perf: Res<pixl::perf::Perf>,
+                   (perf, preview): (Res<pixl::perf::Perf>, Res<pixl::view::Preview>),
                    signals: Signals,
                    mut tick: Local<usize>| {
                 *tick += 1;
@@ -456,6 +459,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     perf_lines: (0..6)
                         .filter_map(|i| signals.get::<String>(&format!("perf_line_{i}")))
                         .collect(),
+                    preview: preview.pixels.len(),
                 });
             })
             .after(pixl::view::draw_stage)
@@ -489,6 +493,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         perf_frames: end.perf_frames,
         last_stroke: end.last_stroke,
         perf_lines: end.perf_lines,
+        preview: end.preview,
     }
 }
 

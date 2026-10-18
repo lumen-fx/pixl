@@ -506,3 +506,30 @@ fn enter_finishes_a_polygon_and_plays_the_animation_otherwise() {
     let (playing, _) = played(editor_over(d).insert_resource(settings), enter);
     assert!(playing, "with no polygon under way Enter plays");
 }
+
+/// The text tool shows its text under the pointer; it goes when the pointer
+/// leaves the canvas for the tool bar, and when another tool is picked.
+#[test]
+fn the_text_under_the_pointer_goes_with_the_pointer_and_the_tool() {
+    let over = vec![
+        Step::Key("t", false),
+        Step::Text("opt_text", "Hi"),
+        Step::Move(At::Doc(4, 4)),
+        Step::Move(At::Doc(5, 5)),
+    ];
+    let shown = drive(editor_over(doc()), over.clone());
+    assert!(shown.preview > 0, "the text shows over the canvas");
+
+    let mut off = over.clone();
+    off.push(Step::Move(At::Element("tool-pencil")));
+    off.push(Step::Wait);
+    let out = drive(editor_over(doc()), off);
+    assert_eq!(out.preview, 0, "off the canvas");
+
+    let mut switched = over;
+    switched.push(Step::Key("b", false));
+    switched.push(Step::Wait);
+    let out = drive(editor_over(doc()), switched);
+    assert_ne!(out.tool, Tool::Text);
+    assert_eq!(out.preview, 0, "another tool");
+}

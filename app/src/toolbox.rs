@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use lumenui::ecs::system::SystemParam;
-use lumenui::lumen_core::input::PointerButton;
+use lumenui::lumen_core::input::{PointerButton, PointerState};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_core::filters::read_values;
@@ -223,6 +223,8 @@ pub struct Toolbox {
     accent: Rgba,
     /// A gradient still being painted on worker threads.
     fill: Option<PaintJob>,
+    /// Whether the preview shows the text tool's text under the pointer.
+    text_hover: bool,
 }
 
 impl Default for Toolbox {
@@ -239,6 +241,7 @@ impl Default for Toolbox {
             edit_slice: None,
             accent: Rgba::opaque(0x31, 0xa2, 0xf2),
             fill: None,
+            text_hover: false,
         }
     }
 }
@@ -1177,6 +1180,7 @@ pub struct BoxKeys<'w> {
     commands: Res<'w, crate::keymap::KeyCommands>,
     home: Res<'w, crate::Home>,
     colors: Res<'w, crate::view::ViewColors>,
+    pointer: Res<'w, PointerState>,
 }
 
 /// The options bar's buttons, and the file dialog the font button opens.
@@ -1258,6 +1262,14 @@ pub fn use_toolbox(
                     | Tool::Slice
             )
     };
+    // The text under the pointer goes when the text tool does, and when the
+    // pointer leaves the window.
+    if toolbox.text_hover
+        && (editor.tool != Tool::Text || keys.home.open || keys.pointer.position.is_none())
+    {
+        preview.clear();
+        toolbox.text_hover = false;
+    }
     // The Rig panel's modes take the stage's pointer too.
     if !mine(editor.tool) || place.rig.captures_pointer() {
         pointer.events();
@@ -1300,7 +1312,7 @@ pub fn use_toolbox(
             Pointer::Move { at, .. } => {
                 if toolbox.session.is_some() {
                     extend(editor, toolbox, &mut preview, view.doc_pixel(at));
-                } else if editor.tool == Tool::Text && view.contains(at) {
+                } else if editor.tool == Tool::Text && view.contains(at) && over {
                     // The text shows where a click would set it.
                     let p = view.doc_pixel(at);
                     let px = toolbox.font().layout(
@@ -1311,6 +1323,11 @@ pub fn use_toolbox(
                         0,
                     );
                     preview.set(px, editor.fg);
+                    toolbox.text_hover = true;
+                } else if toolbox.text_hover {
+                    // Off the canvas, onto a panel or the tool bar.
+                    preview.clear();
+                    toolbox.text_hover = false;
                 }
             }
             Pointer::Up { at, button, .. } => {
