@@ -1,8 +1,15 @@
 name: release
 
-# A `v*` tag builds pixl for Windows and publishes the zip on a GitHub
-# pre-release. A manual run builds and checks the same zip and keeps it as a
-# workflow artifact only, without creating a release.
+# A `v*` tag builds pixl for Windows, Linux and macOS and publishes the three
+# packages on one GitHub pre-release. A manual run builds and checks the same
+# packages and keeps them as workflow artifacts only, without creating a
+# release.
+#
+# Every package holds the executable, lumen.toml, LICENSE and assets/. The
+# markup and stylesheets are compiled into the executable, every part and
+# import spliced in by app/build.rs. The icons and the font they name are
+# read at run time from the executable's own folder, which lumen.toml beside
+# it marks as the app folder.
 
 on:
   push:
@@ -39,10 +46,6 @@ jobs:
       - name: Build
         run: cargo build --release --locked -p pixl
 
-      # The markup and stylesheets are compiled into the executable, every
-      # part and import spliced in by app/build.rs. The icons and the font
-      # they name are read at run time from the executable's own folder,
-      # which lumen.toml beside it marks as the app folder.
       - name: Lay out the package
         run: |
           dir="dist/$PACKAGE"
@@ -115,7 +118,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windowed-run
+          name: windowed-run-windows
           path: ${{ runner.temp }}/windowed
 
       - uses: actions/upload-artifact@v4
@@ -124,12 +127,266 @@ jobs:
           path: dist/${{ env.PACKAGE }}.zip
           if-no-files-found: error
 
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The -dev packages are what the engine links at build time. xvfb is
+      # the display for the windowed run, mesa-vulkan-drivers (lavapipe) the
+      # GPU the runner lacks, and imagemagick takes the screenshot.
+      - name: Install the system libraries the Lumen engine links
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libx11-dev \
+            mesa-vulkan-drivers libvulkan1 xvfb xauth imagemagick
+
+      - name: Install the toolchain rust-toolchain.toml names
+        run: rustup toolchain install
+
+      - name: Read the version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "pixl") | .version')
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match the workspace version $version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "PACKAGE=pixl-$version-linux-x86_64" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: cargo build --release --locked -p pixl
+
+      - name: Lay out the package
+        run: |
+          dir="dist/$PACKAGE"
+          mkdir -p "$dir/assets/icons" "$dir/assets/fonts"
+          cp target/release/pixl app/lumen.toml LICENSE "$dir/"
+          cp app/assets/icons/*.png "$dir/assets/icons/"
+          cp app/assets/fonts/* "$dir/assets/fonts/"
+          missing=0
+          for f in $(grep -rhoE 'url\("[^"]+"\)' app/src | sed -E 's/url\("([^"]+)"\)/\1/' | sort -u); do
+            if [ ! -f "$dir/$f" ]; then
+              echo "missing from the package: $f" >&2
+              missing=1
+            fi
+          done
+          [ "$missing" = 0 ]
+          tar -C dist -czf "dist/$PACKAGE.tar.gz" "$PACKAGE"
+          tar -tzvf "dist/$PACKAGE.tar.gz"
+          echo "shared libraries pixl links:"
+          ldd "$dir/pixl"
+
+      - name: Smoke test the tarball
+        run: |
+          smoke="$RUNNER_TEMP/smoke"
+          elsewhere="$RUNNER_TEMP/elsewhere"
+          mkdir -p "$smoke" "$elsewhere"
+          tar -C "$smoke" -xzf "dist/$PACKAGE.tar.gz"
+          cp app/assets/demo/rig-demo.pixl "$elsewhere/"
+          mv app "$RUNNER_TEMP/app-source"
+          cd "$elsewhere"
+          status=0
+          LUMEN_HEADLESS=1 LUMEN_HEADLESS_TICKS=60 \
+            "$smoke/$PACKAGE/pixl" rig-demo.pixl 2> stderr.txt || status=$?
+          cat stderr.txt
+          if [ "$status" != 0 ]; then
+            echo "pixl exited with $status" >&2
+            exit 1
+          fi
+          if grep -iqE 'not found|no such file|cannot find' stderr.txt; then
+            echo "pixl could not find a file it needs" >&2
+            exit 1
+          fi
+
+      # The same tarball with a real window on a virtual X display: the
+      # screen is captured after pixl has had time to draw, and the run fails
+      # if the editor exited early.
+      - name: Run the tarball with a window
+        run: |
+          log="$RUNNER_TEMP/windowed"
+          mkdir -p "$log"
+          cat > "$RUNNER_TEMP/windowed.sh" <<'EOF'
+          set -u
+          cd "$LOG"
+          "$PIXL" > stdout.txt 2> stderr.txt &
+          pid=$!
+          sleep 45
+          import -window root screen.png
+          if kill -0 "$pid" 2> /dev/null; then
+            kill "$pid"
+            exit 0
+          fi
+          wait "$pid"
+          echo "pixl exited with $?" | tee -a stderr.txt
+          exit 1
+          EOF
+          status=0
+          LOG="$log" PIXL="$RUNNER_TEMP/smoke/$PACKAGE/pixl" \
+            xvfb-run -a -s "-screen 0 1920x1080x24" bash "$RUNNER_TEMP/windowed.sh" || status=$?
+          cat "$log/stderr.txt" "$log/stdout.txt" 2> /dev/null || true
+          exit "$status"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windowed-run-linux
+          path: ${{ runner.temp }}/windowed
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: dist/${{ env.PACKAGE }}.tar.gz
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain rust-toolchain.toml names
+        run: rustup toolchain install
+
+      - name: Read the version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "pixl") | .version')
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match the workspace version $version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "PACKAGE=pixl-$version-macos-arm64" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: cargo build --release --locked -p pixl
+
+      # An app bundle. Lumen takes the folder holding the executable as the
+      # app folder when lumen.toml is beside it, so lumen.toml and assets/
+      # sit in Contents/MacOS with the executable rather than in
+      # Contents/Resources. The bundle is signed ad hoc, which binds
+      # Info.plist and the files to the signature; it is not a Developer ID
+      # signature, so Gatekeeper still asks before the first start.
+      - name: Lay out the package
+        run: |
+          app="dist/$PACKAGE/pixl.app"
+          exe="$app/Contents/MacOS"
+          mkdir -p "$exe/assets/icons" "$exe/assets/fonts"
+          cp target/release/pixl app/lumen.toml "$exe/"
+          cp app/assets/icons/*.png "$exe/assets/icons/"
+          cp app/assets/fonts/* "$exe/assets/fonts/"
+          cp LICENSE "dist/$PACKAGE/"
+          cat > "$app/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>pixl</string>
+            <key>CFBundleIdentifier</key><string>dev.lumenfx.pixl</string>
+            <key>CFBundleName</key><string>pixl</string>
+            <key>CFBundleDisplayName</key><string>pixl</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>$VERSION</string>
+            <key>CFBundleVersion</key><string>$VERSION</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+          plutil -lint "$app/Contents/Info.plist"
+          missing=0
+          for f in $(grep -rhoE 'url\("[^"]+"\)' app/src | sed -E 's/url\("([^"]+)"\)/\1/' | sort -u); do
+            if [ ! -f "$exe/$f" ]; then
+              echo "missing from the package: $f" >&2
+              missing=1
+            fi
+          done
+          [ "$missing" = 0 ]
+          codesign --force --sign - "$app"
+          codesign --verify --strict --verbose=2 "$app"
+          # ditto keeps the bundle's signature and attributes intact in the zip.
+          (cd dist && ditto -c -k --keepParent "$PACKAGE" "$PACKAGE.zip")
+          unzip -l "dist/$PACKAGE.zip"
+
+      - name: Smoke test the zip
+        run: |
+          smoke="$RUNNER_TEMP/smoke"
+          elsewhere="$RUNNER_TEMP/elsewhere"
+          mkdir -p "$smoke" "$elsewhere"
+          ditto -x -k "dist/$PACKAGE.zip" "$smoke"
+          codesign --verify --strict "$smoke/$PACKAGE/pixl.app"
+          cp app/assets/demo/rig-demo.pixl "$elsewhere/"
+          mv app "$RUNNER_TEMP/app-source"
+          cd "$elsewhere"
+          status=0
+          LUMEN_HEADLESS=1 LUMEN_HEADLESS_TICKS=60 \
+            "$smoke/$PACKAGE/pixl.app/Contents/MacOS/pixl" rig-demo.pixl 2> stderr.txt || status=$?
+          cat stderr.txt
+          if [ "$status" != 0 ]; then
+            echo "pixl exited with $status" >&2
+            exit 1
+          fi
+          if grep -iqE 'not found|no such file|cannot find' stderr.txt; then
+            echo "pixl could not find a file it needs" >&2
+            exit 1
+          fi
+
+      # The bundle with a real window, started through Launch Services as a
+      # double-click in Finder would. The screen is captured after pixl has
+      # had time to draw, and the run fails if the editor exited early.
+      - name: Run the zip with a window
+        run: |
+          log="$RUNNER_TEMP/windowed"
+          mkdir -p "$log"
+          exe="$RUNNER_TEMP/smoke/$PACKAGE/pixl.app/Contents/MacOS/pixl"
+          open -n --stdout "$log/stdout.txt" --stderr "$log/stderr.txt" \
+            "$RUNNER_TEMP/smoke/$PACKAGE/pixl.app"
+          sleep 45
+          screencapture -x "$log/screen.png" || echo "screencapture failed" >&2
+          alive=0
+          pgrep -f "$exe" > /dev/null && alive=1
+          if [ "$alive" = 1 ]; then
+            pkill -f "$exe"
+          else
+            echo "pixl exited before the screen was captured" | tee -a "$log/stderr.txt"
+          fi
+          cat "$log/stderr.txt" "$log/stdout.txt" 2> /dev/null || true
+          [ "$alive" = 1 ]
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windowed-run-macos
+          path: ${{ runner.temp }}/windowed
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: dist/${{ env.PACKAGE }}.zip
+          if-no-files-found: error
+
+  # One release for the three packages, made once every build has passed.
+  publish:
+    if: github.ref_type == 'tag'
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pixl-*
+          path: dist
+          merge-multiple: true
+
       - name: Publish the pre-release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "dist/$PACKAGE.zip" \
+          ls -l dist
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
             --prerelease \
-            --title "pixl $VERSION" \
-            --notes "A pre-release of pixl for Windows (x86_64). Unzip it anywhere and run pixl.exe; keep the files beside it, pixl reads them at start."
+            --title "pixl ${GITHUB_REF_NAME#v}" \
+            --notes "A pre-release of pixl for Windows (x86_64), Linux (x86_64) and macOS (Apple silicon). The builds are not signed; the README's Download section says what each system asks on first start. Keep the files that come with pixl beside it, pixl reads them at start."
