@@ -13,6 +13,7 @@ pub mod input;
 pub mod jobs;
 pub mod keymap;
 pub mod layers;
+pub mod lessons;
 pub mod menus;
 pub mod palette;
 pub mod panels;

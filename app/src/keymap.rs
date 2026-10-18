@@ -15,6 +15,7 @@ use lumenui::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::editor::Tool;
+use crate::lessons::LESSONS;
 use crate::settings::Settings;
 
 /// One key with the modifiers held for it. `ctrl` stands for Ctrl, or
@@ -283,8 +284,6 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("pan-right", "Move view right", "View", Kind::Hold),
     ("rig-mode-bones", "Bones mode", "Rig", Kind::Press),
     ("rig-mode-pose", "Pose mode", "Rig", Kind::Press),
-    ("help-rig-demo", "Open rig demo", "Help", Kind::Press),
-    ("help-rig-tutorial", "Rig tutorial", "Help", Kind::Press),
     (
         "apply",
         "Finish the shape, or apply the transform",
@@ -396,14 +395,22 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("view-flip", "Flip view", "View", Kind::Press),
     ("brush-smaller", "Smaller brush", "Tools", Kind::Press),
     ("brush-larger", "Larger brush", "Tools", Kind::Press),
+    ("help-rig-demo", "Open rig demo", "Help", Kind::Press),
 ];
 
-/// Every command a key can run: the tools, then the rest by group.
+/// Every command a key can run: the tools, then the rest by group, with
+/// the tutorials last in Help.
 pub fn commands() -> Vec<Command> {
     let tools = Tool::ALL.into_iter().map(|t| Command {
         id: t.button_id().to_string(),
         label: t.label().to_string(),
         group: "Tools",
+        kind: Kind::Press,
+    });
+    let lessons = LESSONS.into_iter().map(|l| Command {
+        id: l.id.to_string(),
+        label: l.title.to_string(),
+        group: "Help",
         kind: Kind::Press,
     });
     tools
@@ -413,6 +420,7 @@ pub fn commands() -> Vec<Command> {
             group,
             kind: *kind,
         }))
+        .chain(lessons)
         .collect()
 }
 

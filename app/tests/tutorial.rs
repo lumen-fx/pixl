@@ -11,8 +11,8 @@ use common::drive::{At, Outcome, Step, drive, editor_over};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use lumenui::prelude::*;
 use pixl::Workspace;
+use pixl::lessons::RIG;
 use pixl::shipped::Shipped;
-use pixl::tutorial::STEPS;
 use pixl_core::rig::Rig;
 use pixl_core::{ColorMode, Document, LayerKind};
 
@@ -148,11 +148,11 @@ fn each_step_ticks_off_when_the_editor_shows_it_done() {
         assert!(
             ran >= *done_at && ran <= done_at + 2,
             "step {k} ({}) ticked off after {ran} scripted steps, its input ran at {done_at}",
-            STEPS[*k].title
+            RIG.steps[*k].title
         );
     }
     let last = out.tutorial.last().unwrap();
-    assert_eq!(last.step, STEPS.len(), "every step is done");
+    assert_eq!(last.step, RIG.steps.len(), "every step is done");
     assert!(last.open, "the card shows the end");
     // The card hid while closed and showed again from the Help menu.
     let closed = out.tutorial.iter().position(|t| !t.open && t.step == 3);

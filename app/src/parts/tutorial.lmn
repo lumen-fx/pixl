@@ -1,10 +1,10 @@
 <if signal="tutor_open" mode="hide">
   <column id="tutor" class="tutor">
     <row class="tutor-head">
-      <label class="tutor-title" text="Rig tutorial"/>
+      <label id="tutor-title" class="tutor-title" bind-text="tutor_title" text=""/>
       <label class="tutor-count" bind-text="tutor_count" text=""/>
       <spacer/>
-      <tooltip text="Close; Help &gt; Rig tutorial shows it again"><button id="tutor-close" class="flat small" text="x"/></tooltip>
+      <tooltip text="Close; the tutorial's Help item shows it again"><button id="tutor-close" class="flat small" text="x"/></tooltip>
     </row>
     <label id="tutor-text" class="tutor-text" bind-text="tutor_text" text=""/>
     <column id="tutor-steps" class="tutor-steps"/>
