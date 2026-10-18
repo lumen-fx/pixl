@@ -10,7 +10,10 @@ pub mod common;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use common::demo::{rig_demo, rig_lesson};
+use common::demo::{
+    animation_lesson, layers_lesson, palette_lesson, rig_demo, rig_lesson, selection_lesson,
+    start_lesson,
+};
 use common::drive::{Step, drive, editor_over};
 use pixl::Recents;
 use pixl::shipped::Shipped;
@@ -27,6 +30,23 @@ fn the_shipped_documents_are_what_the_code_builds() {
             rig_demo as fn() -> Document,
         ),
         (Shipped::RigLesson, "rig-lesson.pixl", rig_lesson),
+        (Shipped::StartLesson, "start-lesson.pixl", start_lesson),
+        (Shipped::LayersLesson, "layers-lesson.pixl", layers_lesson),
+        (
+            Shipped::SelectionLesson,
+            "selections-lesson.pixl",
+            selection_lesson,
+        ),
+        (
+            Shipped::AnimationLesson,
+            "animation-lesson.pixl",
+            animation_lesson,
+        ),
+        (
+            Shipped::PaletteLesson,
+            "palettes-lesson.pixl",
+            palette_lesson,
+        ),
     ] {
         let bytes = native::save(&build(), SaveOptions::default());
         assert_eq!(

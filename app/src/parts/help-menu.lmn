@@ -1,4 +1,10 @@
 <menu id="help-menu">
+  <menuitem id="help-start-tutorial" label="Getting started"/>
+  <menuitem id="help-layers-tutorial" label="Layers tutorial"/>
+  <menuitem id="help-selection-tutorial" label="Selections tutorial"/>
+  <menuitem id="help-animation-tutorial" label="Animation tutorial"/>
+  <menuitem id="help-palette-tutorial" label="Palettes tutorial"/>
   <menuitem id="help-rig-tutorial" label="Rig tutorial"/>
+  <separator/>
   <menuitem id="help-rig-demo" label="Open rig demo"/>
 </menu>

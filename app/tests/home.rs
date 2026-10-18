@@ -388,7 +388,7 @@ fn every_preset_has_its_button() {
 }
 
 #[test]
-fn the_rig_demo_is_listed_after_the_recent_documents() {
+fn the_rig_demo_and_getting_started_are_listed_after_the_recent_documents() {
     let (_, data) = seeded("demo-listed");
     let recents = Recents::load(&data);
     let now = std::time::SystemTime::now();
@@ -406,10 +406,20 @@ fn the_rig_demo_is_listed_after_the_recent_documents() {
     assert!(!pixl::home::recents_markup(&recents, "knight", now).contains("home-rig-demo"));
     let none = pixl::home::recents_markup(&recents, "zzz", now);
     assert!(none.contains("No recent document matches") && !none.contains("home-rig-demo"));
-    // With nothing opened yet it is the one entry, under the line saying so.
+    // The Getting started tutorial follows it, and the search finds it as
+    // a tutorial.
+    let start = all
+        .find("<row id=\"home-start-lesson\"")
+        .expect("the tutorial is listed");
+    assert!(start > demo && all[start..].contains("32 x 32 px"));
+    let found = pixl::home::recents_markup(&recents, "tutorial", now);
+    assert!(found.contains("home-start-lesson") && !found.contains("home-rig-demo"));
+    // With nothing opened yet they are the only entries, under the line
+    // saying so.
     let empty = pixl::home::recents_markup(&Recents::in_memory(), "", now);
     assert!(empty.contains("No recent documents yet"));
     assert!(empty.contains("<row id=\"home-rig-demo\""));
+    assert_eq!(empty.matches("<row ").count(), 2);
 }
 
 #[test]

@@ -1,7 +1,7 @@
 //! The start screen: what pixl shows when it opens without a file, after
 //! File > Close, and from the Home button. It lists the recent documents,
-//! with the rig demo pixl ships after them, and offers a new project or a
-//! file to open.
+//! with the rig demo and the Getting started tutorial pixl ships after them,
+//! and offers a new project or a file to open.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -99,7 +99,9 @@ pub fn show_home(
         home.open = false;
     }
     if home.open {
-        recents.draw_shipped_thumb(Shipped::RigDemo);
+        for (which, ..) in EXAMPLES {
+            recents.draw_shipped_thumb(which);
+        }
     }
     recents.collect_thumbnails();
     if recents.drawing()
@@ -127,8 +129,25 @@ pub fn show_home(
     }
 }
 
+/// The documents pixl ships that the start screen lists after the recent
+/// ones: each with its name and what it is. A click on the rig demo opens
+/// it; one on a lesson starts its tutorial.
+const EXAMPLES: [(Shipped, &str, &str); 2] = [
+    (
+        Shipped::RigDemo,
+        "Rig demo",
+        "Example: a rigged character that walks",
+    ),
+    (
+        Shipped::StartLesson,
+        "Getting started",
+        "Tutorial: draw, erase, undo, zoom and save, one step at a time",
+    ),
+];
+
 /// The recent documents whose name or folder holds `filter`, as markup,
-/// and after them the rig demo, listed the same way.
+/// and after them the rig demo and the Getting started tutorial, listed the
+/// same way.
 pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> String {
     let filter = filter.trim().to_lowercase();
     let matches = |name: &str, folder: &str| {
@@ -180,13 +199,15 @@ pub fn recents_markup(recents: &Recents, filter: &str, now: SystemTime) -> Strin
             &actions,
         ));
     }
-    let (name, folder) = ("Rig demo", "Example: a rigged character that walks");
-    if matches(name, folder) {
-        let (w, h) = Shipped::RigDemo.size();
+    for (which, name, folder) in EXAMPLES {
+        if !matches(name, folder) {
+            continue;
+        }
+        let (w, h) = which.size();
         out.push_str(&row(
-            "home-rig-demo",
+            &format!("home-{}", which.slug()),
             "recent example",
-            recents.shipped_thumb(Shipped::RigDemo).as_deref(),
+            recents.shipped_thumb(which).as_deref(),
             [
                 name,
                 folder,

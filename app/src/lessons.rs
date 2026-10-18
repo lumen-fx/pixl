@@ -1,24 +1,464 @@
-//! The lessons the tutorial walks through, each over a document pixl ships.
+//! The lessons the tutorial walks through, each over a document pixl ships:
 //!
-//! The rig lesson opens a character with no skeleton and builds one for it:
-//! a body bone, the head and the arm joined to the body's end, each part's
-//! layer bound to its bone, then a pose on two frames and the frames between
-//! rendered and played.
+//! - Getting started: pick the pencil and a color, draw, erase, undo and
+//!   redo, zoom and pan, save.
+//! - Layers: add a layer, name it, paint on it, move it under another, hide
+//!   and solo layers, fade it, merge it down.
+//! - Selections: select a box, move what it holds, deselect, lasso and add
+//!   to the lasso, paint inside the selection.
+//! - Animation: add frames, turn on the onion skin, draw a bounce, time a
+//!   frame, play, open the sprite sheet export.
+//! - Palettes: pick a swatch, build a ramp, paint and shade along it, turn
+//!   the picture to indexed color.
+//! - Rig: build a skeleton for a character with none: a body bone, the head
+//!   and the arm joined to the body's end, each part's layer bound to its
+//!   bone, then a pose on two frames and the frames between rendered and
+//!   played.
 
-use pixl_core::LayerId;
 use pixl_core::rig::{BoneId, Rig};
+use pixl_core::{ColorMode, LayerId};
 
+use crate::editor::Tool;
 use crate::rig::{RigMode, skeletons};
 use crate::shipped::Shipped;
 use crate::tutorial::{Lesson, Seen, Step};
 
 /// Every lesson, in the order the Help menu lists them.
-pub const LESSONS: [&Lesson; 1] = [&RIG];
+pub const LESSONS: [&Lesson; 6] = [&START, &LAYERS, &SELECTIONS, &ANIMATION, &PALETTES, &RIG];
 
 /// The lesson with this command id.
 pub fn lesson(id: &str) -> Option<&'static Lesson> {
     LESSONS.into_iter().find(|l| l.id == id)
 }
+
+// ---- getting started ----
+
+pub const START: Lesson = Lesson {
+    id: "help-start-tutorial",
+    title: "Getting started",
+    document: Shipped::StartLesson,
+    layout: "Paint",
+    steps: &START_STEPS,
+    done: "Done. The Help menu has more tutorials: layers, selections, animation, palettes and rigging.",
+};
+
+/// The red swatch of the default palette.
+const RED_SWATCH: &str = "swatch-4";
+
+const START_STEPS: [Step; 9] = [
+    Step {
+        title: "Pick the pencil",
+        text: "Click the pencil at the top of the tool bar on the left, or press B. It draws one pixel at a time.",
+        target: |_| Some(Tool::Pencil.button_id().to_string()),
+        done: |s| s.editor.tool == Tool::Pencil,
+    },
+    Step {
+        title: "Pick a color",
+        text: "Click the red swatch in the Palette panel on the right. The large square in the Color panel shows the color you draw with.",
+        target: |_| Some(RED_SWATCH.to_string()),
+        done: |s| s.editor.fg != s.since.fg,
+    },
+    Step {
+        title: "Draw",
+        text: "Drag on the canvas to color in the heart.",
+        target: |s| s.with_tool(Tool::Pencil, None),
+        done: |s| s.edited("Pencil"),
+    },
+    Step {
+        title: "Erase",
+        text: "Pick the eraser in the tool bar, or press E, and drag over part of what you drew.",
+        target: |s| s.with_tool(Tool::Eraser, None),
+        done: |s| s.edited("Eraser"),
+    },
+    Step {
+        title: "Undo",
+        text: "Press Ctrl+Z to undo the erasing. The History panel lists every edit, and Undo there does the same.",
+        target: |_| Some("history-undo".to_string()),
+        done: |s| s.editor.history.redo_labels().count() > s.since.redo,
+    },
+    Step {
+        title: "Redo",
+        text: "Press Ctrl+Shift+Z or Ctrl+Y to redo it.",
+        target: |_| Some("history-redo".to_string()),
+        done: |s| s.editor.history.redo_labels().count() < s.since.redo,
+    },
+    Step {
+        title: "Zoom",
+        text: "Turn the mouse wheel over the canvas to zoom in and out around the pointer. The + and - keys zoom too, and 0 fits the canvas to the window.",
+        target: |_| None,
+        done: |s| s.zooms > s.since.zooms,
+    },
+    Step {
+        title: "Pan",
+        text: "Hold W, A, S or D to move the view, or drag with the middle mouse button.",
+        target: |_| None,
+        done: |s| s.pans > s.since.pans,
+    },
+    Step {
+        title: "Save",
+        text: "Press Ctrl+S to save. This copy has no file yet, so pixl asks where to keep it.",
+        target: |_| None,
+        done: |s| s.editor.path.is_some() && !s.editor.is_modified(),
+    },
+];
+
+// ---- layers ----
+
+pub const LAYERS: Lesson = Lesson {
+    id: "help-layers-tutorial",
+    title: "Layers tutorial",
+    document: Shipped::LayersLesson,
+    // Animate leaves out the History and Brushes panels, which gives the
+    // layers list room.
+    layout: "Animate",
+    steps: &LAYERS_STEPS,
+    done: "Done. A layer keeps its pixels apart from the others until you merge it, so try ideas on a new one.",
+};
+
+impl Seen<'_> {
+    /// The id of the eye on a layer's row.
+    fn eye(layer: Option<LayerId>) -> Option<String> {
+        layer.map(|l| format!("layer-eye-{}", l.0))
+    }
+
+    /// `then` while the layer the lesson added is the active one; until
+    /// then its row.
+    fn on_added(&self, then: Option<String>) -> Option<String> {
+        match self.added() {
+            Some(layer) if layer != self.editor.layer => Some(row(layer)),
+            _ => then,
+        }
+    }
+
+    /// Whether `layer` shows.
+    fn visible(&self, layer: Option<LayerId>) -> bool {
+        layer
+            .and_then(|l| self.editor.doc.layer(l))
+            .is_some_and(|l| l.props.visible)
+    }
+
+    /// The place of `layer` among the layers, bottom first.
+    fn place(&self, layer: Option<LayerId>) -> Option<usize> {
+        let layer = layer?;
+        self.editor
+            .doc
+            .walk()
+            .iter()
+            .position(|(_, l)| l.id == layer)
+    }
+}
+
+const LAYERS_STEPS: [Step; 9] = [
+    Step {
+        title: "Add a layer",
+        text: "Click New below the list in the Layers panel. The new layer goes above the active one, Tree.",
+        target: |_| Some("layer-add".to_string()),
+        done: |s| s.added().is_some(),
+    },
+    Step {
+        title: "Name it",
+        text: "Click Props below the list, or double-click the new layer's row, then type Shadow as its name and click OK.",
+        target: |s| {
+            if s.flag("lp_open") {
+                return Some("lp-ok".to_string());
+            }
+            s.on_added(Some("layer-properties".to_string()))
+        },
+        done: |s| {
+            s.added()
+                .and_then(|l| s.editor.doc.layer(l))
+                .is_some_and(|l| !l.props.name.starts_with("Layer "))
+        },
+    },
+    Step {
+        title: "Paint on it",
+        text: "With the pencil, draw a shadow on the grass at the foot of the tree. Only the active layer, highlighted in the list, takes the paint.",
+        target: |s| s.on_added(s.with_tool(Tool::Pencil, None)),
+        done: |s| s.added().is_some_and(|l| s.painted(l, s.editor.frame)),
+    },
+    Step {
+        title: "Move it down",
+        text: "Click Down below the list to move your layer under Tree, so the tree covers its shadow. Dragging a row moves it too.",
+        target: |s| s.on_added(Some("layer-down".to_string())),
+        done: |s| match (s.place(s.added()), s.place(s.layer("Tree"))) {
+            (Some(layer), Some(tree)) => layer < tree,
+            _ => false,
+        },
+    },
+    Step {
+        title: "Hide a layer",
+        text: "Click the eye at the left of the Tree row to hide the tree.",
+        target: |s| Seen::eye(s.layer("Tree")),
+        done: |s| s.layer("Tree").is_some() && !s.visible(s.layer("Tree")),
+    },
+    Step {
+        title: "Show one alone",
+        text: "Hold Alt and click the eye on your layer's row. Only that layer shows.",
+        target: |s| Seen::eye(s.added()),
+        done: |s| {
+            let only = s.added();
+            s.visible(only)
+                && s.editor
+                    .doc
+                    .walk()
+                    .iter()
+                    .all(|(_, l)| Some(l.id) == only || !l.props.visible)
+        },
+    },
+    Step {
+        title: "Show them again",
+        text: "Alt+click the same eye to bring back what showed before, then click the Tree row's eye to show the tree.",
+        target: |s| {
+            let hidden = s
+                .editor
+                .doc
+                .walk()
+                .iter()
+                .filter(|(_, l)| !l.props.visible)
+                .any(|(_, l)| Some(l.id) != s.layer("Tree"));
+            Seen::eye(if hidden { s.added() } else { s.layer("Tree") })
+        },
+        done: |s| s.editor.doc.walk().iter().all(|(_, l)| l.props.visible),
+    },
+    Step {
+        title: "Fade it",
+        text: "Drag the opacity slider at the top of the Layers panel to the left to fade the shadow.",
+        target: |s| s.on_added(Some("layer-opacity".to_string())),
+        done: |s| {
+            s.added()
+                .and_then(|l| s.editor.doc.layer(l))
+                .is_some_and(|l| l.props.opacity < 255)
+        },
+    },
+    Step {
+        title: "Merge it down",
+        text: "Open the Layer menu in the menu row and click Merge down. Your layer joins Background, the layer under it.",
+        target: |s| s.on_added(Some("menu-layer".to_string())),
+        done: |s| s.added().is_none() && s.edited("Merge down"),
+    },
+];
+
+// ---- selections ----
+
+pub const SELECTIONS: Lesson = Lesson {
+    id: "help-selection-tutorial",
+    title: "Selections tutorial",
+    document: Shipped::SelectionLesson,
+    layout: "Paint",
+    steps: &SELECTION_STEPS,
+    done: "Done. Every tool keeps to the selection, and the Select menu grows, shrinks, inverts and saves it.",
+};
+
+/// The middles of the selection lesson's apple, star and leaf.
+pub const APPLE: (i32, i32) = (8, 9);
+pub const STAR: (i32, i32) = (23, 9);
+pub const LEAF: (i32, i32) = (15, 24);
+
+impl Seen<'_> {
+    /// Whether the selection holds the pixel at `at`.
+    fn selects(&self, at: (i32, i32)) -> bool {
+        self.editor
+            .selection
+            .as_ref()
+            .is_some_and(|sel| sel.contains(at.0, at.1))
+    }
+}
+
+const SELECTION_STEPS: [Step; 7] = [
+    Step {
+        title: "Rectangle select",
+        text: "Click Rectangle select in the tool bar, or press M.",
+        target: |_| Some(Tool::Select.button_id().to_string()),
+        done: |s| s.editor.tool == Tool::Select,
+    },
+    Step {
+        title: "Select the apple",
+        text: "Drag a box around the red apple at the top left. An outline marks what is selected.",
+        target: |s| s.with_tool(Tool::Select, None),
+        done: |s| s.selects(APPLE),
+    },
+    Step {
+        title: "Move it",
+        text: "Pick Move in the tool bar, or press V, then drag from inside the box to carry the apple to the right.",
+        target: |s| s.with_tool(Tool::Move, None),
+        done: |s| s.editor.selection.is_some() && s.edited("Move"),
+    },
+    Step {
+        title: "Deselect",
+        text: "Press Escape to drop the selection. Ctrl+D does the same.",
+        target: |_| None,
+        done: |s| s.editor.selection.is_none(),
+    },
+    Step {
+        title: "Lasso",
+        text: "Pick the lasso in the tool bar, or press Q, and drag a loop around the star.",
+        target: |s| s.with_tool(Tool::Lasso, None),
+        done: |s| s.editor.tool == Tool::Lasso && s.selects(STAR),
+    },
+    Step {
+        title: "Add to it",
+        text: "Hold Shift and lasso the leaf too. Shift adds to the selection, and Alt takes away from it.",
+        target: |s| s.with_tool(Tool::Lasso, None),
+        done: |s| s.selects(STAR) && s.selects(LEAF),
+    },
+    Step {
+        title: "Paint inside",
+        text: "Pick the pencil and scribble across the star and the leaf. The paint lands only inside the selection.",
+        target: |s| s.with_tool(Tool::Pencil, None),
+        done: |s| s.edited("Pencil"),
+    },
+];
+
+// ---- animation ----
+
+pub const ANIMATION: Lesson = Lesson {
+    id: "help-animation-tutorial",
+    title: "Animation tutorial",
+    document: Shipped::AnimationLesson,
+    layout: "Animate",
+    steps: &ANIMATION_STEPS,
+    done: "Done. Export the sheet from this dialog, or close it and pick Export GIF in the File menu for an animated GIF.",
+};
+
+const ANIMATION_STEPS: [Step; 8] = [
+    Step {
+        title: "Add a frame",
+        text: "Click New in the timeline below the canvas. It adds an empty frame 2 after this one and shows it.",
+        target: |_| Some("tl-new".to_string()),
+        done: |s| s.editor.doc.frame_count() > s.start.doc.frame_count(),
+    },
+    Step {
+        title: "Onion skin",
+        text: "Tick Onion skin at the right of the timeline. The frames before and after this one show faintly behind it.",
+        target: |_| Some("tl-onion".to_string()),
+        done: |s| s.timeline.onion.on,
+    },
+    Step {
+        title: "Draw the fall",
+        text: "On frame 2, draw the ball again at the bottom of the canvas, a little wider and flatter where it hits the ground.",
+        target: |s| (s.editor.frame != 1).then(|| "tl-frame-1".to_string()),
+        done: |s| s.layer("Ball").is_some_and(|l| s.painted(l, 1)),
+    },
+    Step {
+        title: "Add another",
+        text: "Click New again for frame 3.",
+        target: |_| Some("tl-new".to_string()),
+        done: |s| s.editor.doc.frame_count() > s.start.doc.frame_count() + 1,
+    },
+    Step {
+        title: "Draw the rise",
+        text: "On frame 3, draw the ball round again, halfway back up.",
+        target: |s| (s.editor.frame != 2).then(|| "tl-frame-2".to_string()),
+        done: |s| s.layer("Ball").is_some_and(|l| s.painted(l, 2)),
+    },
+    Step {
+        title: "Time the hit",
+        text: "Click frame 2's number in the timeline, then type 60 in Duration and press Enter. The ball now meets the ground in a blink.",
+        target: |s| {
+            Some(if s.editor.frame == 1 {
+                "tl-duration".to_string()
+            } else {
+                "tl-frame-1".to_string()
+            })
+        },
+        done: |s| {
+            let was = s.start.doc.frames()[0].duration_ms;
+            s.editor.doc.frames().iter().any(|f| f.duration_ms != was)
+        },
+    },
+    Step {
+        title: "Play",
+        text: "Click Play to watch the ball bounce. Click it again to stop.",
+        target: |_| Some("tl-play".to_string()),
+        done: |s| s.timeline.playback.playing,
+    },
+    Step {
+        title: "Export",
+        text: "Open the File menu and click Export sprite sheet. It lays the frames out side by side on one image, ready for a game.",
+        target: |_| Some("menu-file".to_string()),
+        done: |s| s.flag("sheet_export_open"),
+    },
+];
+
+// ---- palettes ----
+
+pub const PALETTES: Lesson = Lesson {
+    id: "help-palette-tutorial",
+    title: "Palettes tutorial",
+    document: Shipped::PaletteLesson,
+    layout: "Paint",
+    steps: &PALETTE_STEPS,
+    done: "Done. Image > Sort palette orders the swatches, and Load palette and Save palette share them as .gpl, .pal, .hex and .ase files.",
+};
+
+/// The green swatch of the default palette.
+const GREEN_SWATCH: usize = 11;
+
+impl Seen<'_> {
+    /// How many colors the lesson's palette started with.
+    fn first_colors(&self) -> usize {
+        self.start.doc.palette().len()
+    }
+
+    /// `then` while the dialog with the open flag `open` shows; until then
+    /// the Image menu, which opens it.
+    fn image_dialog(&self, open: &str, then: &str) -> Option<String> {
+        Some(if self.flag(open) { then } else { "menu-image" }.to_string())
+    }
+}
+
+const PALETTE_STEPS: [Step; 6] = [
+    Step {
+        title: "Pick a swatch",
+        text: "Click the dark green swatch in the Palette panel. A click picks the color you draw with, and a right-click the background color.",
+        target: |_| Some(format!("swatch-{GREEN_SWATCH}")),
+        done: |s| s.editor.fg != s.since.fg,
+    },
+    Step {
+        title: "Build a ramp",
+        text: "Open the Image menu, click Ramp builder and then Add to palette. It adds shades of your color, dark to light, at the end of the palette.",
+        target: |s| s.image_dialog("ramp_open", "ramp-ok"),
+        done: |s| s.editor.doc.palette().len() > s.since.doc.palette().len(),
+    },
+    Step {
+        title: "Pick from the ramp",
+        text: "Click the middle swatch of the new shades, at the end of the palette.",
+        target: |s| {
+            let added = s
+                .editor
+                .doc
+                .palette()
+                .len()
+                .saturating_sub(s.first_colors());
+            (added > 0).then(|| format!("swatch-{}", s.first_colors() + added / 2))
+        },
+        done: |s| {
+            let colors = s.editor.doc.palette().colors();
+            colors
+                .iter()
+                .skip(s.first_colors())
+                .any(|c| *c == s.editor.fg)
+        },
+    },
+    Step {
+        title: "Paint a leaf",
+        text: "With the pencil, draw a leaf on the bare stem.",
+        target: |s| s.with_tool(Tool::Pencil, None),
+        done: |s| s.edited("Pencil"),
+    },
+    Step {
+        title: "Shade it",
+        text: "Pick Shading in the tool bar, or press O, and drag over half of your leaf. Each pixel steps to the next swatch, lighter here, and a right-click drag steps back.",
+        target: |s| s.with_tool(Tool::Shade, None),
+        done: |s| s.edited("Shading"),
+    },
+    Step {
+        title: "Indexed color",
+        text: "Open the Image menu, click Indexed color and then OK. Every pixel then holds an entry of the palette instead of a color of its own.",
+        target: |s| s.image_dialog("indexed_open", "indexed-ok"),
+        done: |s| s.editor.doc.mode() == ColorMode::Indexed,
+    },
+];
 
 // ---- the rig lesson ----
 
@@ -273,6 +713,15 @@ mod tests {
                 assert!(s.text.is_ascii() && s.title.is_ascii());
             }
             assert!(lesson.done.is_ascii() && lesson.title.is_ascii());
+        }
+    }
+
+    #[test]
+    fn the_help_menu_lists_every_lesson() {
+        let menu = include_str!("parts/help-menu.lmn");
+        for l in LESSONS {
+            let item = format!(r#"<menuitem id="{}" label="{}"/>"#, l.id, l.title);
+            assert!(menu.contains(&item), "{}", l.title);
         }
     }
 

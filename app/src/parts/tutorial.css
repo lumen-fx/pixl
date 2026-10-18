@@ -30,3 +30,5 @@
 
 button.tutor-target, button.flat.tutor-target { border: 2px solid var(--tutor-mark); text-color: var(--text); }
 .layer-row.tutor-target, .rig-bone.tutor-target { border: 2px solid var(--tutor-mark); }
+.swatch.tutor-target, .tl-frame.tutor-target { border: 2px solid var(--tutor-mark); }
+slider.tutor-target, checkbox.tutor-target, input.tutor-target { border: 2px solid var(--tutor-mark); radius: var(--radius); }

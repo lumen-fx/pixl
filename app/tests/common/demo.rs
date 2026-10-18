@@ -1,12 +1,13 @@
 //! The documents pixl ships, built from code: the rig demo, a small character
-//! rigged and keyed as a walk, and the rig lesson the tutorial opens, the same
-//! character with no skeleton, its arm held out and no far arm. `tests/demo.rs`
-//! checks the files in `assets/demo/` are what this builds.
+//! rigged and keyed as a walk; the rig lesson the rig tutorial opens, the same
+//! character with no skeleton, its arm held out and no far arm; and the small
+//! canvases the other tutorials open. `tests/demo.rs` checks the files in
+//! `assets/demo/` are what this builds.
 
 use pixl_core::rig::{BonePose, Easing, NamedPose, Pose, PoseKey, RenderOptions, Vec2};
 use pixl_core::{Binding, ColorMode, Document, LayerId, NewLayer, Placement, Rgba};
 
-/// The canvas side of both documents.
+/// The canvas side of the rig demo and the rig lesson.
 pub const SIDE: u32 = 48;
 /// The milliseconds each frame of the demo's walk lasts.
 const WALK_MS: u32 = 100;
@@ -256,5 +257,173 @@ pub fn rig_demo() -> Document {
     });
     d.render_keyed(skel, 0, 7, RenderOptions::default())
         .expect("the walk renders");
+    d
+}
+
+/// Draws `rows` of keys onto frame 0 of `layer`, with the top-left at `at`;
+/// a key `colors` does not name stays empty.
+fn draw(d: &mut Document, layer: LayerId, at: (i32, i32), rows: &[&str], colors: &[(char, Rgba)]) {
+    let t = d.target(layer, 0).expect("frame 0");
+    for (y, row) in rows.iter().enumerate() {
+        for (x, key) in row.chars().enumerate() {
+            if let Some((_, c)) = colors.iter().find(|(k, _)| *k == key) {
+                t.raster
+                    .set_raw(at.0 + x as i32, at.1 + y as i32, c.to_u32());
+            }
+        }
+    }
+}
+
+/// A filled circle of `color` around `at`.
+fn disc(d: &mut Document, layer: LayerId, at: (i32, i32), r: i32, color: Rgba) {
+    let t = d.target(layer, 0).expect("frame 0");
+    for y in -r..=r {
+        for x in -r..=r {
+            if x * x + y * y <= r * r + r / 2 {
+                t.raster.set_raw(at.0 + x, at.1 + y, color.to_u32());
+            }
+        }
+    }
+}
+
+/// The side of the tutorials' lessons other than the rig's.
+pub const LESSON_SIDE: u32 = 32;
+
+/// A lesson canvas with its one layer named `layer`.
+fn canvas(layer: &str) -> (Document, LayerId) {
+    let mut d = Document::new(LESSON_SIDE, LESSON_SIDE, ColorMode::Rgba).expect("a valid size");
+    let id = d.layers()[0].id;
+    d.update_layer(id, |p| p.name = layer.into())
+        .expect("the first layer");
+    (d, id)
+}
+
+/// Getting started: the outline of a heart to color in.
+pub fn start_lesson() -> Document {
+    let (mut d, layer) = canvas("Layer 1");
+    let heart = [
+        "..ooo...ooo..",
+        ".o...o.o...o.",
+        "o.....o.....o",
+        "o...........o",
+        "o...........o",
+        ".o.........o.",
+        "..o.......o..",
+        "...o.....o...",
+        "....o...o....",
+        ".....o.o.....",
+        "......o......",
+    ];
+    let pink = Rgba::opaque(0xe0, 0x6f, 0x8b);
+    draw(&mut d, layer, (10, 11), &heart, &[('o', pink)]);
+    d
+}
+
+/// The layers lesson: a tree on its own layer over a sky and grass.
+pub fn layers_lesson() -> Document {
+    let (mut d, background) = canvas("Background");
+    {
+        let t = d.target(background, 0).expect("frame 0");
+        for y in 0..LESSON_SIDE as i32 {
+            let c = if y < 24 {
+                Rgba::opaque(0x31, 0xa2, 0xf2)
+            } else {
+                Rgba::opaque(0x44, 0x89, 0x1a)
+            };
+            for x in 0..LESSON_SIDE as i32 {
+                t.raster.set_raw(x, y, c.to_u32());
+            }
+        }
+    }
+    let tree = d
+        .add_layer(NewLayer::Raster, "Tree", Placement::default())
+        .expect("a layer");
+    let trunk = Rgba::opaque(0x49, 0x3c, 0x2b);
+    draw(&mut d, tree, (15, 15), &["tt"; 11], &[('t', trunk)]);
+    disc(&mut d, tree, (16, 11), 6, Rgba::opaque(0xa3, 0xce, 0x27));
+    d
+}
+
+/// The selections lesson: an apple, a star and a leaf to select.
+pub fn selection_lesson() -> Document {
+    use pixl::lessons::{APPLE, LEAF, STAR};
+    let (mut d, layer) = canvas("Picture");
+    disc(&mut d, layer, APPLE, 4, Rgba::opaque(0xbe, 0x26, 0x33));
+    let stem = Rgba::opaque(0x49, 0x3c, 0x2b);
+    draw(
+        &mut d,
+        layer,
+        (APPLE.0, APPLE.1 - 6),
+        &["s", "s"],
+        &[('s', stem)],
+    );
+    let star = [
+        "....y....",
+        "....y....",
+        "...yyy...",
+        "yyyyyyyyy",
+        ".yyyyyyy.",
+        "..yyyyy..",
+        "..yy.yy..",
+        ".yy...yy.",
+        "y.......y",
+    ];
+    let yellow = Rgba::opaque(0xf7, 0xe2, 0x6b);
+    draw(
+        &mut d,
+        layer,
+        (STAR.0 - 4, STAR.1 - 4),
+        &star,
+        &[('y', yellow)],
+    );
+    let leaf = [
+        "....gggg.....",
+        "..gggggggg...",
+        "gggggggggggg.",
+        "..gggggggg...",
+        "....gggg.....",
+    ];
+    let green = Rgba::opaque(0x44, 0x89, 0x1a);
+    draw(
+        &mut d,
+        layer,
+        (LEAF.0 - 6, LEAF.1 - 2),
+        &leaf,
+        &[('g', green)],
+    );
+    d
+}
+
+/// The milliseconds the animation lesson's frame lasts.
+pub const BOUNCE_MS: u32 = 120;
+
+/// The animation lesson: one frame, the ball at the top.
+pub fn animation_lesson() -> Document {
+    let (mut d, layer) = canvas("Ball");
+    d.set_frame_duration(0, BOUNCE_MS).expect("frame 0");
+    disc(&mut d, layer, (16, 6), 3, Rgba::opaque(0xbe, 0x26, 0x33));
+    d
+}
+
+/// The palettes lesson: a pot with a bare stem, its clay in colors the
+/// palette does not have.
+pub fn palette_lesson() -> Document {
+    let (mut d, layer) = canvas("Plant");
+    let pot = [
+        "lllllllllll",
+        "ddddddddddd",
+        ".lllllllll.",
+        ".llllllldl.",
+        "..lllllld..",
+        "..llllldd..",
+        "...ddddd...",
+    ];
+    let clay = [
+        ('l', Rgba::opaque(196, 112, 74)),
+        ('d', Rgba::opaque(141, 72, 50)),
+    ];
+    draw(&mut d, layer, (11, 24), &pot, &clay);
+    let stem = Rgba::opaque(0x2f, 0x48, 0x4e);
+    draw(&mut d, layer, (16, 12), &["s"; 12], &[('s', stem)]);
     d
 }

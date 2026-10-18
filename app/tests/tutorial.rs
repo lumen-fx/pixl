@@ -7,7 +7,8 @@ pub mod common;
 use std::sync::{Arc, Mutex};
 
 use common::demo::{HAND, HEAD_TOP, HIPS, LESSON_FRAMES, NECK};
-use common::drive::{At, Outcome, Step, drive, editor_over};
+use common::drive::{At, Step, drive, editor_over};
+use common::script::{Script, click, drag, press};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use lumenui::prelude::*;
 use pixl::Workspace;
@@ -17,35 +18,6 @@ use pixl_core::rig::Rig;
 use pixl_core::{ColorMode, Document, LayerKind};
 
 const L: PointerButton = PointerButton::Primary;
-
-fn drag(a: (i32, i32), b: (i32, i32)) -> Vec<Step> {
-    let mut steps = vec![Step::Move(At::Doc(a.0, a.1)), Step::Wait];
-    steps.push(Step::Down(At::Doc(a.0, a.1), L));
-    for i in 1..=4 {
-        let x = a.0 + (b.0 - a.0) * i / 4;
-        let y = a.1 + (b.1 - a.1) * i / 4;
-        steps.push(Step::Move(At::Doc(x, y)));
-    }
-    steps.push(Step::Up(At::Doc(b.0, b.1), L));
-    steps.push(Step::Wait);
-    steps
-}
-
-/// A press on the canvas at a pixel, which is what selects a bone.
-fn press(a: (i32, i32)) -> Vec<Step> {
-    vec![
-        Step::Move(At::Doc(a.0, a.1)),
-        Step::Wait,
-        Step::Down(At::Doc(a.0, a.1), L),
-    ]
-}
-
-/// A click on the canvas at a pixel.
-fn click(a: (i32, i32)) -> Vec<Step> {
-    let mut steps = press(a);
-    steps.extend([Step::Up(At::Doc(a.0, a.1), L), Step::Wait]);
-    steps
-}
 
 /// The middle of the body bone, and of the head bone.
 const BODY_MID: (i32, i32) = (HIPS.0, (HIPS.1 + NECK.1) / 2);
@@ -61,39 +33,6 @@ fn layer_row(name: &str) -> &'static str {
         .map(|(_, l)| l.id)
         .expect("the layer");
     Box::leak(format!("layer-row-{}", id.0).into_boxed_str())
-}
-
-/// A script, with the place in it where each tutorial step should tick off.
-#[derive(Default)]
-struct Script {
-    steps: Vec<Step>,
-    /// The tutorial step, and how many scripted steps have run once the
-    /// input that does it has.
-    expect: Vec<(usize, usize)>,
-}
-
-impl Script {
-    /// Input that does not finish a step.
-    fn then(&mut self, steps: impl IntoIterator<Item = Step>) -> &mut Self {
-        self.steps.extend(steps);
-        self
-    }
-
-    /// Input whose last step finishes tutorial step `k`.
-    fn ticks(&mut self, k: usize, steps: Vec<Step>) -> &mut Self {
-        let last = steps.iter().rposition(|s| !matches!(s, Step::Wait));
-        let done_at = self.steps.len() + last.expect("an input") + 1;
-        self.steps.extend(steps);
-        self.expect.push((k, done_at));
-        self.steps.push(Step::Wait);
-        self
-    }
-}
-
-/// The scripted steps that had run on the first tick the tutorial was past
-/// step `k`.
-fn passed(out: &Outcome, k: usize) -> Option<usize> {
-    out.tutorial.iter().find(|t| t.step > k).map(|t| t.ran)
 }
 
 fn skeleton_rig(doc: &Document) -> &Rig {
@@ -139,21 +78,12 @@ fn each_step_ticks_off_when_the_editor_shows_it_done() {
         .ticks(12, vec![Step::Click("rig-render-keyed")])
         .ticks(13, vec![Step::Click("tl-play")]);
     let lesson = Document::new(16, 16, ColorMode::Rgba).unwrap();
-    let out = drive(editor_over(lesson), s.steps);
+    let out = drive(editor_over(lesson), s.steps.clone());
 
     assert_eq!(out.title, "rig lesson *");
     assert_eq!(out.doc.frame_count(), LESSON_FRAMES);
-    for (k, done_at) in &s.expect {
-        let ran = passed(&out, *k).unwrap_or_else(|| panic!("step {k} never ticked off"));
-        assert!(
-            ran >= *done_at && ran <= done_at + 2,
-            "step {k} ({}) ticked off after {ran} scripted steps, its input ran at {done_at}",
-            RIG.steps[*k].title
-        );
-    }
-    let last = out.tutorial.last().unwrap();
-    assert_eq!(last.step, RIG.steps.len(), "every step is done");
-    assert!(last.open, "the card shows the end");
+    let titles: Vec<&str> = RIG.steps.iter().map(|s| s.title).collect();
+    s.check(&out, &titles);
     // The card hid while closed and showed again from the Help menu.
     let closed = out.tutorial.iter().position(|t| !t.open && t.step == 3);
     let reopened = out.tutorial.iter().rposition(|t| t.open && t.step == 3);

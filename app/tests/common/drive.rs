@@ -37,6 +37,9 @@ pub enum Step {
     Key(&'static str, bool),
     KeyDown(NamedKey),
     KeyUp(NamedKey),
+    /// A character key going down and staying down, and coming up.
+    Hold(&'static str),
+    Release(&'static str),
     Down(At, PointerButton),
     Move(At),
     Up(At, PointerButton),
@@ -115,15 +118,17 @@ pub struct Outcome {
     pub perf_lines: Vec<String>,
     /// The pixels the tool preview draws over the document.
     pub preview: usize,
-    /// The rig tutorial on each tick from the fifth on.
+    /// The tutorial on each tick from the fifth on.
     pub tutorial: Vec<Tutor>,
 }
 
-/// The rig tutorial on one tick.
+/// The tutorial on one tick.
 #[derive(Clone, Debug)]
 pub struct Tutor {
     /// How many scripted steps had run.
     pub ran: usize,
+    /// The command id of the lesson running.
+    pub lesson: Option<&'static str>,
     /// The tutorial's step.
     pub step: usize,
     /// Whether its card showed.
@@ -289,6 +294,19 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     Step::KeyUp(k) => {
                         keys_up.write(KeyReleased {
                             key: Key::Named(k),
+                            modifiers: mods,
+                        });
+                    }
+                    Step::Hold(name) => {
+                        keys.write(KeyPressed {
+                            key: key(name),
+                            modifiers: mods,
+                            repeat: false,
+                        });
+                    }
+                    Step::Release(name) => {
+                        keys_up.write(KeyReleased {
+                            key: key(name),
                             modifiers: mods,
                         });
                     }
@@ -474,6 +492,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         .is_some_and(|n| n.has_class("tutor-target"));
                     tutorial_out.lock().unwrap().push(Tutor {
                         ran: ran_out.load(Ordering::Relaxed),
+                        lesson: tutor.running(&editor).map(|l| l.id),
                         step: tutor.step,
                         open: signals.get::<bool>("tutor_open").unwrap_or(false),
                         target,

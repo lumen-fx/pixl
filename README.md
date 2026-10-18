@@ -25,8 +25,8 @@ its size and when it last changed, with a field that filters them by name or
 folder. A click opens one. A document that is no longer there shows as
 missing, with a button that takes it off the list; one with a recovery copy
 newer than its file offers to recover it. After the recent documents the
-list shows the rig demo, which opens as an untitled copy and never joins the
-recent documents. Beside the list are New project and Open. The list and the
+list shows the rig demo and the Getting started tutorial; each opens as an
+untitled copy that never joins the recent documents. Beside the list are New project and Open. The list and the
 thumbnails are kept in pixl's folder of the user data directory
 (`~/.local/share/lumen/pixl` on Linux), never beside the documents. File >
 Close (Ctrl+W) and the Home button in the menu row return to the start
@@ -328,17 +328,33 @@ menu) the panel shows only its header until a mode starts; Bones or Pose
 with no skeleton yet unfolds it to New skeleton.
 
 Help > Open rig demo, also listed on the start screen, opens a character
-rigged and keyed as an eight-frame walk; press Play to watch it. Help > Rig
-tutorial opens a plainer copy of that character, its arm held out and no
-skeleton, with a card over the canvas that goes through building one: draw a
-body bone, draw the head and the arm from the body's end so they join it,
-bind each part's layer to its bone, raise the arm on one frame and turn the
-body on another, which carries the head and arm along, then render the
-frames between and play. Each step says where to drag or outlines the
-control to click next, and ticks itself off once done. The tutorial switches
-to the Rig layout; closing its card keeps the place, and Help > Rig tutorial
-shows it again. Both open as untitled copies, so what pixl ships is never
-changed.
+rigged and keyed as an eight-frame walk; press Play to watch it.
+
+The Help menu's tutorials walk through pixl one workflow at a time:
+
+- Getting started: pick the pencil and a color, draw, erase, undo and redo,
+  zoom and pan, save.
+- Layers: add a layer, name it, paint on it, move it under another, hide a
+  layer and show one alone, fade it and merge it down.
+- Selections: select a box, move what it holds, deselect, lasso and add to
+  the lasso with Shift, paint inside the selection.
+- Animation: add frames, turn on the onion skin, draw a bounce, time a
+  frame, play, open the sprite sheet export.
+- Palettes: pick a swatch, build a ramp, paint and shade along it, convert
+  the picture to indexed color.
+- Rig: a plainer copy of the demo's character, its arm held out and no
+  skeleton. Draw a body bone, draw the head and the arm from the body's end
+  so they join it, bind each part's layer to its bone, raise the arm on one
+  frame and turn the body on another, which carries the head and arm along,
+  then render the frames between and play.
+
+Each tutorial opens a small document of its own as an untitled copy, so what
+pixl ships is never changed, switches to the layout it works in, and shows a
+card over the canvas listing its steps. Each step says where to drag or
+outlines the control to click next, and ticks itself off once the editor
+shows it done. Closing the card keeps the place, and the tutorial's Help item
+shows it again; opening another document ends the tutorial. The start screen
+lists Getting started after the rig demo.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
@@ -376,10 +392,10 @@ cargo run -p pixl -- art.pixl     # straight into a document
 cargo test
 ```
 
-The rig demo and the tutorial's lesson are built by
+The rig demo and the tutorials' documents are built by
 `app/tests/common/demo.rs`, and a test checks the files shipped in
-`app/assets/demo/` match. After changing either, or the `.pixl` format,
-write them again with `PIXL_WRITE_DEMO=1 cargo test -p pixl --test demo`.
+`app/assets/demo/` match. After changing one, or the `.pixl` format, write
+them again with `PIXL_WRITE_DEMO=1 cargo test -p pixl --test demo`.
 
 `cargo bench -p pixl-core --bench rig` times posing and rendering a
 20-bone character, and `cargo bench -p pixl --bench pose -- gpu` (or `cpu`)
