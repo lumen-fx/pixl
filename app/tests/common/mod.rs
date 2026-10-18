@@ -65,4 +65,5 @@ pub fn save(frame: &Frame, name: &str) {
     }
 }
 
+pub mod demo;
 pub mod drive;

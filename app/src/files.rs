@@ -1,6 +1,7 @@
 //! Documents on disk: new, open, save, save as and close for `.pixl` files,
-//! import from PNG, GIF and Aseprite, export to PNG and GIF, and the
-//! autosave recovery copy pixl-core keeps beside a saved document.
+//! import from PNG, GIF and Aseprite, export to PNG and GIF, the documents
+//! pixl ships, and the autosave recovery copy pixl-core keeps beside a saved
+//! document.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -23,6 +24,7 @@ use crate::ids::ElementIds;
 use crate::keymap::KeyCommands;
 use crate::recents::Recents;
 use crate::settings::Settings;
+use crate::shipped::Shipped;
 use crate::view::parse_hex;
 
 /// Something that replaces the document, waiting for the user to agree to
@@ -42,6 +44,8 @@ pub enum Replace {
     /// The frames a sprite sheet image splits into, each lasting the given
     /// milliseconds.
     Sheet(PathBuf, SheetGrid, u32),
+    /// An untitled copy of a document pixl ships.
+    Shipped(Shipped),
 }
 
 /// File work in progress.
@@ -171,6 +175,21 @@ pub fn recover_path(editor: &mut Editor, path: &Path) {
             editor.touch();
         }
         Err(e) => editor.message = Some(format!("could not recover: {e}")),
+    }
+}
+
+/// Opens an untitled copy of a document pixl ships: it has no file, so
+/// saving asks where to and autosave never writes it.
+pub fn open_shipped(editor: &mut Editor, files: &mut Files, which: Shipped) {
+    match which.load() {
+        Ok(doc) => {
+            editor.replace(doc, None);
+            editor.name = Some(which.name().to_string());
+            editor.message = None;
+            files.recovery = None;
+            files.last_autosave = None;
+        }
+        Err(e) => editor.message = Some(e),
     }
 }
 
@@ -370,6 +389,7 @@ fn start(
         Replace::Recent(path) => open_recent(editor, files, signals, &path),
         Replace::Recover(path) => recover_path(editor, &path),
         Replace::Sheet(path, grid, ms) => crate::sheets::import_into(editor, &path, &grid, ms),
+        Replace::Shipped(which) => open_shipped(editor, files, which),
     }
 }
 
@@ -467,6 +487,7 @@ const FILE_COMMANDS: &[&str] = &[
     "file-export-png",
     "file-export-gif",
     "file-close",
+    "help-rig-demo",
 ];
 
 /// The commands the start screen takes; the editor's others wait until a
@@ -532,6 +553,7 @@ pub fn file_commands(
             "file-new" | "home-new" => Some(Replace::New),
             "file-open" | "home-open" => Some(Replace::Open),
             "file-close" => Some(Replace::Close),
+            "help-rig-demo" | "home-rig-demo" => Some(Replace::Shipped(Shipped::RigDemo)),
             "go-home" => {
                 home.show(editor, true);
                 None

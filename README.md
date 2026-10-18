@@ -24,10 +24,10 @@ or saved most recently, each with a thumbnail of its first frame, its folder,
 its size and when it last changed, with a field that filters them by name or
 folder. A click opens one. A document that is no longer there shows as
 missing, with a button that takes it off the list; one with a recovery copy
-newer than its file offers to recover it. Beside the list are New project
-and Open. The list and the thumbnails are kept in pixl's folder of the user
-data directory (`~/.local/share/lumen/pixl` on Linux), never beside the
-documents. File > Close (Ctrl+W) and the Home button in the menu row return
+newer than its file offers to recover it. Beside the list are New project,
+Open and Open rig demo. The list and the thumbnails are kept in pixl's
+folder of the user data directory (`~/.local/share/lumen/pixl` on Linux),
+never beside the documents. File > Close (Ctrl+W) and the Home button in the menu row return
 to the start screen; Home keeps the open document to go back to.
 
 The canvas view zooms from 1 to 6400 percent around the pointer (the wheel,
@@ -311,6 +311,10 @@ art in the theme's colors and are never part of it. Escape leaves either
 mode, and picking a tool hands the canvas back to it. Outside the Rig layout
 (Window menu) the panel shows only its header until a mode starts.
 
+Help > Open rig demo, also on the start screen, opens a character rigged and
+keyed as an eight-frame walk; press Play to watch it. It opens as an untitled
+copy, so what pixl ships is never changed.
+
 Documents save as `.pixl` files: one versioned, chunked, compressed file that
 stores each distinct tile once. Saves are atomic, and autosave keeps a
 recovery copy beside the document. A file from a newer pixl opens in an older
@@ -346,6 +350,10 @@ cargo run -p pixl                 # the start screen
 cargo run -p pixl -- art.pixl     # straight into a document
 cargo test
 ```
+
+The rig demo is built by `app/tests/common/demo.rs`, and a test checks the
+file shipped in `app/assets/demo/` matches. After changing it, or the `.pixl`
+format, write it again with `PIXL_WRITE_DEMO=1 cargo test -p pixl --test demo`.
 
 `cargo bench -p pixl-core --bench rig` times posing and rendering a
 20-bone character, and `cargo bench -p pixl --bench pose -- gpu` (or `cpu`)

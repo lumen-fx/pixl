@@ -1,5 +1,6 @@
-//! The Select, Image, Filter and View menus: their buttons in the menu row,
-//! and the commands their items, their keys and the command palette run.
+//! The Select, Image, Filter, View and Help menus: their buttons in the menu
+//! row, and the commands their items, their keys and the command palette
+//! run.
 //! Each tick's chosen commands land in [`Chosen`], where the selection,
 //! image, filter and view modules pick up their own.
 
@@ -30,11 +31,12 @@ impl Chosen {
 }
 
 /// The menu row buttons this module opens, and the menu each opens.
-const MENUS: [(&str, &str); 4] = [
+const MENUS: [(&str, &str); 5] = [
     ("menu-select", "select-menu"),
     ("menu-image", "image-menu"),
     ("menu-filter", "filter-menu"),
     ("menu-view", "view-menu"),
+    ("menu-help", "help-menu"),
 ];
 
 /// Gathers this tick's commands and opens the menus.

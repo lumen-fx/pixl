@@ -26,6 +26,7 @@ pub mod select;
 pub mod settings;
 pub mod settings_ui;
 pub mod sheets;
+pub mod shipped;
 pub mod slices;
 pub mod store;
 pub mod themes;

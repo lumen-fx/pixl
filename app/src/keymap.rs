@@ -283,6 +283,7 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("pan-right", "Move view right", "View", Kind::Hold),
     ("rig-mode-bones", "Bones mode", "Rig", Kind::Press),
     ("rig-mode-pose", "Pose mode", "Rig", Kind::Press),
+    ("help-rig-demo", "Open rig demo", "Help", Kind::Press),
     (
         "apply",
         "Finish the shape, or apply the transform",
