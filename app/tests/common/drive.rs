@@ -232,6 +232,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 };
                 match step.clone() {
                     Step::Wheel(at, dy) => {
+                        press(&mut pointer_state, place(at), None);
                         wheel.write(MouseWheel {
                             delta: Vec2::new(0.0, dy),
                             position: place(at),

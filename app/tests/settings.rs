@@ -153,6 +153,29 @@ fn the_wheel_follows_the_navigation_settings() {
     assert_eq!(dy, 64.0, "the wheel pans twice its distance");
 }
 
+/// With the settings dialog open over the canvas, the wheel scrolls the
+/// dialog and leaves the view alone.
+#[test]
+fn the_wheel_over_a_dialog_leaves_the_canvas() {
+    let mid = At::Window(Vec2::new(720.0, 450.0));
+    let out = drive(
+        editor_over(doc()),
+        vec![
+            Step::Ctrl(",", false),
+            Step::Wait,
+            Step::Move(mid),
+            Step::Wait,
+            Step::Wheel(mid, -32.0),
+            Step::Wait,
+            Step::Wait,
+        ],
+    );
+    assert!(out.settings_open);
+    let (a, b) = (&out.views[0], out.views.last().unwrap());
+    assert_eq!(b.zoom, a.zoom, "no zoom");
+    assert_eq!(b.origin, a.origin, "no pan");
+}
+
 #[test]
 fn the_menus_show_the_keys_in_force() {
     let mut settings = Settings::default();

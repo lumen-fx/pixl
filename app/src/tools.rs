@@ -257,15 +257,23 @@ impl Place<'_, '_> {
     /// With nothing hovered (input that did not come through the window),
     /// the stage's own rectangle decides.
     pub(crate) fn over_stage(&self) -> bool {
-        self.hovered.iter().all(|id| {
-            id.is_some_and(|id| {
-                matches!(
-                    id.0.as_str(),
-                    "stage" | "checker" | "art" | "rig" | "overlay"
-                )
-            })
-        })
+        stage_hovered(self.hovered.iter())
     }
+}
+
+/// Whether the hovered element is the stage or a layer of it, rather than
+/// a dialog, a menu or a panel in front of it. With nothing hovered (input
+/// that did not come through the window), the stage's own rectangle
+/// decides.
+pub fn stage_hovered<'a>(mut hovered: impl Iterator<Item = Option<&'a LumenId>>) -> bool {
+    hovered.all(|id| {
+        id.is_some_and(|id| {
+            matches!(
+                id.0.as_str(),
+                "stage" | "checker" | "art" | "rig" | "overlay"
+            )
+        })
+    })
 }
 
 /// Runs the active tool over this tick's pointer events.

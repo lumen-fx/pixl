@@ -248,13 +248,16 @@ pub fn navigate(
     mut pointer: PointerInput,
     modifiers: Res<ModifiersState>,
     home: Res<Home>,
+    hovered: Query<Option<&LumenId>, With<Hovered>>,
     wake: Option<Res<WakeDeadline>>,
     mut status: Signals,
 ) {
     let s = &settings.navigation;
     let held = modifiers.0;
+    // A wheel over a dialog, a menu or a panel scrolls that, not the canvas.
+    let over_stage = crate::tools::stage_hovered(hovered.iter());
     for w in wheel.read() {
-        if home.open || !view.contains(w.position) {
+        if home.open || !over_stage || !view.contains(w.position) {
             continue;
         }
         let flip = if s.invert_wheel { -1.0 } else { 1.0 };
