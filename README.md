@@ -15,7 +15,8 @@ Windows (x86_64) builds are on the
 [releases page](https://github.com/lumen-fx/pixl/releases) as pre-releases.
 Unzip `pixl-<version>-windows-x86_64.zip` anywhere and run `pixl.exe`; keep
 the files beside it, since pixl reads its icons and font from that folder at
-start. The executable is not signed, so Windows SmartScreen
+start. `pixl-cli.exe` beside it exports documents from the command line (see
+Command line). The executable is not signed, so Windows SmartScreen
 may ask before it runs the first time. On Linux and macOS, build it from
 source (see Quick start).
 
@@ -286,10 +287,13 @@ which frames (all, the current one, one tag, or each tag), which layers (the
 visible ones merged, or each layer alone), the sheet's layout (a row, a
 column, a grid, or packed, with or without trimming), and the file
 to write, relative to the document's folder, where `{name}`, `{tag}`,
-`{frame}`, `{layer}` and `{scale}` fill in. File > Export all (Ctrl+Alt+E)
+`{frame}`, `{layer}` and `{scale}` fill in. `{frame}` counts from 0, padded
+to the last frame's digits; `{frame1}` or `{frame001}` count from that
+number, padded to its digits. File > Export all (Ctrl+Alt+E)
 runs every preset marked for it on the open document, in the background, and
 the status bar says how many files it wrote. The presets are kept in
-`exports.json` in pixl's data folder and serve every document.
+`exports.json` in pixl's data folder and serve every document, and
+`pixl-cli --preset NAME` runs them without the editor.
 
 Ctrl+Shift+P opens the command palette: one search field over every command
 a key can run, every tool, the layouts, the themes, the open documents and
@@ -468,6 +472,71 @@ a PNG into the frames of a new document, by cell size or by a count of
 columns and rows, with an offset and padding, leaving out empty cells if
 asked, and previews the cells over the image.
 
+## Command line
+
+`pixl-cli` exports documents without the editor, for game build pipelines
+and CI machines with no display or GPU: PNG frames, GIFs, and sprite sheets
+with their Aseprite-shape JSON, from `.pixl`, `.aseprite`, `.ase`, `.png` and
+`.gif` files. It writes what the editor's exports write for the same
+settings, through the same code. It reads Aseprite's batch flags, so a
+pipeline built on `aseprite -b` switches by changing the program name, and
+it runs the editor's export presets.
+
+```sh
+pixl-cli -b hero.aseprite --sheet hero.png --data hero.json --sheet-type packed --trim
+pixl-cli hero.pixl --split-tags --save-as build/hero.gif --scale 4
+pixl-cli hero.pixl --tag walk --save-as 'frames/{title}-{frame001}.png'
+pixl-cli hero.pixl --split-layers --sheet layers.png --data layers.json
+pixl-cli hero.pixl --preset "Sprite sheet"     # one of the editor's presets
+pixl-cli hero.pixl --all-presets               # what File > Export all runs
+pixl-cli hero.pixl --list-tags
+```
+
+`pixl-cli --help` lists every option. It exits with 0 when everything was
+written, 1 when an export failed (a file that cannot be read or written, a
+layer, tag or preset that does not exist), and 2 when the command line is
+wrong, with the reason on standard error. Its output has no colors. Presets
+come from the editor's `exports.json` (a new user's starter presets when there
+is none), or from the file `--presets FILE` names, and write beside the
+document as they do in the editor; `--save-as` and `--sheet` write where they
+say, relative to the working folder.
+
+| Aseprite | pixl-cli |
+| --- | --- |
+| `-b`, `--batch` | accepted; every run is a batch run |
+| `--save-as FILE` | same, for `.png` frames or a `.gif` |
+| `--sheet FILE`, `--data FILE` | same; no JSON without `--data` |
+| `--format json-hash`, `json-array` | same |
+| `--sheet-type horizontal`, `vertical`, `rows`, `columns`, `packed` | same |
+| `--sheet-pack` | same as `--sheet-type packed` |
+| `--sheet-columns N`, `--sheet-rows N` | same |
+| `--border-padding N`, `--shape-padding N` | same |
+| `--trim` | same, for `--sheet` |
+| `--layer NAME`, `--ignore-layer NAME`, `--all-layers` | same; names or group paths such as `body/arm` |
+| `--split-layers` | same; with `--sheet`, every layer on the one sheet |
+| `--split-tags` | same, for `--save-as` |
+| `--tag NAME`, `--frame-tag NAME` | same |
+| `--frame-range A,B` | same, counted from 0 |
+| `--oneframe` | same |
+| `--scale N` | whole factors only |
+| `--list-layers`, `--list-tags` | same |
+| `{title}`, `{name}`, `{tag}`, `{layer}`, `{frame1}`, `{frame001}`, `{tagframe}` | same, except `{name}` is the document's name without its extension, like `{title}` |
+| `{frame}` | padded to the last frame's digits; `{frame0}` is Aseprite's unpadded `{frame}` |
+| (none) | `--preset NAME`, `--all-presets`, `--presets FILE`, `--list-presets` |
+
+A `--save-as` name without tokens gets the ones Aseprite adds: ` ({layer})`
+when layers split, ` #{tag}` when tags split, and the frame number when each
+frame is a file, counting on from a number the name ends in, else from 1.
+Sheet JSON names its frames `{title} {frame}`, without Aseprite's file
+extension.
+
+pixl-cli reads one document per run, so an atlas of several sprites takes
+one sheet per sprite. Aseprite options it does not do (scripts,
+`--filename-format`, `--ignore-empty`, `--merge-duplicates`,
+`--inner-padding`, `--crop`, slices, color mode and palette changes, and
+fractional scales) stop the run with exit code 2 rather than export
+something different.
+
 ## Layout
 
 - `crates/document` (`pixl-document`): the document model, with no UI:
@@ -478,7 +547,9 @@ asked, and previews the cells over the image.
   brushes and inks, fills, gradients, shapes and text, and the adjustments
   and effects.
 - `crates/io` (`pixl-io`): other programs' formats: Aseprite files, GIF,
-  PNG, and sprite sheets with Aseprite-compatible JSON.
+  PNG, and sprite sheets with Aseprite-compatible JSON, and the export
+  presets.
+- `crates/cli` (`pixl-cli`): the command line exporter.
 - `app` (`pixl`): the editor.
 
 ## Quick start
@@ -486,6 +557,7 @@ asked, and previews the cells over the image.
 ```sh
 cargo run -p pixl                 # the start screen
 cargo run -p pixl -- art.pixl     # straight into a document
+cargo run -p pixl-cli -- --help   # the command line exporter
 cargo test
 ```
 
@@ -495,8 +567,8 @@ into one markup file and one stylesheet, which the executable embeds. A debug
 build reads `src/` from disk instead, for hot reload. The icons and font in
 `assets/` stay files, read from the folder beside the executable when that
 folder holds a `lumen.toml`, and from `app/` in the source tree otherwise. The
-Windows zip is that folder: `pixl.exe`, `lumen.toml`, `LICENSE`, and
-`assets/icons` and `assets/fonts`. Pushing a `v*` tag that
+Windows zip is that folder: `pixl.exe`, `pixl-cli.exe`, `lumen.toml`,
+`LICENSE`, and `assets/icons` and `assets/fonts`. Pushing a `v*` tag that
 matches the workspace version builds it on CI and publishes it as a
 pre-release.
 

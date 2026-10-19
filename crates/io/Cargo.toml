@@ -12,4 +12,5 @@ repository.workspace = true
 gif.workspace = true
 pixl-document.workspace = true
 png.workspace = true
+serde.workspace = true
 serde_json.workspace = true

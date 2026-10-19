@@ -14,8 +14,8 @@ use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, Context2d, PixelBuffer};
-use pixl_document::native::write_atomic;
 use pixl_document::{Document, Rgba};
+use pixl_io::export;
 use pixl_io::png::decode_png;
 use pixl_io::sheet::{
     JsonFrames, SheetGrid, SheetLayout, SheetOptions, SpriteSheet, sheet_document, split_sheet,
@@ -186,10 +186,8 @@ pub fn write_sheet(
     if let Some(name) = png_path.file_name() {
         options.image_name = name.to_string_lossy().into_owned();
     }
-    let sheet = sprite_sheet(doc, &options).map_err(|e| e.to_string())?;
-    let png = sheet.to_png().map_err(|e| e.to_string())?;
-    write_atomic(&png_path, &png)
-        .map_err(|e| format!("could not write {}: {e}", png_path.display()))?;
+    let json_path = choice.json.then(|| png_path.with_extension("json"));
+    let sheet = export::write_sheet(doc, &options, &png_path, json_path.as_deref())?;
     let mut done = format!(
         "Exported {} ({} x {} px, {} images)",
         png_path.display(),
@@ -198,9 +196,6 @@ pub fn write_sheet(
         sheet.cells.len()
     );
     if choice.json {
-        let json_path = png_path.with_extension("json");
-        write_atomic(&json_path, sheet.json.as_bytes())
-            .map_err(|e| format!("could not write {}: {e}", json_path.display()))?;
         done.push_str(" with its JSON");
     }
     Ok(done)

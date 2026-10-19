@@ -19,9 +19,10 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_document::native::{self, SaveOptions};
 use pixl_document::{Background, ColorMode, Document};
-use pixl_io::aseprite;
-use pixl_io::gif::{GifOptions, export_gif, import_gif};
-use pixl_io::png::{export_frame_png, import_png};
+use pixl_io::gif::{GifOptions, export_gif};
+use pixl_io::open::is_imported;
+pub use pixl_io::open::{Opened, read_document};
+use pixl_io::png::export_frame_png;
 use pixl_io::sheet::SheetGrid;
 
 use crate::documents::{Documents, TabAction, edit_document};
@@ -139,56 +140,6 @@ const PNG: (&str, &[&str]) = ("PNG images", &["png"]);
 const ASEPRITE: (&str, &[&str]) = ("Aseprite files", &["aseprite", "ase"]);
 const GIF: (&str, &[&str]) = ("GIF animations", &["gif"]);
 
-/// A document read from a file, with what the reader could not use.
-pub struct Opened {
-    pub doc: Document,
-    pub warnings: Vec<String>,
-}
-
-/// Reads a document: `.pixl` natively, `.aseprite` / `.ase`, `.png` and
-/// `.gif` through their importers.
-pub fn read_document(path: &Path) -> std::result::Result<Opened, String> {
-    let ext = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_ascii_lowercase())
-        .unwrap_or_default();
-    let fail = |e: pixl_document::Error| format!("could not open {}: {e}", path.display());
-    match ext.as_str() {
-        "png" => {
-            let bytes = std::fs::read(path)
-                .map_err(|e| format!("could not read {}: {e}", path.display()))?;
-            Ok(Opened {
-                doc: import_png(&bytes).map_err(fail)?,
-                warnings: Vec::new(),
-            })
-        }
-        "gif" => {
-            let bytes = std::fs::read(path)
-                .map_err(|e| format!("could not read {}: {e}", path.display()))?;
-            Ok(Opened {
-                doc: import_gif(&bytes).map_err(fail)?,
-                warnings: Vec::new(),
-            })
-        }
-        "aseprite" | "ase" => {
-            let bytes = std::fs::read(path)
-                .map_err(|e| format!("could not read {}: {e}", path.display()))?;
-            let import = aseprite::import_aseprite(&bytes).map_err(fail)?;
-            Ok(Opened {
-                doc: import.document,
-                warnings: import.warnings.iter().map(ToString::to_string).collect(),
-            })
-        }
-        _ => {
-            let loaded = native::load_file(path).map_err(fail)?;
-            Ok(Opened {
-                doc: loaded.document,
-                warnings: loaded.warnings.iter().map(ToString::to_string).collect(),
-            })
-        }
-    }
-}
-
 /// Reads the document at `path` for a tab of its own, with the colors and
 /// tool of `window` (the editor in front). Its newer recovery copy is on
 /// offer when `offer_recovery`.
@@ -198,11 +149,7 @@ pub fn open_path(
     path: &Path,
 ) -> std::result::Result<Opening, String> {
     let opened = read_document(path)?;
-    let native = !path.extension().is_some_and(|e| {
-        ["png", "gif", "aseprite", "ase"]
-            .iter()
-            .any(|x| e.eq_ignore_ascii_case(x))
-    });
+    let native = !is_imported(path);
     // An imported file is a new, unsaved document: saving writes a .pixl,
     // never over the file it came from.
     let mut editor = Editor::opened(opened.doc, native.then(|| path.to_path_buf()), window);

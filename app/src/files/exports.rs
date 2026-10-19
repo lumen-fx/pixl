@@ -1,21 +1,17 @@
-//! Export presets: named export settings (format, scale, which frames and
-//! layers, the sheet layout, and an output path pattern with tokens such as
-//! `{name}`, `{tag}`, `{frame}` and `{layer}`), kept in `exports.json` in
-//! pixl's data folder. File > Export all runs every preset marked for it on
-//! the open document, on a worker thread, writing beside the document.
+//! The Export presets dialog and File > Export all. The presets themselves
+//! (what each writes, and the writing) are `pixl_io::export`'s, kept in
+//! `exports.json` in pixl's data folder. Export all runs every preset marked
+//! for it on the open document, on a worker thread, writing beside the
+//! document.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::thread::JoinHandle;
 
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
-use pixl_document::native::write_atomic;
-use pixl_document::{Document, LayerId, LayerKind};
-use pixl_io::gif::{GifOptions, export_gif};
-use pixl_io::png::export_frame_png;
-use pixl_io::sheet::{SheetLayout, SheetOptions, sprite_sheet};
-use serde::{Deserialize, Serialize};
+use pixl_io::export::run_presets;
+pub use pixl_io::export::{FILE, Format, Frames, Layers, Preset, PresetFile, Sheet};
 
 use crate::editor::Editor;
 use crate::home::Home;
@@ -24,407 +20,9 @@ use crate::panels::escape;
 use crate::settings::keymap::KeyCommands;
 use crate::settings::store::Store;
 
-/// The file the presets are kept in.
-pub const FILE: &str = "exports.json";
-
 /// What the dialog says under the path field.
 pub const PATH_HINT: &str =
     "Beside the document. {name} {tag} {frame} {layer} {scale} fill in; folders are made.";
-
-/// What a preset writes.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Format {
-    /// One PNG per frame.
-    #[default]
-    Png,
-    /// One animated GIF.
-    Gif,
-    /// One sprite sheet PNG with its Aseprite-shape JSON beside it.
-    Sheet,
-}
-
-impl Format {
-    pub const ALL: [Format; 3] = [Format::Png, Format::Gif, Format::Sheet];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Format::Png => "PNG frames",
-            Format::Gif => "GIF",
-            Format::Sheet => "Sprite sheet",
-        }
-    }
-
-    pub fn from_label(label: &str) -> Option<Format> {
-        Format::ALL.into_iter().find(|f| f.label() == label)
-    }
-
-    fn extension(self) -> &'static str {
-        match self {
-            Format::Png | Format::Sheet => "png",
-            Format::Gif => "gif",
-        }
-    }
-}
-
-/// Which frames a preset writes.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Frames {
-    #[default]
-    All,
-    /// The frame the editor shows.
-    Current,
-    /// Each tag on its own, `{tag}` naming it.
-    EachTag,
-    /// The frames of one tag.
-    Tag(String),
-}
-
-impl Frames {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Frames::All => "All frames",
-            Frames::Current => "Current frame",
-            Frames::EachTag => "Each tag",
-            Frames::Tag(_) => "One tag",
-        }
-    }
-}
-
-/// Which layers a preset writes.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Layers {
-    /// The visible layers, merged as the canvas shows them.
-    #[default]
-    Visible,
-    /// Each visible raster layer on its own, `{layer}` naming it.
-    Each,
-}
-
-impl Layers {
-    pub fn label(self) -> &'static str {
-        match self {
-            Layers::Visible => "Visible, merged",
-            Layers::Each => "Each layer",
-        }
-    }
-}
-
-/// How a sprite sheet lays out its frames.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Sheet {
-    #[default]
-    Horizontal,
-    Vertical,
-    Grid,
-    /// As small an image as the frames fit in.
-    Packed,
-}
-
-impl Sheet {
-    pub const ALL: [Sheet; 4] = [
-        Sheet::Horizontal,
-        Sheet::Vertical,
-        Sheet::Grid,
-        Sheet::Packed,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Sheet::Horizontal => "One row",
-            Sheet::Vertical => "One column",
-            Sheet::Grid => "Grid",
-            Sheet::Packed => "Packed",
-        }
-    }
-}
-
-/// One named set of export settings.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-#[serde(default)]
-pub struct Preset {
-    pub name: String,
-    pub format: Format,
-    /// Integer enlargement, nearest neighbor.
-    pub scale: u32,
-    pub frames: Frames,
-    pub layers: Layers,
-    pub sheet: Sheet,
-    /// Columns of a grid sheet.
-    pub columns: u32,
-    /// Transparent pixels between sheet frames.
-    pub padding: u32,
-    /// Crop each sheet frame to its pixels.
-    pub trim: bool,
-    /// Where the files go, relative to the document's folder. Tokens:
-    /// `{name}` the document's name, `{tag}`, `{frame}` (numbered from 0,
-    /// padded to the last frame's digits), `{layer}` and `{scale}`.
-    pub path: String,
-    /// Export all runs this preset.
-    pub in_all: bool,
-}
-
-impl Default for Preset {
-    fn default() -> Self {
-        Self {
-            name: "PNG frames".to_string(),
-            format: Format::Png,
-            scale: 1,
-            frames: Frames::All,
-            layers: Layers::Visible,
-            sheet: Sheet::Horizontal,
-            columns: 8,
-            padding: 0,
-            trim: false,
-            path: "{name}-{frame}.png".to_string(),
-            in_all: true,
-        }
-    }
-}
-
-impl Preset {
-    /// The presets a new user starts with.
-    pub fn starters() -> Vec<Preset> {
-        vec![
-            Preset::default(),
-            Preset {
-                name: "Sprite sheet".to_string(),
-                format: Format::Sheet,
-                path: "{name}-sheet.png".to_string(),
-                ..Preset::default()
-            },
-            Preset {
-                name: "GIF per tag at 4x".to_string(),
-                format: Format::Gif,
-                scale: 4,
-                frames: Frames::EachTag,
-                path: "{name}-{tag}@{scale}x.gif".to_string(),
-                in_all: false,
-                ..Preset::default()
-            },
-        ]
-    }
-}
-
-/// One file an export writes.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Job {
-    pub path: PathBuf,
-    pub frames: std::ops::Range<usize>,
-    /// The one layer it shows, or every visible one.
-    pub layer: Option<LayerId>,
-}
-
-/// The value of each token in a path pattern.
-#[derive(Clone, Debug, Default)]
-struct Tokens<'a> {
-    name: &'a str,
-    tag: &'a str,
-    frame: Option<(usize, usize)>,
-    layer: &'a str,
-    scale: u32,
-}
-
-/// `text` safe as one path component.
-fn component(text: &str) -> String {
-    let out: String = text
-        .chars()
-        .map(|c| {
-            if "/\\:*?\"<>|".contains(c) || c.is_control() {
-                '_'
-            } else {
-                c
-            }
-        })
-        .collect();
-    out.trim().to_string()
-}
-
-fn fill(pattern: &str, t: &Tokens) -> String {
-    let frame = t.frame.map_or_else(String::new, |(f, last)| {
-        let width = last.to_string().len();
-        format!("{f:0width$}")
-    });
-    pattern
-        .replace("{name}", &component(t.name))
-        .replace("{tag}", &component(t.tag))
-        .replace("{frame}", &frame)
-        .replace("{layer}", &component(t.layer))
-        .replace("{scale}", &t.scale.to_string())
-}
-
-/// The files `preset` writes for `doc` (named `name`, showing `current`),
-/// under `dir`. A path pattern with no extension gets the format's.
-pub fn plan(doc: &Document, name: &str, current: usize, preset: &Preset, dir: &Path) -> Vec<Job> {
-    let last = doc.frame_count().saturating_sub(1);
-    let ranges: Vec<(String, std::ops::Range<usize>)> = match &preset.frames {
-        Frames::All => vec![(String::new(), 0..doc.frame_count())],
-        Frames::Current => vec![(String::new(), current..current + 1)],
-        Frames::EachTag => doc
-            .tags()
-            .iter()
-            .map(|t| (t.name.clone(), t.from..t.to + 1))
-            .collect(),
-        Frames::Tag(tag) => doc
-            .tags()
-            .iter()
-            .filter(|t| t.name == *tag)
-            .map(|t| (t.name.clone(), t.from..t.to + 1))
-            .collect(),
-    };
-    let layers: Vec<(Option<LayerId>, String)> = match preset.layers {
-        Layers::Visible => vec![(None, String::new())],
-        Layers::Each => doc
-            .walk()
-            .into_iter()
-            .filter(|(_, l)| matches!(l.kind, LayerKind::Raster { .. }) && l.props.visible)
-            .map(|(_, l)| (Some(l.id), l.props.name.clone()))
-            .collect(),
-    };
-    let pattern = if Path::new(&preset.path).extension().is_some() {
-        preset.path.clone()
-    } else {
-        format!("{}.{}", preset.path, preset.format.extension())
-    };
-    let mut jobs = Vec::new();
-    for (tag, range) in &ranges {
-        let range = range.start.min(doc.frame_count())..range.end.min(doc.frame_count());
-        if range.is_empty() {
-            continue;
-        }
-        for (layer, layer_name) in &layers {
-            let tokens = Tokens {
-                name,
-                tag,
-                frame: None,
-                layer: layer_name,
-                scale: preset.scale.max(1),
-            };
-            match preset.format {
-                Format::Png => {
-                    for f in range.clone() {
-                        let t = Tokens {
-                            frame: Some((f, last)),
-                            ..tokens.clone()
-                        };
-                        jobs.push(Job {
-                            path: dir.join(fill(&pattern, &t)),
-                            frames: f..f + 1,
-                            layer: *layer,
-                        });
-                    }
-                }
-                Format::Gif | Format::Sheet => jobs.push(Job {
-                    path: dir.join(fill(&pattern, &tokens)),
-                    frames: range.clone(),
-                    layer: *layer,
-                }),
-            }
-        }
-    }
-    // Two jobs on one path would overwrite each other; the first stands.
-    let mut seen = std::collections::HashSet::new();
-    jobs.retain(|j| seen.insert(j.path.clone()));
-    jobs
-}
-
-/// `doc` showing only the raster layer `layer` (its groups stay as they
-/// are).
-fn only_layer(doc: &Document, layer: LayerId) -> Document {
-    let mut out = doc.clone();
-    let others: Vec<LayerId> = out
-        .walk()
-        .into_iter()
-        .filter(|(_, l)| matches!(l.kind, LayerKind::Raster { .. }) && l.id != layer)
-        .map(|(_, l)| l.id)
-        .collect();
-    for id in others {
-        let _ = out.update_layer(id, |p| p.visible = false);
-    }
-    out
-}
-
-/// Writes one job's file (and a sheet's JSON beside it), returning how many
-/// files it wrote.
-pub fn run_job(doc: &Document, preset: &Preset, job: &Job) -> std::result::Result<usize, String> {
-    let shown;
-    let doc = match job.layer {
-        Some(id) => {
-            shown = only_layer(doc, id);
-            &shown
-        }
-        None => doc,
-    };
-    let scale = preset.scale.max(1);
-    let mut files = 1;
-    let bytes = match preset.format {
-        Format::Png => export_frame_png(doc, job.frames.start, scale).map_err(|e| e.to_string())?,
-        Format::Gif => {
-            export_gif(
-                doc,
-                &GifOptions {
-                    frames: Some(job.frames.clone()),
-                    scale,
-                    repeat: None,
-                },
-            )
-            .map_err(|e| e.to_string())?
-            .bytes
-        }
-        Format::Sheet => {
-            let image_name = job
-                .path
-                .file_name()
-                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-            let title = job
-                .path
-                .file_stem()
-                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-            let sheet = sprite_sheet(
-                doc,
-                &SheetOptions {
-                    layout: match preset.sheet {
-                        Sheet::Horizontal => SheetLayout::Horizontal,
-                        Sheet::Vertical => SheetLayout::Vertical,
-                        Sheet::Grid => SheetLayout::Grid {
-                            columns: preset.columns.max(1),
-                        },
-                        Sheet::Packed => SheetLayout::Packed,
-                    },
-                    frames: Some(job.frames.clone()),
-                    padding: preset.padding,
-                    trim: preset.trim,
-                    scale,
-                    title,
-                    image_name,
-                    ..SheetOptions::default()
-                },
-            )
-            .map_err(|e| e.to_string())?;
-            write(&job.path.with_extension("json"), sheet.json.as_bytes())?;
-            files += 1;
-            sheet.to_png().map_err(|e| e.to_string())?
-        }
-    };
-    write(&job.path, &bytes)?;
-    Ok(files)
-}
-
-fn write(path: &Path, bytes: &[u8]) -> std::result::Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    write_atomic(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
-}
-
-/// What `exports.json` holds.
-#[derive(Serialize, Deserialize, Default)]
-struct Saved {
-    presets: Vec<Preset>,
-}
 
 /// The presets, the one the dialog edits, and an export in progress.
 #[derive(Resource)]
@@ -443,7 +41,7 @@ pub struct Exports {
 impl Exports {
     pub fn load(store: Store) -> Self {
         let presets = store
-            .load::<Saved>(FILE)
+            .load::<PresetFile>(FILE)
             .map(|s| s.presets)
             .filter(|p| !p.is_empty())
             .unwrap_or_else(Preset::starters);
@@ -468,7 +66,7 @@ impl Exports {
     fn persist(&self) {
         let _ = self.store.save(
             FILE,
-            &Saved {
+            &PresetFile {
                 presets: self.presets.clone(),
             },
         );
@@ -509,13 +107,7 @@ impl Exports {
         let current = editor.frame;
         editor.message = Some(format!("Exporting {} presets...", presets.len()));
         self.running = Some(std::thread::spawn(move || {
-            let mut out = Vec::new();
-            for preset in &presets {
-                for job in plan(&doc, &name, current, preset, &dir) {
-                    out.push(run_job(&doc, preset, &job));
-                }
-            }
-            out
+            run_presets(&doc, &name, current, &presets, &dir)
         }));
     }
 
@@ -566,10 +158,13 @@ fn read_fields(signals: &Signals, base: &Preset) -> Preset {
             .map_or(fallback, |v| v.clamp(0, max))
     };
     let frames = match text("ex_frames").as_str() {
+        "All frames" => Frames::All,
         "Current frame" => Frames::Current,
         "Each tag" => Frames::EachTag,
         "One tag" => Frames::Tag(text("ex_tag").trim().to_string()),
-        _ => Frames::All,
+        // A choice the dialog does not offer, such as a range written in
+        // exports.json, stays.
+        _ => base.frames.clone(),
     };
     Preset {
         name: {
@@ -579,11 +174,10 @@ fn read_fields(signals: &Signals, base: &Preset) -> Preset {
         format: Format::from_label(&text("ex_format")).unwrap_or(base.format),
         scale: number("ex_scale", base.scale, 64).max(1),
         frames,
-        layers: if text("ex_layers") == Layers::Each.label() {
-            Layers::Each
-        } else {
-            Layers::Visible
-        },
+        layers: [Layers::Visible, Layers::Each]
+            .into_iter()
+            .find(|l| l.label() == text("ex_layers"))
+            .unwrap_or(base.layers),
         sheet: Sheet::ALL
             .into_iter()
             .find(|s| s.label() == text("ex_sheet"))
@@ -596,6 +190,8 @@ fn read_fields(signals: &Signals, base: &Preset) -> Preset {
             if p.is_empty() { base.path.clone() } else { p }
         },
         in_all: signals.get::<bool>("ex_in_all").unwrap_or(base.in_all),
+        // What the dialog has no field for stays as exports.json says.
+        ..base.clone()
     }
 }
 
@@ -768,150 +364,8 @@ pub fn show_exports(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pixl_document::{ColorMode, LoopDirection, NewLayer, Placement, Rgba, Tag};
-
-    fn doc() -> Document {
-        let mut doc = Document::new(4, 4, ColorMode::Rgba).unwrap();
-        for _ in 0..11 {
-            doc.insert_frame(0, 100).unwrap();
-        }
-        doc.add_layer(
-            NewLayer::Raster,
-            "Shadow/top".to_string(),
-            Placement::default(),
-        )
-        .unwrap();
-        for (name, from, to) in [("walk", 0, 3), ("run", 4, 7)] {
-            doc.tags_mut().push(Tag {
-                name: name.to_string(),
-                from,
-                to,
-                direction: LoopDirection::Forward,
-                repeat: 0,
-                color: Rgba::BLACK,
-            });
-        }
-        doc
-    }
-
-    fn names(jobs: &[Job]) -> Vec<String> {
-        jobs.iter()
-            .map(|j| j.path.to_string_lossy().into_owned())
-            .collect()
-    }
-
-    #[test]
-    fn png_frames_number_every_frame_padded() {
-        let jobs = plan(&doc(), "hero", 0, &Preset::default(), Path::new("out"));
-        assert_eq!(jobs.len(), 12);
-        assert_eq!(jobs[0].path, Path::new("out").join("hero-00.png"));
-        assert_eq!(jobs[11].path, Path::new("out").join("hero-11.png"));
-    }
-
-    #[test]
-    fn each_tag_and_each_layer_multiply_and_name_their_files() {
-        let preset = Preset {
-            format: Format::Gif,
-            frames: Frames::EachTag,
-            layers: Layers::Each,
-            scale: 2,
-            path: "{tag}/{layer}@{scale}x".to_string(),
-            ..Preset::default()
-        };
-        let jobs = plan(&doc(), "hero", 0, &preset, Path::new(""));
-        assert_eq!(
-            names(&jobs),
-            [
-                "walk/Layer 1@2x.gif",
-                "walk/Shadow_top@2x.gif",
-                "run/Layer 1@2x.gif",
-                "run/Shadow_top@2x.gif"
-            ]
-        );
-        assert_eq!(jobs[2].frames, 4..8);
-    }
-
-    #[test]
-    fn one_tag_and_the_current_frame() {
-        let tag = Preset {
-            frames: Frames::Tag("run".to_string()),
-            path: "{name}-{tag}-{frame}".to_string(),
-            ..Preset::default()
-        };
-        let jobs = plan(&doc(), "hero", 0, &tag, Path::new(""));
-        assert_eq!(
-            names(&jobs),
-            [
-                "hero-run-04.png",
-                "hero-run-05.png",
-                "hero-run-06.png",
-                "hero-run-07.png"
-            ]
-        );
-        let current = Preset {
-            frames: Frames::Current,
-            path: "{name}".to_string(),
-            ..Preset::default()
-        };
-        assert_eq!(
-            names(&plan(&doc(), "hero", 5, &current, Path::new(""))),
-            ["hero.png"]
-        );
-        let missing = Preset {
-            frames: Frames::Tag("fly".to_string()),
-            ..Preset::default()
-        };
-        assert!(plan(&doc(), "hero", 0, &missing, Path::new("")).is_empty());
-    }
-
-    #[test]
-    fn a_sheet_writes_its_png_and_json() {
-        let dir = std::env::temp_dir().join(format!("pixl-exports-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let preset = Preset {
-            format: Format::Sheet,
-            sheet: Sheet::Grid,
-            columns: 4,
-            path: "sheets/{name}".to_string(),
-            ..Preset::default()
-        };
-        let d = doc();
-        let jobs = plan(&d, "hero", 0, &preset, &dir);
-        assert_eq!(jobs.len(), 1);
-        run_job(&d, &preset, &jobs[0]).unwrap();
-        let png = std::fs::read(dir.join("sheets/hero.png")).unwrap();
-        let sheet = pixl_io::png::decode_png(&png).unwrap();
-        assert_eq!(sheet.size(), (16, 12));
-        let json = std::fs::read_to_string(dir.join("sheets/hero.json")).unwrap();
-        assert!(
-            json.contains("\"image\": \"hero.png\"") || json.contains("\"image\":\"hero.png\"")
-        );
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn a_packed_trimmed_sheet_is_as_small_as_its_pixels() {
-        let dir = std::env::temp_dir().join(format!("pixl-exports-packed-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut d = Document::new(16, 16, ColorMode::Rgba).unwrap();
-        let layer = d.layers()[0].id;
-        let t = d.target(layer, 0).unwrap();
-        t.raster
-            .fill_rect_raw(&pixl_document::Rect::new(2, 2, 3, 2), Rgba::BLACK.to_u32());
-        let preset = Preset {
-            format: Format::Sheet,
-            sheet: Sheet::Packed,
-            trim: true,
-            frames: Frames::Current,
-            path: "{name}".to_string(),
-            ..Preset::default()
-        };
-        let jobs = plan(&d, "dot", 0, &preset, &dir);
-        run_job(&d, &preset, &jobs[0]).unwrap();
-        let png = std::fs::read(dir.join("dot.png")).unwrap();
-        assert_eq!(pixl_io::png::decode_png(&png).unwrap().size(), (3, 2));
-        let _ = std::fs::remove_dir_all(dir);
-    }
+    use crate::files::recents::APP_ID;
+    use lumenui::lumen_core::app_paths;
 
     #[test]
     fn presets_keep_and_a_new_user_gets_the_starters() {
@@ -922,6 +376,15 @@ mod tests {
         ex.presets[0].scale = 3;
         ex.persist();
         assert_eq!(Exports::load(Store::at(&dir)).presets[0].scale, 3);
+        assert_eq!(PresetFile::read(&dir.join(FILE)).unwrap()[0].scale, 3);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_command_line_finds_the_presets_the_editor_keeps() {
+        assert_eq!(
+            pixl_io::export::user_dir(),
+            Some(app_paths::data_dir_for(APP_ID))
+        );
     }
 }

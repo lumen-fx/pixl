@@ -1,0 +1,16 @@
+[package]
+name = "pixl-cli"
+description = "Batch export of pixl, Aseprite, PNG and GIF documents for build pipelines, without the editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+pixl-document.workspace = true
+pixl-io.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

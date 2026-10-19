@@ -37,7 +37,7 @@ jobs:
           echo "PACKAGE=pixl-$version-windows-x86_64" >> "$GITHUB_ENV"
 
       - name: Build
-        run: cargo build --release --locked -p pixl
+        run: cargo build --release --locked -p pixl -p pixl-cli
 
       # The markup and stylesheets are compiled into the executable, every
       # part and import spliced in by app/build.rs. The icons and the font
@@ -47,7 +47,7 @@ jobs:
         run: |
           dir="dist/$PACKAGE"
           mkdir -p "$dir/assets/icons" "$dir/assets/fonts"
-          cp target/release/pixl.exe app/lumen.toml LICENSE "$dir/"
+          cp target/release/pixl.exe target/release/pixl-cli.exe app/lumen.toml LICENSE "$dir/"
           cp app/assets/icons/*.png "$dir/assets/icons/"
           cp app/assets/fonts/* "$dir/assets/fonts/"
           # Every file a stylesheet names with url() is in the package.
@@ -88,6 +88,12 @@ jobs:
             echo "pixl.exe could not find a file it needs" >&2
             exit 1
           fi
+          # The command line exporter from the zip writes a sheet and its
+          # JSON without a window.
+          "$smoke/$PACKAGE/pixl-cli.exe" -b rig-demo.pixl \
+            --sheet sheet.png --data sheet.json --sheet-type packed
+          test -s sheet.png
+          jq -e '.meta.image == "sheet.png"' sheet.json > /dev/null
 
       # The same zip with a real window on the runner's desktop: pixl.exe
       # starts as a double-click would, the screen is captured after it has
@@ -132,4 +138,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "dist/$PACKAGE.zip" \
             --prerelease \
             --title "pixl $VERSION" \
-            --notes "A pre-release of pixl for Windows (x86_64). Unzip it anywhere and run pixl.exe; keep the files beside it, pixl reads them at start."
+            --notes "A pre-release of pixl for Windows (x86_64). Unzip it anywhere and run pixl.exe; keep the files beside it, pixl reads them at start. pixl-cli.exe exports documents from the command line."

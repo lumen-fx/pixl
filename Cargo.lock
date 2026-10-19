@@ -307,6 +307,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pixl-cli"
+version = "0.1.0"
+dependencies = [
+ "pixl-document",
+ "pixl-io",
+ "serde_json",
+]
+
+[[package]]
 name = "pixl-document"
 version = "0.1.0"
 dependencies = [
@@ -321,6 +330,7 @@ dependencies = [
  "gif",
  "pixl-document",
  "png",
+ "serde",
  "serde_json",
 ]
 

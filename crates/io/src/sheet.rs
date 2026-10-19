@@ -4,6 +4,7 @@
 
 use std::ops::Range;
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::png::{decode_png, encode_png_rgba, scale_pixels};
@@ -34,7 +35,8 @@ pub enum SheetLayout {
 }
 
 /// The `frames` shape of the JSON, as Aseprite offers it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum JsonFrames {
     /// An object keyed by frame name.
     #[default]
@@ -264,23 +266,27 @@ pub fn pack(sizes: &[(u32, u32)], gap: u32) -> (Vec<(u32, u32)>, (u32, u32)) {
         .expect("there is a candidate")
 }
 
+/// `doc` showing only the layer `only`: every other layer that is not a
+/// group is hidden, and groups stay as they are.
+pub fn only_layer(doc: &Document, only: LayerId) -> Document {
+    let mut alone = doc.clone();
+    let others: Vec<LayerId> = alone
+        .walk()
+        .into_iter()
+        .filter(|(_, l)| l.id != only && !matches!(l.kind, LayerKind::Group { .. }))
+        .map(|(_, l)| l.id)
+        .collect();
+    for id in others {
+        let _ = alone.update_layer(id, |p| p.visible = false);
+    }
+    alone
+}
+
 /// A frame's pixels for the sheet: the frame composite, or one layer of it.
 fn render_cell(doc: &Document, frame: usize, layer: Option<LayerId>) -> Vec<Rgba> {
     match layer {
         None => composite_frame(doc, frame, &CompositeOptions::EXPORT),
-        Some(only) => {
-            let mut alone = doc.clone();
-            let others: Vec<LayerId> = alone
-                .walk()
-                .into_iter()
-                .filter(|(_, l)| l.id != only && !matches!(l.kind, LayerKind::Group { .. }))
-                .map(|(_, l)| l.id)
-                .collect();
-            for id in others {
-                let _ = alone.update_layer(id, |p| p.visible = false);
-            }
-            composite_frame(&alone, frame, &CompositeOptions::EXPORT)
-        }
+        Some(only) => composite_frame(&only_layer(doc, only), frame, &CompositeOptions::EXPORT),
     }
 }
 
