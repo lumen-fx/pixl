@@ -3,6 +3,7 @@
 @import "parts/themes.css";
 @import "parts/settings.css";
 @import "parts/palette.css";
+@import "parts/color.css";
 @import "parts/timeline.css";
 @import "parts/tools.css";
 @import "parts/perf.css";
@@ -32,9 +33,6 @@
 .panel-header { align: center; padding: 0 var(--space-4); gap: var(--space-2); }
 .panel-body { padding: var(--space-3); gap: var(--space-3); min-height: 36; }
 .panel-body.fill { grow: 1; min-height: 0; }
-.color-pair { align: center; gap: var(--space-3); }
-.channel { align: center; gap: var(--space-3); }
-.channel-slider { grow: 1; min-width: 0; }
 .swatches { flex-wrap: wrap; gap: 2; }
 .layer-props { align: center; gap: var(--space-3); }
 .opacity-slider { grow: 1; min-width: 0; }

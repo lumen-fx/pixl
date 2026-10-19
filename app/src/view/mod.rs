@@ -471,7 +471,7 @@ pub fn read_view_colors(look: Res<Look>, settings: Res<Settings>, mut colors: Re
     }
 }
 
-fn canvas_color(c: Rgba) -> lumenui_canvas::Rgba {
+pub(crate) fn canvas_color(c: Rgba) -> lumenui_canvas::Rgba {
     lumenui_canvas::Rgba::new(
         f64::from(c.r) / 255.0,
         f64::from(c.g) / 255.0,

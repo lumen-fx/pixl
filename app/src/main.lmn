@@ -102,22 +102,7 @@
     </split>
 
     <column id="dock-right" class="dock side">
-      <column id="panel-color" class="panel">
-        <row class="panel-header"><label class="panel-title" text="Color"/></row>
-        <column id="color-body" class="panel-body">
-          <row class="color-pair">
-            <tile id="color-fg" class="swatch big"/>
-            <tile id="color-bg" class="swatch big back"/>
-            <button id="color-swap" class="flat small" text="Swap"/>
-            <spacer/>
-            <input id="color-hex" class="hex" bind-text="color_hex" text="#000000"/>
-          </row>
-          <row class="channel"><label class="channel-name" text="R"/><slider id="color-r" class="channel-slider" min="0" max="255" step="1" value="0" bind-value="color_r"/><label class="channel-value" bind-text="color_r_text" text="0"/></row>
-          <row class="channel"><label class="channel-name" text="G"/><slider id="color-g" class="channel-slider" min="0" max="255" step="1" value="0" bind-value="color_g"/><label class="channel-value" bind-text="color_g_text" text="0"/></row>
-          <row class="channel"><label class="channel-name" text="B"/><slider id="color-b" class="channel-slider" min="0" max="255" step="1" value="0" bind-value="color_b"/><label class="channel-value" bind-text="color_b_text" text="0"/></row>
-          <row class="channel"><label class="channel-name" text="A"/><slider id="color-a" class="channel-slider" min="0" max="255" step="1" value="255" bind-value="color_a"/><label class="channel-value" bind-text="color_a_text" text="255"/></row>
-        </column>
-      </column>
+      <include src="parts/color.lmn"/>
       <column id="panel-palette" class="panel">
         <row class="panel-header"><label class="panel-title" text="Palette"/></row>
         <column id="palette-body" class="panel-body">

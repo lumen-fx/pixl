@@ -1,0 +1,50 @@
+/* The color panel: the foreground and background swatches, the picker
+   (a saturation and value square beside a hue strip, or a hue wheel), the
+   alpha strip, the mode choices and the channel rows. The picker's colors
+   are the color content itself; everything around them reads the tokens. */
+
+.pixl {
+  --picker-h: 150;
+  --strip: 14;
+  --channel-field-w: 40;
+}
+.pixl.scale-125 { --picker-h: 188; --strip: 18; --channel-field-w: 50; }
+.pixl.scale-150 { --picker-h: 225; --strip: 21; --channel-field-w: 60; }
+.pixl.scale-200 { --picker-h: 300; --strip: 28; --channel-field-w: 80; }
+
+.color-pair { align: center; gap: var(--space-3); }
+.swatch.big.editing { border: 2px solid var(--accent); }
+.swatch.big.editing:hover { border: 2px solid var(--accent-hover); }
+
+.color-picker { gap: var(--space-3); height: var(--picker-h); min-height: var(--picker-h); }
+.color-field {
+  grow: 1;
+  min-width: 0;
+  height: var(--picker-h);
+  cursor: crosshair;
+}
+.color-hue {
+  width: var(--strip);
+  min-width: var(--strip);
+  height: var(--picker-h);
+  cursor: pointer;
+}
+.color-picker.wheel .color-hue { display: none; }
+.color-alpha {
+  height: var(--strip);
+  min-height: var(--strip);
+  cursor: pointer;
+}
+
+.color-modes { align: center; gap: var(--space-3); }
+.color-mode { grow: 1; min-width: 0; }
+
+.channel { align: center; gap: var(--space-3); }
+.channel-slider { grow: 1; min-width: 0; }
+.channel-name { width: 12; text-color: var(--text-dim); font-size: var(--font-size-small); }
+.channel-field {
+  width: var(--channel-field-w);
+  min-width: var(--channel-field-w);
+  font-size: var(--font-size-small);
+  text-align: end;
+}

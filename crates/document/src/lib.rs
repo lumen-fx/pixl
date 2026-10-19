@@ -22,7 +22,7 @@ pub mod selection;
 pub mod shapes;
 pub mod transform;
 
-pub use color::{Color, ColorMode, Hsl, Palette, Rgba};
+pub use color::{Color, ColorMode, Hsl, Hsv, Palette, Rgba};
 pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame, composite_ghosts};
 pub use document::{
     Background, BlendMode, Cel, Document, Frame, ImageId, Layer, LayerId, LayerKind, LayerMask,

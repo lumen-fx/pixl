@@ -2,23 +2,22 @@
 //! content is markup the editor writes when what it shows changes; clicks
 //! come back as click messages on the ids the markup carries.
 
+pub mod color;
 pub mod layers;
 pub mod preview;
 pub mod timeline;
 
-use lumenui::ecs::query::Added;
-use lumenui::lumen_core::input::{EditCommitted, PointerButton, PointerPressed, PointerReleased};
+use lumenui::lumen_core::input::{PointerButton, PointerPressed, PointerReleased};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_document::history::Transaction;
-use pixl_document::{BlendMode, LayerId, Rgba, Scope};
+use pixl_document::{BlendMode, LayerId, Scope};
 
 use crate::editor::Editor;
 use crate::home::Home;
 use crate::ids::ElementIds;
 use crate::settings::keymap::KeyCommands;
 use crate::tools::{hex, set_if_changed};
-use crate::view::parse_hex;
 
 /// The name a blend mode has in the layers panel, and its dropdown value.
 pub fn blend_name(mode: BlendMode) -> &'static str {
@@ -75,10 +74,6 @@ pub struct Panels {
     /// The document state the palette and history were last brought up to
     /// date with: generation, revision, undo and redo entries.
     seen: Option<(u64, u64, usize, usize)>,
-    colors: Option<(Rgba, Rgba)>,
-    /// The foreground color as the channel sliders and the hex field last
-    /// showed it.
-    channels: Option<Rgba>,
     /// The active layer's opacity and blend as the controls last showed them.
     props: Option<(LayerId, u8, BlendMode)>,
     /// An opacity or blend change, kept open while the control is dragged
@@ -212,29 +207,6 @@ pub fn show_panels(
     if !current && panels.palette.is_some() && panels.history.is_some() {
         panels.seen = Some(now);
     }
-    if panels.colors != Some((editor.fg, editor.bg))
-        && let (Some(fg), Some(bg)) = (dom::get_by_id("color-fg"), dom::get_by_id("color-bg"))
-    {
-        fg.set_style("bg", &hex(editor.fg));
-        bg.set_style("bg", &hex(editor.bg));
-        panels.colors = Some((editor.fg, editor.bg));
-        changed = true;
-    }
-    if panels.channels != Some(editor.fg) {
-        let c = editor.fg;
-        for (name, v) in [
-            ("color_r", c.r),
-            ("color_g", c.g),
-            ("color_b", c.b),
-            ("color_a", c.a),
-        ] {
-            signals.set(name, f64::from(v));
-            signals.set(&format!("{name}_text"), v.to_string());
-        }
-        signals.set("color_hex", hex(c));
-        panels.channels = Some(c);
-        changed = true;
-    }
     if let Some(layer) = editor.doc.layer(editor.layer) {
         let now = (layer.id, layer.props.opacity, layer.props.blend);
         if panels.props != Some(now) {
@@ -285,7 +257,6 @@ pub fn panel_clicks(
                 close_edit(editor, &mut panels);
                 editor.move_layer(false);
             }
-            "color-swap" => std::mem::swap(&mut editor.fg, &mut editor.bg),
             "history-undo" => {
                 close_edit(editor, &mut panels);
                 editor.undo();
@@ -413,57 +384,6 @@ pub fn layer_controls(
     }
     if released.read().count() > 0 {
         close_edit(editor, &mut panels);
-    }
-}
-
-/// The color panel: the channel sliders and the hex field edit the
-/// foreground color.
-pub fn color_controls(
-    mut editor: ResMut<Editor>,
-    mut panels: ResMut<Panels>,
-    mut signals: Signals,
-    committed: Query<&LumenId, Added<EditCommitted>>,
-) {
-    // What the controls showed; a difference is the user's doing.
-    let Some(c) = panels.channels else {
-        return;
-    };
-    let channel = |s: &Signals, name: &str, was: u8| {
-        s.get::<f64>(name)
-            .map_or(was, |v| v.round().clamp(0.0, 255.0) as u8)
-    };
-    let next = Rgba::new(
-        channel(&signals, "color_r", c.r),
-        channel(&signals, "color_g", c.g),
-        channel(&signals, "color_b", c.b),
-        channel(&signals, "color_a", c.a),
-    );
-    if next != c {
-        editor.fg = next;
-        panels.channels = Some(next);
-        signals.set("color_hex", hex(next));
-        for (name, v) in [
-            ("color_r", next.r),
-            ("color_g", next.g),
-            ("color_b", next.b),
-            ("color_a", next.a),
-        ] {
-            signals.set(&format!("{name}_text"), v.to_string());
-        }
-        return;
-    }
-    if committed.iter().any(|id| id.0 == "color-hex")
-        && let Some(text) = signals.get::<String>("color_hex")
-    {
-        let text = if text.starts_with('#') {
-            text
-        } else {
-            format!("#{text}")
-        };
-        match parse_hex(&text) {
-            Some(c) => editor.fg = c,
-            None => signals.set("color_hex", hex(editor.fg)),
-        }
     }
 }
 

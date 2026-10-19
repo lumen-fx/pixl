@@ -145,11 +145,22 @@ it; and shows the slices. The symmetry axes are marked in the rulers and
 move by their marks. Guides and the grid last as long as the editor runs and
 are not saved with the document.
 
-The panels on the right show the document: the color panel edits the
-foreground color with RGBA sliders and a hex field; the palette sets the
-foreground with a click and the background with a right-click; the history
-panel lists every edit and jumps to any of them. Ctrl+Z undoes, Ctrl+Shift+Z
-or Ctrl+Y redoes.
+The panels on the right show the document. The color panel edits the
+foreground or the background color; a click on either swatch picks which,
+and the one being edited is outlined. Pick the color on a saturation and
+value square beside a hue strip, or on a hue wheel around the square, with
+an alpha strip below; the choice of picker is kept in the settings. Sliders
+set the color in RGB, HSV or HSL (also kept), each with a field to type the
+value, and a hex field takes `#rrggbb` or `#rrggbbaa`. A drag previews in
+the panel and sets the color once, when the button comes up. The arrow keys
+step what is under the pointer (saturation and value on the square, the
+hue on the strip or the wheel, alpha on its strip) or the value of the
+focused field; Shift steps ten at a time. A gray keeps the hue it was
+reached from, so moving through it does not reset the picker. In an indexed
+document the color stays as picked and painting lands on the nearest
+palette entry. The palette sets the foreground with a click and the
+background with a right-click; the history panel lists every edit and jumps
+to any of them. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes.
 
 The layers are listed in the timeline below the canvas, one row per layer
 against the frames, as in Aseprite. Each row carries the layer's eye, a lock

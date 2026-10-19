@@ -151,6 +151,7 @@ pub fn editor(source: Source) -> App {
         .insert_resource(view::aids::Aids::default())
         .insert_resource(tools::transform::FreeTransform::default())
         .insert_resource(panels::Panels::default())
+        .insert_resource(panels::color::ColorPanel::default())
         .insert_resource(files::Files::default())
         .insert_resource(Workspace::in_memory())
         .insert_signal("ws_open", false)
@@ -229,7 +230,7 @@ pub fn editor(source: Source) -> App {
                         panels::panel_clicks,
                         panels::history_keys,
                         panels::layer_controls,
-                        panels::color_controls,
+                        panels::color::color_input,
                         panels::timeline::timeline_input,
                         panels::preview::preview_controls,
                         tools::pick_tool,
@@ -258,6 +259,7 @@ pub fn editor(source: Source) -> App {
                         panels::preview::draw_preview,
                         tools::track_pointer,
                         panels::show_panels,
+                        panels::color::show_color,
                         panels::layers::show_layers,
                         files::autosave,
                         files::show_message,

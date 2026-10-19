@@ -287,8 +287,6 @@ button.small { height: 20; min-height: 20; padding: 0 var(--space-3); font-size:
 .swatch.empty { bg: var(--surface-1); }
 .swatch.big { width: 28; height: 28; }
 .hex { width: 84; font-size: var(--font-size-small); }
-.channel-name { width: 12; text-color: var(--text-dim); font-size: var(--font-size-small); }
-.channel-value { width: 30; text-align: end; text-color: var(--text-dim); font-size: var(--font-size-small); }
 
 .layer-list { bg: var(--surface-1); border: 1px solid var(--edge); }
 .layer-row {

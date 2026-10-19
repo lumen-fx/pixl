@@ -28,6 +28,9 @@ pub enum At {
     Window(Vec2),
     /// The middle of the element with this id, where it is laid out.
     Element(&'static str),
+    /// A point of the element with this id, as shares of its width and
+    /// height from its top left.
+    Within(&'static str, f32, f32),
 }
 
 /// One scripted input.
@@ -249,6 +252,12 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             .and_then(|n| n.rect())
                             .unwrap_or_else(|| panic!("no element {id} laid out"));
                         Vec2::new(r.client_x + r.width / 2.0, r.client_y + r.height / 2.0)
+                    }
+                    At::Within(id, fx, fy) => {
+                        let r = dom::get_by_id(id)
+                            .and_then(|n| n.rect())
+                            .unwrap_or_else(|| panic!("no element {id} laid out"));
+                        Vec2::new(r.client_x + r.width * fx, r.client_y + r.height * fy)
                     }
                 };
                 let pen = |buttons: u32, pressure: f32| PointerData {
@@ -475,6 +484,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
             .before(pixl::settings::keymap::read_keys)
             .before(pixl::view::input::navigate)
             .before(pixl::panels::panel_clicks)
+            .before(pixl::panels::color::color_input)
             .before(pixl::files::file_commands),
         )
         .add_systems(

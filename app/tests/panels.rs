@@ -91,7 +91,7 @@ fn swatches_and_channels_set_the_foreground() {
         vec![
             Step::Click("swatch-4"),
             Step::Wait,
-            Step::Number("color_g", 200.0),
+            Step::Number("color_c1", 200.0 / 255.0),
             Step::Wait,
             Step::Click("color-swap"),
         ],

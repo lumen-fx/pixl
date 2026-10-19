@@ -77,6 +77,56 @@ impl Rgba {
         Hsl { h, s, l }
     }
 
+    /// The color as hue, saturation and value. A gray has hue 0.
+    pub fn to_hsv(self) -> Hsv {
+        let (r, g, b) = (
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+        );
+        let max = r.max(g).max(b);
+        let d = max - r.min(g).min(b);
+        if d <= f32::EPSILON {
+            return Hsv {
+                h: 0.0,
+                s: 0.0,
+                v: max,
+            };
+        }
+        let h = if max == r {
+            60.0 * ((g - b) / d).rem_euclid(6.0)
+        } else if max == g {
+            60.0 * ((b - r) / d + 2.0)
+        } else {
+            60.0 * ((r - g) / d + 4.0)
+        };
+        Hsv {
+            h,
+            s: d / max,
+            v: max,
+        }
+    }
+
+    /// The color of `hsv` with alpha `a`. Any hue turns around to 0 to 360.
+    pub fn from_hsv(hsv: Hsv, a: u8) -> Rgba {
+        let h = hsv.h.rem_euclid(360.0);
+        let s = hsv.s.clamp(0.0, 1.0);
+        let v = hsv.v.clamp(0.0, 1.0);
+        let c = v * s;
+        let x = c * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
+        let m = v - c;
+        let (r, g, b) = match (h / 60.0) as u32 {
+            0 => (c, x, 0.0),
+            1 => (x, c, 0.0),
+            2 => (0.0, c, x),
+            3 => (0.0, x, c),
+            4 => (x, 0.0, c),
+            _ => (c, 0.0, x),
+        };
+        let byte = |v: f32| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+        Rgba::new(byte(r), byte(g), byte(b), a)
+    }
+
     /// The color of `hsl` with alpha `a`.
     pub fn from_hsl(hsl: Hsl, a: u8) -> Rgba {
         let h = hsl.h.rem_euclid(360.0);
@@ -104,6 +154,45 @@ pub struct Hsl {
     pub h: f32,
     pub s: f32,
     pub l: f32,
+}
+
+/// A color as hue (degrees, 0 to 360), saturation and value (0 to 1), the
+/// model of a color picker's square.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Hsv {
+    pub h: f32,
+    pub s: f32,
+    pub v: f32,
+}
+
+impl Hsv {
+    /// The same color as hue, saturation and lightness. A color with no
+    /// saturation keeps its hue, so a picker moved through gray does not
+    /// lose it.
+    pub fn to_hsl(self) -> Hsl {
+        let s = self.s.clamp(0.0, 1.0);
+        let v = self.v.clamp(0.0, 1.0);
+        let l = v * (1.0 - s / 2.0);
+        let sl = if l <= 0.0 || l >= 1.0 {
+            0.0
+        } else {
+            (v - l) / l.min(1.0 - l)
+        };
+        Hsl {
+            h: self.h,
+            s: sl,
+            l,
+        }
+    }
+
+    /// The same color as hue, saturation and value, keeping the hue.
+    pub fn from_hsl(hsl: Hsl) -> Hsv {
+        let s = hsl.s.clamp(0.0, 1.0);
+        let l = hsl.l.clamp(0.0, 1.0);
+        let v = l + s * l.min(1.0 - l);
+        let sv = if v <= 0.0 { 0.0 } else { 2.0 * (1.0 - l / v) };
+        Hsv { h: hsl.h, s: sv, v }
+    }
 }
 
 /// A color as a tool or a fill names it: either a direct color or a palette
@@ -254,6 +343,81 @@ mod tests {
         let red = Rgba::opaque(255, 0, 0).to_hsl();
         assert_eq!((red.h, red.s, red.l), (0.0, 1.0, 0.5));
         assert_eq!(Rgba::opaque(0, 0, 255).to_hsl().h, 240.0);
+    }
+
+    /// A spread of colors: each channel at both ends, one step in from
+    /// them, and between.
+    fn samples() -> impl Iterator<Item = Rgba> {
+        let steps = [0u8, 1, 17, 64, 127, 128, 200, 254, 255];
+        steps.into_iter().flat_map(move |r| {
+            steps
+                .into_iter()
+                .flat_map(move |g| steps.into_iter().map(move |b| Rgba::new(r, g, b, 77)))
+        })
+    }
+
+    #[test]
+    fn hsv_round_trips_every_sample() {
+        for c in samples() {
+            assert_eq!(Rgba::from_hsv(c.to_hsv(), c.a), c, "{c:?}");
+            assert_eq!(Rgba::from_hsl(c.to_hsl(), c.a), c, "{c:?}");
+            // Through the other model and back.
+            let via = Rgba::from_hsl(c.to_hsv().to_hsl(), c.a);
+            assert_eq!(via, c, "{c:?} through HSL");
+            let via = Rgba::from_hsv(Hsv::from_hsl(c.to_hsl()), c.a);
+            assert_eq!(via, c, "{c:?} through HSV");
+        }
+    }
+
+    #[test]
+    fn edge_hues_land_on_the_primaries() {
+        let at = |h: f32| Rgba::from_hsv(Hsv { h, s: 1.0, v: 1.0 }, 255);
+        assert_eq!(at(0.0), Rgba::opaque(255, 0, 0));
+        assert_eq!(at(360.0), Rgba::opaque(255, 0, 0), "a full turn is red");
+        assert_eq!(at(-120.0), Rgba::opaque(0, 0, 255), "turns around");
+        assert_eq!(at(720.0 + 120.0), Rgba::opaque(0, 255, 0));
+        assert_eq!(at(60.0), Rgba::opaque(255, 255, 0));
+        assert_eq!(at(180.0), Rgba::opaque(0, 255, 255));
+        assert_eq!(at(300.0), Rgba::opaque(255, 0, 255));
+        assert_eq!(at(359.9), Rgba::opaque(255, 0, 0));
+        let just_short = Rgba::opaque(255, 0, 1).to_hsv().h;
+        assert!(just_short > 359.0 && just_short < 360.0, "{just_short}");
+        assert_eq!(Rgba::opaque(0, 0, 255).to_hsv().h, 240.0);
+        assert_eq!(Rgba::opaque(255, 0, 255).to_hsv().h, 300.0);
+    }
+
+    #[test]
+    fn grays_have_no_saturation_and_keep_a_given_hue() {
+        for v in [0u8, 1, 128, 255] {
+            let gray = Rgba::opaque(v, v, v);
+            let hsv = gray.to_hsv();
+            assert_eq!((hsv.h, hsv.s), (0.0, 0.0));
+            assert!((hsv.v - f32::from(v) / 255.0).abs() < 1e-6);
+            let hsl = gray.to_hsl();
+            assert_eq!(hsl.s, 0.0);
+        }
+        // Any hue at no saturation is the same gray, and the conversion
+        // between the models keeps the hue it was given.
+        for h in [0.0, 90.0, 210.0, 359.0] {
+            let hsv = Hsv { h, s: 0.0, v: 0.5 };
+            assert_eq!(Rgba::from_hsv(hsv, 255), Rgba::opaque(128, 128, 128));
+            assert_eq!(hsv.to_hsl().h, h);
+            assert_eq!(Hsv::from_hsl(hsv.to_hsl()).h, h);
+        }
+        // Black and white have no saturation in either model.
+        let black = Hsv {
+            h: 40.0,
+            s: 1.0,
+            v: 0.0,
+        };
+        assert_eq!(black.to_hsl().s, 0.0);
+        let white = Hsl {
+            h: 40.0,
+            s: 1.0,
+            l: 1.0,
+        };
+        assert_eq!(Hsv::from_hsl(white).s, 0.0);
+        assert_eq!(Hsv::from_hsl(white).v, 1.0);
     }
 
     #[test]

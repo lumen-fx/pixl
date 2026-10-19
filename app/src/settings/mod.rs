@@ -271,6 +271,34 @@ impl Default for PerformanceSettings {
     }
 }
 
+/// How the color panel picks: a saturation and value square beside a hue
+/// strip, or a hue wheel around the square.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Picker {
+    #[default]
+    Square,
+    Wheel,
+}
+
+/// The color model of the color panel's sliders.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Channels {
+    #[default]
+    Rgb,
+    Hsv,
+    Hsl,
+}
+
+/// The color panel's modes, as last chosen in the panel.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct ColorSettings {
+    pub picker: Picker,
+    pub channels: Channels,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct ShortcutSettings {
@@ -293,6 +321,7 @@ pub struct Settings {
     pub files: FileSettings,
     pub performance: PerformanceSettings,
     pub shortcuts: ShortcutSettings,
+    pub color: ColorSettings,
 }
 
 impl Default for Settings {
@@ -306,6 +335,7 @@ impl Default for Settings {
             files: FileSettings::default(),
             performance: PerformanceSettings::default(),
             shortcuts: ShortcutSettings::default(),
+            color: ColorSettings::default(),
         }
     }
 }
@@ -337,6 +367,7 @@ impl Settings {
             read!(files);
             read!(performance);
             read!(shortcuts);
+            read!(color);
             s
         });
         s.clamp();

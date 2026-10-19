@@ -1,0 +1,32 @@
+<column id="panel-color" class="panel">
+  <row class="panel-header"><label class="panel-title" text="Color"/></row>
+  <column id="color-body" class="panel-body">
+    <row class="color-pair">
+      <tooltip text="Edit the foreground color"><tile id="color-fg" class="swatch big editing"/></tooltip>
+      <tooltip text="Edit the background color"><tile id="color-bg" class="swatch big back"/></tooltip>
+      <button id="color-swap" class="flat small" text="Swap"/>
+      <spacer/>
+      <input id="color-hex" class="hex" bind-text="color_hex" text="#000000"/>
+    </row>
+    <row id="color-picker" class="color-picker">
+      <canvas id="color-field" class="color-field"/>
+      <canvas id="color-hue" class="color-hue"/>
+    </row>
+    <canvas id="color-alpha" class="color-alpha"/>
+    <row class="color-modes">
+      <dropdown id="color-picker-mode" class="color-mode" bind-value="color_picker">
+        <option value="Square"/>
+        <option value="Wheel"/>
+      </dropdown>
+      <dropdown id="color-channel-mode" class="color-mode" bind-value="color_channels">
+        <option value="RGB"/>
+        <option value="HSV"/>
+        <option value="HSL"/>
+      </dropdown>
+    </row>
+    <row class="channel"><label class="channel-name" bind-text="color_c0_name" text="R"/><slider id="color-c0" class="channel-slider" min="0" max="1" step="0.001" value="0" bind-value="color_c0"/><input id="color-c0-field" class="channel-field" bind-text="color_c0_text" text="0"/></row>
+    <row class="channel"><label class="channel-name" bind-text="color_c1_name" text="G"/><slider id="color-c1" class="channel-slider" min="0" max="1" step="0.001" value="0" bind-value="color_c1"/><input id="color-c1-field" class="channel-field" bind-text="color_c1_text" text="0"/></row>
+    <row class="channel"><label class="channel-name" bind-text="color_c2_name" text="B"/><slider id="color-c2" class="channel-slider" min="0" max="1" step="0.001" value="0" bind-value="color_c2"/><input id="color-c2-field" class="channel-field" bind-text="color_c2_text" text="0"/></row>
+    <row class="channel"><label class="channel-name" text="A"/><slider id="color-c3" class="channel-slider" min="0" max="1" step="0.001" value="1" bind-value="color_c3"/><input id="color-c3-field" class="channel-field" bind-text="color_c3_text" text="255"/></row>
+  </column>
+</column>
