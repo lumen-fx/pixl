@@ -292,8 +292,9 @@ pub fn use_tools(
     // A popup or a panel over the stage takes the press.
     let over_stage = place.over_stage();
     let events = pointer.events();
-    // The Rig panel's modes take the stage's pointer.
-    if place.rig.captures_pointer() {
+    // The Rig panel's modes take the stage's pointer, and so does an active
+    // reference layer.
+    if place.rig.captures_pointer() || crate::reference::takes_pointer(&editor) {
         return;
     }
     for event in events {

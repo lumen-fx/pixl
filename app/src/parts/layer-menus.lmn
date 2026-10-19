@@ -93,6 +93,27 @@
         <checkbox id="lp-mask-on" label="On" bind-checked="lp_mask_on"/>
       </row>
     </if>
+    <if signal="lp_is_reference" mode="hide">
+      <column class="lp-place">
+        <row class="dialog-row">
+          <label class="field-label" text="Center"/>
+          <input id="lp-ref-x" class="number-field" type="number" step="any" value="0" bind-text="lp_ref_x"/>
+          <input id="lp-ref-y" class="number-field" type="number" step="any" value="0" bind-text="lp_ref_y"/>
+          <label class="option-label" text="px"/>
+        </row>
+        <row class="dialog-row">
+          <label class="field-label" text="Size"/>
+          <input id="lp-ref-w" class="number-field" type="number" step="any" value="0" bind-text="lp_ref_w"/>
+          <input id="lp-ref-h" class="number-field" type="number" step="any" value="0" bind-text="lp_ref_h"/>
+          <label class="option-label" text="px"/>
+        </row>
+        <row class="dialog-row">
+          <label class="field-label" text="Angle"/>
+          <input id="lp-ref-angle" class="number-field" type="number" step="any" value="0" bind-text="lp_ref_angle"/>
+          <label class="option-label" text="degrees"/>
+        </row>
+      </column>
+    </if>
     <row class="dialog-actions">
       <spacer/>
       <button id="lp-cancel" text="Cancel"/>

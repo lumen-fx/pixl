@@ -61,4 +61,6 @@
 .layer-row.drop-into { bg: var(--accent-soft); }
 
 .lp-card { min-width: 520; }
+/* A reference's place rows, spaced like the card's own. */
+.lp-place { gap: 12; }
 .tag-choice.no-tag { bg: var(--surface-1); }

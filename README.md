@@ -176,8 +176,14 @@ resolution and drawn smoothly at screen resolution over the canvas, not on
 its pixel grid, so a high-resolution photo stays sharp at any zoom. It
 arrives at half opacity in the middle of the canvas, scaled down to fit when
 it is larger, and sits in the layer stack like any layer: above the art or
-below it. It is never painted on, never exported, and the eyedropper and the
-other tools read the art alone. The Layer menu, also opened by a right-click on a row,
+below it. While its layer is active a box with handles surrounds it, and
+every tool but the eyedropper places it: drag inside the box to move it, a
+corner to scale it keeping its proportions (Shift frees them), an edge to
+stretch one side, or outside the box to turn it (Shift steps 15 degrees);
+Alt scales from the middle, and each drag is one undo step. The layer's
+properties set its center, size and angle by number. It is never painted
+on, never exported, and the eyedropper and the other tools read the art
+alone. The Layer menu, also opened by a right-click on a row,
 duplicates, merges down, flattens, clips, locks pixels, alpha or position,
 and opens the layer's properties: name, opacity, blend mode, color tag,
 clipping, locks and the mask.

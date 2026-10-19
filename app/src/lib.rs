@@ -22,6 +22,7 @@ pub mod presets;
 pub mod preview;
 pub mod progressive;
 pub mod recents;
+pub mod reference;
 pub mod refview;
 pub mod rig;
 pub mod select;
@@ -197,8 +198,10 @@ pub fn editor(source: Source) -> App {
         .insert_resource(timeline::LayerTree::default())
         .insert_resource(preview::PreviewPane::default())
         .insert_resource(layers::LayerPanel::default())
+        .insert_resource(reference::ReferenceBox::default())
         .insert_signal("lp_open", false)
         .insert_signal("lp_has_mask", false)
+        .insert_signal("lp_is_reference", false)
         .insert_signal("lp_name", "")
         .insert_signal("lp_opacity", "100")
         .insert_signal("lp_blend", "Normal")
@@ -261,6 +264,7 @@ pub fn editor(source: Source) -> App {
                         toolbox::toolbox_options,
                         toolbox::use_toolbox,
                         transform_tool::use_transform,
+                        reference::place_reference,
                         perf::note_stroke,
                     )
                     .chain(),

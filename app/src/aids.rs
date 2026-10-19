@@ -89,7 +89,8 @@ pub struct Aids {
     seen: Option<Seen>,
     /// The slice the dialog edits.
     editing: Option<usize>,
-    /// The free transform's box, its corners in document coordinates.
+    /// The box of the free transform or of the active reference layer,
+    /// its corners in document coordinates.
     pub transform_box: Option<[(f64, f64); 4]>,
     rulers_drawn: Option<RulersDrawn>,
 }
@@ -841,7 +842,8 @@ pub fn draw(ctx: &Context2d, view: &View, aids: &Aids, editor: &Editor) {
             }
         }
     }
-    // The free transform's box, with a handle at each corner and edge.
+    // The free transform's or the reference's box, with a handle at each
+    // corner and edge.
     if let (Some(corners), Some(g)) = (aids.transform_box, aids.colors.guide) {
         let at = |(x, y): (f64, f64)| (ox + x * z, oy + y * z);
         ctx.set_stroke_color(color(g));

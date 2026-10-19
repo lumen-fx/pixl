@@ -1270,8 +1270,10 @@ pub fn use_toolbox(
         preview.clear();
         toolbox.text_hover = false;
     }
-    // The Rig panel's modes take the stage's pointer too.
-    if !mine(editor.tool) || place.rig.captures_pointer() {
+    // The Rig panel's modes take the stage's pointer too, and so does an
+    // active reference layer.
+    if !mine(editor.tool) || place.rig.captures_pointer() || crate::reference::takes_pointer(editor)
+    {
         pointer.events();
         return;
     }

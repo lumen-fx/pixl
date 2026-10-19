@@ -1018,7 +1018,77 @@ fn fill_properties(editor: &Editor, id: LayerId, signals: &mut Signals) {
     let mask = mask_of(&editor.doc, id);
     signals.set("lp_has_mask", mask.is_some());
     signals.set("lp_mask_on", mask.is_some_and(|m| m.enabled));
+    let reference = editor.doc.reference(id).ok();
+    signals.set("lp_is_reference", reference.is_some());
+    if let Some((img, place)) = reference {
+        for (signal, value) in reference_fields(place, (img.width(), img.height())) {
+            signals.set(signal, number(value));
+        }
+    }
     mark_tag_choice(p.color_tag);
+}
+
+/// The place fields of the properties dialog for a reference of `size` at
+/// `place`: the center, the size on the canvas and the angle.
+fn reference_fields(place: ReferencePlace, size: (u32, u32)) -> [(&'static str, f64); 5] {
+    let (w, h) = place.extent(size);
+    [
+        ("lp_ref_x", place.center.0),
+        ("lp_ref_y", place.center.1),
+        ("lp_ref_w", w),
+        ("lp_ref_h", h),
+        ("lp_ref_angle", place.rotation),
+    ]
+}
+
+/// A number for a field: up to two decimals, no trailing zeros.
+fn number(v: f64) -> String {
+    let s = format!("{v:.2}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.into() }
+}
+
+/// The place the dialog's fields ask for. A field left as it was filled
+/// keeps the exact value, so opening and closing the dialog moves nothing;
+/// one that does not read as a number, or a size that is not positive,
+/// keeps it too.
+fn reference_from_fields(
+    place: ReferencePlace,
+    size: (u32, u32),
+    text: impl Fn(&str) -> String,
+) -> ReferencePlace {
+    let read = |signal: &str, was: f64| {
+        let t = text(signal);
+        if t.trim() == number(was) {
+            return was;
+        }
+        t.trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite())
+            .unwrap_or(was)
+    };
+    let fields = reference_fields(place, size);
+    let [x, y, w, h, angle] = fields.map(|(signal, was)| read(signal, was));
+    let scale = |want: f64, was_extent: f64, was_scale: f64, side: u32| {
+        if want > 0.0 && want != was_extent {
+            (want / f64::from(side)).copysign(was_scale)
+        } else {
+            was_scale
+        }
+    };
+    ReferencePlace {
+        center: (x, y),
+        scale: (
+            scale(w, fields[2].1, place.scale.0, size.0),
+            scale(h, fields[3].1, place.scale.1, size.1),
+        ),
+        rotation: if angle == place.rotation {
+            angle
+        } else {
+            angle.rem_euclid(360.0)
+        },
+    }
 }
 
 /// The properties dialog's fields, applied as one undo step.
@@ -1055,10 +1125,20 @@ fn apply_properties(editor: &mut Editor, panel: &LayerPanel, signals: &Signals) 
     };
     let mask_on = mask_of(&editor.doc, id).map(|m| m.enabled);
     let want_mask = flag("lp_mask_on");
-    if props == before && mask_on.is_none_or(|on| on == want_mask) {
+    let place = editor.doc.reference(id).ok().map(|(img, was)| {
+        let size = (img.width(), img.height());
+        (was, reference_from_fields(was, size, text))
+    });
+    let moved = place.is_some_and(|(was, now)| was != now);
+    if props == before && mask_on.is_none_or(|on| on == want_mask) && !moved {
         return;
     }
     editor.layer_edit("Layer properties", |doc| {
+        // The place first: a position lock set in this same edit still
+        // lets the typed place in.
+        if let Some((_, now)) = place.filter(|_| moved) {
+            doc.set_reference_place(id, now)?;
+        }
         doc.update_layer(id, |p| *p = props)?;
         if mask_on.is_some_and(|on| on != want_mask) {
             doc.set_mask_enabled(id, want_mask)?;

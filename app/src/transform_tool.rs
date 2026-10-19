@@ -398,7 +398,8 @@ pub fn use_transform(
         }
         return;
     }
-    if ft.session.is_none() && chosen.0.is_empty() {
+    // A reference layer has its own box (see crate::reference).
+    if ft.session.is_none() && chosen.0.is_empty() && !crate::reference::takes_pointer(editor) {
         ft.session = start(editor);
         if ft.session.is_some() {
             dirty = true;
