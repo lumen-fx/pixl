@@ -20,6 +20,11 @@
 
 #menubar { align: center; gap: var(--space-1); padding: 0 var(--space-2); }
 #tool-options { align: center; gap: var(--space-4); padding: 0 var(--space-4); }
+#tabs { min-width: 0; overflow: hidden; }
+#tabs.empty { display: none; }
+.tab-list { min-width: 0; }
+.tab { align: center; gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-4); }
+.tab.home-tab { padding: 0 var(--space-4); }
 #workspace { grow: 1; min-height: 0; }
 #docks { grow: 1; min-width: 0; }
 #toolbar { padding: var(--space-2); gap: var(--space-1); align: center; }
@@ -48,7 +53,8 @@
 .history-row { align: center; padding: 0 var(--space-3); }
 #statusbar { align: center; gap: 16; padding: 0 var(--space-4); }
 
-/* The start screen takes the window in place of the editor. */
+/* The start screen takes the window in place of the editor; the tab bar
+   stays above it while documents are open. */
 #home { display: none; }
 .pixl.home #home { display: flex; grow: 1; min-height: 0; }
 .pixl.home #menubar { display: none; }

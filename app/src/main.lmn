@@ -1,7 +1,6 @@
 <root id="app" class="pixl dark">
   <row id="menubar">
     <label class="brand" text="pixl"/>
-    <tooltip text="Back to the start screen"><button id="go-home" class="menu-title" text="Home"/></tooltip>
     <button id="menu-file" class="menu-title" text="File"/>
     <menu id="file-menu">
       <menuitem id="file-new" label="New... (Ctrl+N)"/>
@@ -76,6 +75,17 @@
     <label id="tool-hint" class="option-label" bind-text="tool_hint" text=""/>
     <include src="parts/quickbar.lmn"/>
   </row>
+
+  <row id="tabs" class="empty">
+    <row id="tab-list" class="tab-list"/>
+  </row>
+  <menu id="tab-menu">
+    <menuitem id="tab-menu-close" label="Close"/>
+    <menuitem id="tab-menu-close-others" label="Close others"/>
+    <menuitem id="tab-menu-close-right" label="Close to the right"/>
+    <separator/>
+    <menuitem id="tab-menu-copy-path" label="Copy path"/>
+  </menu>
 
   <row id="workspace">
     <column id="toolbar">
@@ -244,12 +254,12 @@
 
   <dialog open="discard_open">
     <column class="dialog-card">
-      <label class="dialog-title" text="Discard unsaved changes?"/>
-      <label class="dialog-text" text="The document has edits that are not saved."/>
+      <label class="dialog-title" bind-text="discard_title" text="Close without saving?"/>
+      <label class="dialog-text" bind-text="discard_text" text=""/>
       <row class="dialog-actions">
         <spacer/>
         <button id="discard-no" text="Keep editing"/>
-        <button id="discard-yes" class="primary" default="true" text="Discard"/>
+        <button id="discard-yes" class="primary" default="true" bind-text="discard_yes" text="Close without saving"/>
       </row>
     </column>
   </dialog>

@@ -122,6 +122,34 @@ impl Default for Aids {
 }
 
 impl Aids {
+    /// Hands over the guides of the document in front, leaving none.
+    pub fn take_guides(&mut self) -> (Vec<i32>, Vec<i32>) {
+        let taken = (
+            std::mem::take(&mut self.guides_x),
+            std::mem::take(&mut self.guides_y),
+        );
+        self.forget_document();
+        taken
+    }
+
+    /// Puts back the guides of the document coming to the front.
+    pub fn restore_guides(&mut self, (xs, ys): (Vec<i32>, Vec<i32>)) {
+        self.guides_x = xs;
+        self.guides_y = ys;
+        self.forget_document();
+    }
+
+    /// Drops what the aids hold of the document in front: a drag, the
+    /// slice the dialog edits, the transform box; and draws again.
+    fn forget_document(&mut self) {
+        self.drag = None;
+        self.editing = None;
+        self.transform_box = None;
+        self.seen = None;
+        self.rulers_drawn = None;
+        self.revision += 1;
+    }
+
     /// What positions snap to, with snapping on.
     pub fn snap_targets(&self, editor: &Editor) -> Option<Snap> {
         if !self.snap {

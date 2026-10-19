@@ -171,6 +171,37 @@ impl Default for View {
 }
 
 impl View {
+    /// Hands over how the document in front is viewed, leaving the view of
+    /// a newly opened document: fitted to the stage on the next tick.
+    pub fn take_document(&mut self) -> View {
+        let fresh = View {
+            stage: self.stage,
+            snap: self.snap.clone(),
+            revision: self.revision + 1,
+            ..View::default()
+        };
+        std::mem::replace(self, fresh)
+    }
+
+    /// Puts back how the document coming to the front was viewed, in the
+    /// stage as it is now.
+    pub fn restore_document(&mut self, saved: View) {
+        let stage = self.stage;
+        let revision = self.revision + 1;
+        let resized = saved.stage != stage;
+        *self = View {
+            stage,
+            revision,
+            ..saved
+        };
+        if resized && !self.fit_pending {
+            // Keep the middle of the view where it was.
+            let dx = f64::from(stage.1.x - saved.stage.1.x) / 2.0;
+            let dy = f64::from(stage.1.y - saved.stage.1.y) / 2.0;
+            self.origin = (self.origin.0 + dx, self.origin.1 + dy);
+        }
+    }
+
     /// Whether the view turns or mirrors the document.
     pub fn turned(&self) -> bool {
         self.rotation.rem_euclid(360.0) != 0.0 || self.flipped
@@ -1128,7 +1159,95 @@ impl Default for Layers {
     }
 }
 
+/// What the layer buffers hold of one document: the buffers, the plan
+/// they follow and what of the document they show. A document keeps it
+/// while another one is in front, so coming back draws what it had and
+/// rewrites only what changed.
+pub struct Buffers {
+    items: Vec<Item>,
+    seen_revision: u64,
+    seen_generation: u64,
+    seen_frame: usize,
+    seen_size: (u32, u32),
+    seen_onion: Option<OnionSkin>,
+    references: Vec<(usize, PlanItem)>,
+    reference_images: References,
+    error: Option<String>,
+}
+
+impl Buffers {
+    /// None: the document's buffers are made anew when it comes back.
+    pub fn none() -> Self {
+        Self {
+            items: Vec::new(),
+            seen_revision: 0,
+            seen_generation: u64::MAX,
+            seen_frame: 0,
+            seen_size: (0, 0),
+            seen_onion: None,
+            references: Vec::new(),
+            reference_images: References::default(),
+            error: None,
+        }
+    }
+
+    /// The memory the buffers hold, in bytes.
+    pub fn bytes(&self) -> u64 {
+        let own: u64 = self
+            .items
+            .iter()
+            .map(|i| u64::from(i.buffer.width()) * u64::from(i.buffer.height()) * 4)
+            .sum();
+        own + self.reference_images.buffer_stats().1
+    }
+}
+
 impl Layers {
+    /// Hands over the buffers of the document in front, leaving none for
+    /// the next. Buffers with tiles still on the workers are dropped
+    /// instead: their missing tiles would not arrive, so the document
+    /// draws anew when it comes back.
+    pub fn take_buffers(&mut self) -> Buffers {
+        let incomplete = !self.rewrites.is_empty() || self.pool.queued() > 0;
+        for item in &self.items {
+            self.pool.cancel(item.key);
+        }
+        self.rewrites.clear();
+        self.art_dirty = true;
+        self.replan = false;
+        let taken = Buffers {
+            items: std::mem::take(&mut self.items),
+            seen_revision: std::mem::take(&mut self.seen_revision),
+            seen_generation: std::mem::replace(&mut self.seen_generation, u64::MAX),
+            seen_frame: std::mem::take(&mut self.seen_frame),
+            seen_size: std::mem::take(&mut self.seen_size),
+            seen_onion: self.seen_onion.take(),
+            references: std::mem::take(&mut self.references),
+            reference_images: std::mem::take(&mut self.reference_images),
+            error: self.error.take(),
+        };
+        if incomplete { Buffers::none() } else { taken }
+    }
+
+    /// Puts back the buffers of the document coming to the front.
+    pub fn restore_buffers(&mut self, buffers: Buffers) {
+        self.items = buffers.items;
+        self.seen_revision = buffers.seen_revision;
+        self.seen_generation = buffers.seen_generation;
+        self.seen_frame = buffers.seen_frame;
+        self.seen_size = buffers.seen_size;
+        self.seen_onion = buffers.seen_onion;
+        self.references = buffers.references;
+        self.reference_images = buffers.reference_images;
+        self.error = buffers.error;
+        self.art_dirty = true;
+    }
+
+    /// The memory budget of the buffers, in bytes.
+    pub fn budget_bytes(&self) -> u64 {
+        self.budget * 4
+    }
+
     /// Follows the performance settings: the buffer budget (a change
     /// re-plans the buffers), the progressive threshold and the worker
     /// count. The workers are replaced only while they are idle, so no

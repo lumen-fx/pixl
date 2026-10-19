@@ -23,7 +23,7 @@ use pixl_io::sheet::{
 };
 
 use crate::editor::Editor;
-use crate::files::{Files, Replace};
+use crate::files::{Files, Request};
 use crate::ids::ElementIds;
 use crate::panels::escape;
 use crate::settings::keymap::KeyCommands;
@@ -221,28 +221,28 @@ pub fn read_sheet_image(path: &Path) -> std::result::Result<SheetImage, String> 
     })
 }
 
-/// Replaces the editor's document with the frames `grid` splits `image`
-/// into.
-pub fn import_into(editor: &mut Editor, path: &Path, grid: &SheetGrid, duration_ms: u32) {
-    let result = read_sheet_image(path).and_then(|image| {
-        let cells = split_sheet(image.width, image.height, &image.pixels, grid);
-        sheet_document(grid.cell, &cells, duration_ms).map_err(|e| e.to_string())
-    });
-    match result {
-        Ok(doc) => {
-            let frames = doc.frame_count();
-            editor.replace(doc, None);
-            editor.imported_from = Some(path.to_path_buf());
-            editor.name = path.file_stem().map(|s| s.to_string_lossy().into_owned());
-            editor.message = Some(format!(
-                "Imported {frames} frames of {} x {} from {}",
-                grid.cell.0,
-                grid.cell.1,
-                path.display()
-            ));
-        }
-        Err(e) => editor.message = Some(e),
-    }
+/// A new document of the frames `grid` splits `image` into, with the colors
+/// and tool of `window` (the editor in front).
+pub fn import(
+    window: &Editor,
+    path: &Path,
+    grid: &SheetGrid,
+    duration_ms: u32,
+) -> std::result::Result<Editor, String> {
+    let image = read_sheet_image(path)?;
+    let cells = split_sheet(image.width, image.height, &image.pixels, grid);
+    let doc = sheet_document(grid.cell, &cells, duration_ms).map_err(|e| e.to_string())?;
+    let frames = doc.frame_count();
+    let mut editor = Editor::opened(doc, None, window);
+    editor.imported_from = Some(path.to_path_buf());
+    editor.name = path.file_stem().map(|s| s.to_string_lossy().into_owned());
+    editor.message = Some(format!(
+        "Imported {frames} frames of {} x {} from {}",
+        grid.cell.0,
+        grid.cell.1,
+        path.display()
+    ));
+    Ok(editor)
 }
 
 /// Opens and answers the two dialogs.
@@ -294,6 +294,7 @@ pub fn sheet_commands(
             "sx-export" => {
                 let title = title(&editor);
                 let choice = export_choice(&signals, &editor.doc, &title);
+                let generation = editor.generation;
                 signals.set("sheet_export_open", false);
                 changed = true;
                 commands.queue(
@@ -304,9 +305,10 @@ pub fn sheet_commands(
                             let Some(path) = paths.into_iter().next() else {
                                 return;
                             };
-                            let mut editor = world.resource_mut::<Editor>();
-                            let done = write_sheet(&editor.doc, &choice, &path);
-                            editor.message = Some(done.unwrap_or_else(|e| e));
+                            crate::documents::edit_document(world, generation, |editor| {
+                                let done = write_sheet(&editor.doc, &choice, &path);
+                                editor.message = Some(done.unwrap_or_else(|e| e));
+                            });
                         }),
                 );
             }
@@ -327,7 +329,7 @@ pub fn sheet_commands(
                     let ms = field(&signals, "si_ms", 1, 60000, 100);
                     signals.set("sheet_import_open", false);
                     changed = true;
-                    files.queued = Some(Replace::Sheet(image.path, grid, ms));
+                    files.queued = Some(Request::Sheet(image.path, grid, ms));
                 } else {
                     editor.message = Some("Choose a sheet image first".into());
                 }

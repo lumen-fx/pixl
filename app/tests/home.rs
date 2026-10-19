@@ -10,7 +10,7 @@ use common::drive::{Outcome, Step, drive, editor_over};
 use lumenui::App;
 use pixl::files::recents::{Recents, Thumb, key};
 use pixl::files::save_to;
-use pixl::{Editor, Home};
+use pixl::{Documents, Editor, Home};
 use pixl_document::native;
 use pixl_document::{Background, ColorMode, Document, Rgba};
 
@@ -321,13 +321,17 @@ fn a_file_named_at_start_skips_the_start_screen() {
 #[test]
 fn close_and_home_go_back_to_the_start_screen() {
     let data = scratch("close").join("data");
-    let app = pixl::starting(
-        editor_over(art(16, 16, Rgba::opaque(9, 9, 9))),
-        Recents::load(&data),
-        None,
-    )
-    .insert_resource(Home::default());
-    let home = drive(app, vec![Step::Click("go-home"), Step::Wait]);
+    // The start screen over a document open in a tab.
+    let app = || {
+        pixl::starting(
+            editor_over(art(16, 16, Rgba::opaque(9, 9, 9))),
+            Recents::load(&data),
+            None,
+        )
+        .insert_resource(Home::default())
+        .insert_resource(Documents::default())
+    };
+    let home = drive(app(), vec![Step::ClickInside("tab-home"), Step::Wait]);
     common::save(&home.frame, "home-from-editor");
     assert!(home.home_open);
     assert_eq!(
@@ -336,16 +340,10 @@ fn close_and_home_go_back_to_the_start_screen() {
         "Home keeps it"
     );
 
-    let app = pixl::starting(
-        editor_over(art(16, 16, Rgba::opaque(9, 9, 9))),
-        Recents::load(&data),
-        None,
-    )
-    .insert_resource(Home::default());
     let back = drive(
-        app,
+        app(),
         vec![
-            Step::Click("go-home"),
+            Step::ClickInside("tab-home"),
             Step::Wait,
             Step::Click("home-back"),
             Step::Wait,
@@ -354,14 +352,8 @@ fn close_and_home_go_back_to_the_start_screen() {
     assert!(!back.home_open);
     assert_eq!(pixel(&back.doc, 8, 8), Rgba::opaque(9, 9, 9));
 
-    let app = pixl::starting(
-        editor_over(art(16, 16, Rgba::opaque(9, 9, 9))),
-        Recents::load(&data),
-        None,
-    )
-    .insert_resource(Home::default());
     let closed = drive(
-        app,
+        app(),
         vec![
             Step::Edit(|e| e.touch()),
             Step::Menu("file-close"),
@@ -371,6 +363,7 @@ fn close_and_home_go_back_to_the_start_screen() {
         ],
     );
     assert!(closed.home_open);
+    assert!(closed.tabs.is_empty());
     assert_eq!(pixel(&closed.doc, 8, 8), Rgba::TRANSPARENT);
 }
 

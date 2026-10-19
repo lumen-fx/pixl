@@ -1,5 +1,5 @@
 //! Documents on disk: save and open, import, export, the recovery copy, and
-//! the New and discard dialogs.
+//! the New dialog.
 
 pub mod common;
 
@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use common::drive::{Step, drive, editor_over};
 use pixl::Editor;
-use pixl::files::{Files, export_to, open_path, read_document, save_to};
+use pixl::files::{export_to, open_path, read_document, save_to};
 use pixl_document::native;
 use pixl_document::{ColorMode, Document, Rgba};
 
@@ -46,12 +46,11 @@ fn a_saved_document_opens_as_it_was_and_reads_unmodified() {
     assert_eq!(editor.path.as_deref(), Some(saved.as_path()));
     assert!(!editor.is_modified());
 
-    let mut other = Editor::blank();
-    let mut files = Files::default();
-    open_path(&mut other, &mut files, &saved);
+    let opened = open_path(&Editor::blank(), true, &saved).unwrap();
+    let other = &opened.editor;
     assert_eq!(pixel(&other.doc, 3, 4), Rgba::opaque(9, 8, 7));
     assert_eq!(other.title(), "saved.pixl");
-    assert!(files.recovery.is_none());
+    assert!(opened.file.recovery.is_none());
 }
 
 #[test]
@@ -61,9 +60,8 @@ fn a_newer_recovery_copy_is_offered_on_open() {
     save_to(&mut editor, &path).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(20));
     native::write_recovery(&editor.doc, &path).unwrap();
-    let mut files = Files::default();
-    open_path(&mut Editor::blank(), &mut files, &path);
-    assert_eq!(files.recovery.as_deref(), Some(path.as_path()));
+    let opened = open_path(&Editor::blank(), true, &path).unwrap();
+    assert_eq!(opened.file.recovery.as_deref(), Some(path.as_path()));
 }
 
 #[test]
@@ -74,10 +72,11 @@ fn aseprite_and_png_files_import_as_new_documents() {
     let png = read_document(&data.join("basic-16x16.png")).unwrap();
     assert_eq!((png.doc.width(), png.doc.height()), (16, 16));
 
-    let mut editor = Editor::blank();
-    let mut files = Files::default();
-    open_path(&mut editor, &mut files, &data.join("basic-16x16.aseprite"));
-    assert_eq!(editor.path, None, "saving an import never writes over it");
+    let opened = open_path(&Editor::blank(), true, &data.join("basic-16x16.aseprite")).unwrap();
+    assert_eq!(
+        opened.editor.path, None,
+        "saving an import never writes over it"
+    );
 }
 
 #[test]
@@ -103,14 +102,12 @@ fn exports_write_png_and_gif() {
 }
 
 #[test]
-fn new_asks_before_discarding_edits_then_makes_the_size_asked_for() {
+fn new_makes_the_size_asked_for_and_keeps_the_edited_document() {
     let out = drive(
         editor_over(dotted()),
         vec![
             Step::Edit(|e| e.touch()),
             Step::Menu("file-new"),
-            Step::Wait,
-            Step::Click("discard-yes"),
             Step::Wait,
             Step::Text("new_width", "40"),
             Step::Text("new_height", "24"),
@@ -119,19 +116,5 @@ fn new_asks_before_discarding_edits_then_makes_the_size_asked_for() {
         ],
     );
     assert_eq!((out.doc.width(), out.doc.height()), (40, 24));
-}
-
-#[test]
-fn keeping_the_edits_keeps_the_document() {
-    let out = drive(
-        editor_over(dotted()),
-        vec![
-            Step::Edit(|e| e.touch()),
-            Step::Menu("file-new"),
-            Step::Wait,
-            Step::Click("discard-no"),
-            Step::Wait,
-        ],
-    );
-    assert_eq!(pixel(&out.doc, 3, 4), Rgba::opaque(9, 8, 7));
+    assert_eq!(out.tabs, ["untitled *", "untitled"]);
 }

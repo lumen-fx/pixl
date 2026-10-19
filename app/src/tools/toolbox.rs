@@ -228,6 +228,13 @@ pub struct Toolbox {
     text_hover: bool,
 }
 
+/// What the tools keep of one document between gestures.
+#[derive(Default)]
+pub struct ToolboxDocument {
+    clone_source: Option<Point>,
+    pattern: Option<(Arc<Pixels>, Point)>,
+}
+
 impl Default for Toolbox {
     fn default() -> Self {
         Self {
@@ -248,6 +255,23 @@ impl Default for Toolbox {
 }
 
 impl Toolbox {
+    /// Hands over what the tools keep of the document in front: the clone
+    /// stamp's source and the pattern stamp's pattern.
+    pub fn take_document(&mut self) -> ToolboxDocument {
+        self.last_press = None;
+        self.edit_slice = None;
+        ToolboxDocument {
+            clone_source: self.clone_source.take(),
+            pattern: self.pattern.take(),
+        }
+    }
+
+    /// Puts back what the tools kept of the document coming to the front.
+    pub fn restore_document(&mut self, saved: ToolboxDocument) {
+        self.clone_source = saved.clone_source;
+        self.pattern = saved.pattern;
+    }
+
     /// Whether a gesture of the toolbox is in progress, or the paint it
     /// left is still being drawn.
     pub fn active(&self) -> bool {

@@ -22,9 +22,9 @@ source (see Quick start).
 ## Status
 
 Early. The editor is the `pixl` program in `app/`, built with the Lumen Rust
-SDK: one document per window, with a menu row, the tool bar, tool options,
-the canvas, and the color, palette, layers, history, timeline and preview
-panels. Under it, crates with no UI hold the document, the tools and the
+SDK: a menu row, the tool bar, tool options, a tab for each open
+document, the canvas, and the color, palette, layers, history, timeline and
+preview panels. Under it, crates with no UI hold the document, the tools and the
 file formats (see Layout).
 
 Started without a file, pixl opens on its start screen: the documents opened
@@ -36,9 +36,27 @@ newer than its file offers to recover it. After the recent documents the
 list shows the rig demo and the Getting started tutorial; each opens as an
 untitled copy that never joins the recent documents. Beside the list are New project and Open. The list and the
 thumbnails are kept in pixl's folder of the user data directory
-(`~/.local/share/lumen/pixl` on Linux), never beside the documents. File >
-Close (Ctrl+W) and the Home button in the menu row return to the start
-screen; Home keeps the open document to go back to.
+(`~/.local/share/lumen/pixl` on Linux), never beside the documents.
+
+Several documents stay open at once, each in a tab above the canvas, as in
+Aseprite. New, Open, the start screen's list and the tutorials each open a
+document in a tab of its own; opening a file that is already open brings
+its tab to the front. A tab shows the file's name, with a `*` while it has
+unsaved edits, and its tooltip gives the full path. Each document keeps its
+own undo history, selection and saved selections, view (zoom, pan, turn and
+tiling), frame, layer, onion skin, guides, Rig panel mode and recovery copy;
+the colors, the tool and its options, the settings, the palettes, the
+brushes and the layouts belong to the window and stay as they are from one
+tab to the next. Ctrl+Tab and Ctrl+Shift+Tab step through the tabs, a drag
+moves a tab along the row, and Ctrl+W, a middle click or the tab's `x`
+closes one, asking first when it has unsaved edits. A right-click on a tab
+offers Close, Close others, Close to the right and Copy path. The Home tab
+at the start of the row shows the start screen over the open documents;
+closing the last document returns to it. Closing the window while
+documents have unsaved edits asks once, naming them. While something is
+under way on the document in front (a stroke, a shape, a free transform, a
+filter preview, an image edit), the tabs wait until it is applied or
+dropped.
 
 The canvas view zooms from 1 to 6400 percent around the pointer (the wheel,
 or `+`, `-`, `0` to fit and `1` for 100 percent) and pans with the middle
@@ -53,7 +71,11 @@ renders there; what the renderer cannot composite the way `pixl-document` does
 CPU instead, and so are the bottom layers of a document whose layers would
 not fit the layer buffer memory set under Performance in the settings. More
 buffers make strokes on lower layers cheaper and every frame of the renderer
-dearer, so the default holds eight buffers of 4096x4096. Large redraws run on
+dearer, so the default holds eight buffers of 4096x4096. Only the document in
+front is drawn; the documents behind other tabs keep their buffers while
+all of them fit that memory together, so switching back to one draws at
+once, and past it the tabs left longest ago give theirs up and draw anew
+when they come back. Large redraws run on
 worker threads and show tile by tile as they finish.
 
 F3 shows the performance overlay over the canvas: frames per second, the
@@ -110,8 +132,8 @@ brush size; the pen's eraser end erases.
 
 The Select menu selects everything, nothing, the inverse, every pixel of
 the foreground color or of the layer's content, grows, shrinks or borders the
-selection by a number of pixels, and saves selections to load again later in
-the session, replacing, adding to, subtracting from or intersecting the
+selection by a number of pixels, and saves selections to load again later
+while the document is open, replacing, adding to, subtracting from or intersecting the
 current one.
 
 The Image menu crops to the selection, sets the canvas size around an anchor,
@@ -142,8 +164,8 @@ the pixel grid; snaps to the grid, the guides and the slices; draws a grid
 of any cell size and offset, square or isometric; repeats the document left and right and above
 and below for seamless tiles; turns the view in 15 degree steps and mirrors
 it; and shows the slices. The symmetry axes are marked in the rulers and
-move by their marks. Guides and the grid last as long as the editor runs and
-are not saved with the document.
+move by their marks. Guides last while the document is open and the grid
+while the editor runs; neither is saved with the document.
 
 The panels on the right show the document. The color panel edits the
 foreground or the background color; a click on either swatch picks which,
@@ -253,7 +275,8 @@ the status bar says how many files it wrote. The presets are kept in
 `exports.json` in pixl's data folder and serve every document.
 
 Ctrl+Shift+P opens the command palette: one search field over every command
-a key can run, every tool, the layouts, the themes and the recent documents.
+a key can run, every tool, the layouts, the themes, the open documents and
+the recent ones.
 Typing narrows the list to the entries that have the typed letters in order,
 the arrow keys pick one and Enter runs it. Each entry shows its keys, so the
 palette also answers "what is the shortcut for this".
@@ -290,8 +313,7 @@ documents (Ctrl+O, Ctrl+S, Ctrl+Shift+S), and exports the current frame as a
 PNG (Ctrl+E) or the animation as a GIF. Open also reads Aseprite, PNG and GIF
 files, as new documents that save as `.pixl`. A new project has a name, a
 size (typed, or one click on a square, sprite or screen preset), RGBA or
-indexed color, and a transparent or colored background. Replacing a document
-with unsaved edits asks first. While
+indexed color, and a transparent or colored background. While
 a saved document has unsaved edits, the editor writes its recovery copy beside
 it every 30 seconds (the files settings change the interval or turn recovery
 copies off), and opening a document whose recovery copy is newer offers to
@@ -392,7 +414,8 @@ pixl ships is never changed, switches to the layout it works in, and shows a
 card over the canvas listing its steps. Each step says where to drag or
 outlines the control to click next, and ticks itself off once the editor
 shows it done. Closing the card keeps the place, and the tutorial's Help item
-shows it again; opening another document ends the tutorial. The start screen
+shows it again. The tutorial stays with its document's tab: its card shows
+while that tab is in front. The start screen
 lists Getting started after the rig demo.
 
 Documents save as `.pixl` files: one versioned, chunked, compressed file that

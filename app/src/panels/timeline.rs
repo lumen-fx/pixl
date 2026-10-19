@@ -343,6 +343,25 @@ struct Controls {
 }
 
 impl Timeline {
+    /// Hands over the timeline of the document in front, stopped, leaving
+    /// a new document's.
+    pub fn take_document(&mut self) -> Timeline {
+        let mut saved = std::mem::take(self);
+        saved.playback.stop();
+        saved
+    }
+
+    /// Puts back the timeline of the document coming to the front; the
+    /// grid and the controls show it on the next tick.
+    pub fn restore_document(&mut self, mut saved: Timeline) {
+        saved.drag = None;
+        saved.menu_on = None;
+        saved.grid = None;
+        saved.shown = None;
+        saved.controls = None;
+        *self = saved;
+    }
+
     /// The selected frames, first and last; the current frame alone when
     /// nothing is selected.
     pub fn frames(&self, editor: &Editor) -> (usize, usize) {

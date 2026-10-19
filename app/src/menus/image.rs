@@ -366,7 +366,7 @@ pub fn image_commands(
                 editor.touch();
             }
             "replace-cancel" => signals.set("replace_open", false),
-            "palette-load" => load_palette(&mut commands),
+            "palette-load" => load_palette(&mut commands, editor),
             "palette-save" => save_palette(&mut commands, editor),
             "palette-sort" => {
                 signals.set("sort_title", "Sort the palette");
@@ -528,19 +528,20 @@ pub fn image_commands(
 }
 
 /// Asks for a palette file and puts the document on it.
-pub fn load_palette(commands: &mut Commands) {
+pub fn load_palette(commands: &mut Commands, editor: &Editor) {
+    let generation = editor.generation;
     commands.queue(
         FileDialog::open()
             .filter("Palettes", &["gpl", "pal", "hex", "ase", "txt"])
-            .then(|world: &mut World, paths| {
+            .then(move |world: &mut World, paths| {
                 let Some(path) = paths.into_iter().next() else {
                     return;
                 };
-                let mut editor = world.resource_mut::<Editor>();
-                match load_palette_file(&path) {
-                    Ok(p) => use_palette(&mut editor, "Load palette", p),
+                let read = load_palette_file(&path);
+                crate::documents::edit_document(world, generation, |editor| match read {
+                    Ok(p) => use_palette(editor, "Load palette", p),
                     Err(e) => editor.message = Some(e),
-                }
+                });
             }),
     );
 }
@@ -571,6 +572,7 @@ fn save_palette(commands: &mut Commands, editor: &Editor) {
     let base = editor.name();
     let stem = base.rsplit_once('.').map_or(base.as_str(), |(s, _)| s);
     let name = format!("{stem}.gpl");
+    let generation = editor.generation;
     commands.queue(
         FileDialog::save()
             .filter("GIMP palette", &["gpl"])
@@ -578,15 +580,16 @@ fn save_palette(commands: &mut Commands, editor: &Editor) {
             .filter("Hex list", &["hex"])
             .filter("Adobe swatches", &["ase"])
             .file_name(name)
-            .then(|world: &mut World, paths| {
+            .then(move |world: &mut World, paths| {
                 let Some(path) = paths.into_iter().next() else {
                     return;
                 };
-                let mut editor = world.resource_mut::<Editor>();
-                let palette = editor.doc.palette().clone();
-                if let Err(e) = save_palette_file(&palette, &path) {
-                    editor.message = Some(e);
-                }
+                crate::documents::edit_document(world, generation, |editor| {
+                    let palette = editor.doc.palette().clone();
+                    if let Err(e) = save_palette_file(&palette, &path) {
+                        editor.message = Some(e);
+                    }
+                });
             }),
     );
 }

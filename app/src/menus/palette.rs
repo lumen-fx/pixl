@@ -1,6 +1,6 @@
 //! The command palette (Ctrl+Shift+P): one search field over every command
 //! a key can run, every tool, the workspace layouts and themes, the brushes
-//! and tool presets, and the recent documents. Typing filters by the letters in order; the arrow keys
+//! and tool presets, the open documents and the recent ones. Typing filters by the letters in order; the arrow keys
 //! pick and Enter runs, as a click on a result does.
 //!
 //! A command runs the way its key would, through the keymap's commands; a
@@ -12,6 +12,8 @@ use lumenui::lumen_core::input::{Key, MenuClicked, NamedKey};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 
+use crate::documents::{Documents, palette_entries};
+use crate::editor::Editor;
 use crate::files::recents::{Recents, key};
 use crate::home::Home;
 use crate::panels::escape;
@@ -40,8 +42,8 @@ pub enum Run {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     pub label: String,
-    /// The kind of thing it is: a command's group, "Layout", "Theme" or
-    /// "Recent".
+    /// The kind of thing it is: a command's group, "Layout", "Theme",
+    /// "Document" or "Recent".
     pub group: String,
     /// The keys that run it, as text.
     pub keys: String,
@@ -106,6 +108,7 @@ pub fn entries(
     workspace: &Workspace,
     themes: &Themes,
     presets: &Presets,
+    open: Vec<Entry>,
     recents: &Recents,
 ) -> Vec<Entry> {
     let mut out: Vec<Entry> = commands()
@@ -160,6 +163,7 @@ pub fn entries(
             run: Run::Item(format!("tp-use-{i}")),
         });
     }
+    out.extend(open);
     for recent in &recents.entries {
         let name = recent
             .path
@@ -201,6 +205,8 @@ pub struct Sources<'w> {
     presets: Res<'w, Presets>,
     recents: Res<'w, Recents>,
     home: Res<'w, Home>,
+    documents: Res<'w, Documents>,
+    editor: Res<'w, Editor>,
 }
 
 /// Opens the palette, moves through it and runs what it picks. Runs right
@@ -225,6 +231,7 @@ pub fn palette_input(
             &sources.workspace,
             &sources.themes,
             &sources.presets,
+            palette_entries(&sources.documents, &sources.editor),
             &sources.recents,
         );
         palette.query = None;

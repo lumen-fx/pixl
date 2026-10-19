@@ -1,8 +1,11 @@
-//! The open document and everything the editor knows about editing it: the
-//! history, the active layer and frame, the colors, the tool and its options,
-//! and the selection.
+//! The document in front and everything the editor knows about editing it:
+//! the history, the active layer and frame, the colors, the tool and its
+//! options, and the selection. The colors, the tool and its options belong
+//! to the window and stay as they are when another document comes to the
+//! front; the rest belongs to the document (see [`crate::documents`]).
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use lumenui::prelude::*;
 use pixl_document::{
@@ -202,7 +205,7 @@ impl Default for ToolOptions {
     }
 }
 
-/// The document of this window and the state of editing it.
+/// The document in front and the state of editing it.
 #[derive(Resource)]
 pub struct Editor {
     pub doc: Document,
@@ -232,8 +235,12 @@ pub struct Editor {
     pub revision: u64,
     /// The revision that matches the file on disk.
     pub saved_revision: u64,
-    /// Bumped when a new document replaces this one.
+    /// Names this document's content: every editor gets its own, and
+    /// replacing the document (a recovered copy) gets a new one. Views
+    /// compare it to know when they show another document.
     pub generation: u64,
+    /// The saved revision the start screen's list last noted, if it has.
+    pub listed: Option<u64>,
     /// A line for the status bar, such as a failed save.
     pub message: Option<String>,
     /// What changed since a view last looked.
@@ -272,7 +279,8 @@ impl Editor {
             selection: None,
             revision: 1,
             saved_revision: 1,
-            generation: 0,
+            generation: next_generation(),
+            listed: None,
             message: None,
             touched: Touched::All,
         }
@@ -283,19 +291,32 @@ impl Editor {
         Self::new(Document::new(64, 64, ColorMode::Rgba).expect("64x64 is a valid size"))
     }
 
-    /// Replaces the document, keeping the colors, tool and options.
-    pub fn replace(&mut self, doc: Document, path: Option<PathBuf>) {
+    /// An editor over `doc` opened from `path`, with the colors, tool and
+    /// options of `window` (the editor in front).
+    pub fn opened(doc: Document, path: Option<PathBuf>, window: &Editor) -> Self {
         let mut next = Editor::new(doc);
-        next.fg = self.fg;
-        next.bg = self.bg;
-        next.tool = self.tool;
-        next.options = self.options;
-        next.brush_shape = self.brush_shape.clone();
-        // The symmetry keeps its mode and centers on the new canvas.
-        let (w, h) = (next.doc.width(), next.doc.height());
-        next.symmetry = Symmetry::centered(self.symmetry.mode, w, h);
         next.path = path;
-        next.generation = self.generation + 1;
+        next.take_window_state(window);
+        // A new document keeps the symmetry's mode, centered on its canvas.
+        let (w, h) = (next.doc.width(), next.doc.height());
+        next.symmetry = Symmetry::centered(window.symmetry.mode, w, h);
+        next
+    }
+
+    /// Takes what belongs to the window from `window`: the colors, the tool,
+    /// its options and the brush shape.
+    pub fn take_window_state(&mut self, window: &Editor) {
+        self.fg = window.fg;
+        self.bg = window.bg;
+        self.tool = window.tool;
+        self.options = window.options;
+        self.brush_shape = window.brush_shape.clone();
+    }
+
+    /// Replaces the document in place (a recovered copy of it), keeping
+    /// the colors, tool and options.
+    pub fn replace(&mut self, doc: Document, path: Option<PathBuf>) {
+        let mut next = Editor::opened(doc, path, self);
         next.revision = self.revision + 1;
         next.saved_revision = next.revision;
         *self = next;
@@ -528,6 +549,12 @@ impl Default for Editor {
     fn default() -> Self {
         Self::blank()
     }
+}
+
+/// A generation no editor has had yet.
+fn next_generation() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 /// The topmost raster layer, searching groups too.

@@ -1152,16 +1152,17 @@ fn apply_properties(editor: &mut Editor, panel: &LayerPanel, signals: &Signals) 
 }
 
 /// Opens the file dialog for a reference image.
-fn import_reference(commands: &mut Commands) {
+fn import_reference(commands: &mut Commands, editor: &Editor) {
+    let generation = editor.generation;
     commands.queue(
         FileDialog::open()
             .filter("Images", &["png", "gif", "aseprite", "ase", "pixl"])
-            .then(|world: &mut World, paths| {
+            .then(move |world: &mut World, paths| {
                 let Some(path) = paths.into_iter().next() else {
                     return;
                 };
-                let mut editor = world.resource_mut::<Editor>();
-                match reference_image(&path) {
+                let read = reference_image(&path);
+                crate::documents::edit_document(world, generation, |editor| match read {
                     Ok(img) => {
                         let name = path.file_stem().map_or_else(
                             || "Reference".into(),
@@ -1170,7 +1171,7 @@ fn import_reference(commands: &mut Commands) {
                         editor.add_reference(img, name);
                     }
                     Err(e) => editor.message = Some(e),
-                }
+                });
             }),
     );
 }
@@ -1192,7 +1193,7 @@ pub fn layer_command(
         "lm-delete" => editor.delete_layer(),
         "lm-merge" => editor.merge_down_active(),
         "lm-flatten" => editor.flatten(),
-        "lm-reference" => import_reference(commands),
+        "lm-reference" => import_reference(commands, editor),
         "lm-mask-add" => editor.add_mask(),
         "lm-mask-edit" => editor.toggle_mask_edit(),
         "lm-mask-toggle" => editor.toggle_mask(),

@@ -30,6 +30,21 @@ pub struct Selections {
     shown: Option<String>,
 }
 
+impl Selections {
+    /// Hands over the saved selections of the document in front, leaving
+    /// none for the next.
+    pub fn take_document(&mut self) -> Selections {
+        std::mem::take(self)
+    }
+
+    /// Puts back the saved selections of the document coming to the front.
+    pub fn restore_document(&mut self, mut saved: Selections) {
+        saved.asking = None;
+        saved.shown = None;
+        *self = saved;
+    }
+}
+
 /// Every pixel of the active cel that is not clear: the layer's content.
 pub fn layer_content(editor: &Editor) -> Option<Selection> {
     let (w, h) = (editor.doc.width(), editor.doc.height());

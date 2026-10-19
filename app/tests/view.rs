@@ -192,7 +192,7 @@ fn the_document_fits_the_stage_with_sharp_pixels() {
     paint(&mut doc, id, 31, 31, Rgba::opaque(0, 255, 0));
     let (frame, view) = render("cpu", doc, 8, |_| {});
     common::save(&frame, "view-fit");
-    assert!(view.zoom >= 16.0, "a 32x32 document fits at a high zoom");
+    assert!(view.zoom >= 12.0, "a 32x32 document fits at a high zoom");
     assert_eq!(on_screen(&frame, &view, 0, 0), [255, 0, 0, 255]);
     assert_eq!(on_screen(&frame, &view, 31, 31), [0, 255, 0, 255]);
     // A transparent pixel shows the checkerboard, not the stage.
@@ -283,7 +283,7 @@ fn at_doc(frame: &Frame, view: &View, x: f64, y: f64) -> [u8; 4] {
 fn check_reference(backend: &str) {
     let (frame, view) = render(backend, traced(0.0, false), 30, |_| {});
     common::save(&frame, &format!("view-reference-{backend}"));
-    assert!(view.zoom >= 16.0);
+    assert!(view.zoom >= 12.0);
     // The art draws over a reference below it.
     assert_eq!(on_screen(&frame, &view, 20, 20), [0, 0, 255, 255]);
     // The ramp is where its place puts it: half way across, red is half

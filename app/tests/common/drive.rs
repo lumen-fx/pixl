@@ -9,14 +9,14 @@ use std::time::Instant;
 use lumenui::ecs::hierarchy::Children;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
-    ContextMenuEvent, Key, MenuClicked, Modifiers, ModifiersState, MouseWheel, NamedKey,
-    PointerButton, PointerData, PointerKind, PointerMoved, PointerPressed, PointerReleased,
-    PointerState,
+    CloseRequest, ContextMenuEvent, Key, MenuClicked, Modifiers, ModifiersState, MouseWheel,
+    NamedKey, PointerButton, PointerData, PointerKind, PointerMoved, PointerPressed,
+    PointerReleased, PointerState,
 };
 use lumenui::prelude::*;
 use pixl::files::recents::Recent;
 use pixl::view::View;
-use pixl::{Editor, Home, Recents, Settings, Tool};
+use pixl::{Documents, Editor, Home, Recents, Settings, Tool};
 use pixl_document::{Document, LayerId, Point, Rgba, Selection};
 
 /// Where a pointer step lands.
@@ -84,6 +84,8 @@ pub enum Step {
     /// [`UNTIL_PAUSE`] each, until the editor shows what a background job
     /// finishes with.
     Until(fn(&Editor) -> bool),
+    /// The window's close button.
+    CloseWindow,
     /// Waits a tick.
     Wait,
 }
@@ -124,6 +126,16 @@ pub struct Outcome {
     pub preview: usize,
     /// The tutorial on each tick from the fifth on.
     pub tutorial: Vec<Tutor>,
+    /// Each open document's title, in tab order, and the place of the one
+    /// in front.
+    pub tabs: Vec<String>,
+    pub front: Option<usize>,
+    /// The discard question's text, while it is asked.
+    pub asking: Option<String>,
+    /// The layer buffer memory documents behind other tabs keep.
+    pub behind_bytes: u64,
+    /// Tiles written into layer buffers since the editor started.
+    pub tiles_written: u64,
 }
 
 /// The tutorial on one tick.
@@ -163,6 +175,11 @@ struct Snapshot {
     last_stroke: Option<std::time::Duration>,
     perf_lines: Vec<String>,
     preview: usize,
+    tabs: Vec<String>,
+    front: Option<usize>,
+    asking: Option<String>,
+    behind_bytes: u64,
+    tiles_written: u64,
 }
 
 fn key(name: &str) -> Key {
@@ -206,7 +223,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 ResMut<PointerState>,
             ),
                    mut wheel: MessageWriter<MouseWheel>,
-                   mut keys: MessageWriter<KeyPressed>,
+                   (mut keys, mut close): (
+                MessageWriter<KeyPressed>,
+                MessageWriter<CloseRequest>,
+            ),
                    mut keys_up: MessageWriter<KeyReleased>,
                    mut down: MessageWriter<PointerPressed>,
                    mut moved: MessageWriter<PointerMoved>,
@@ -474,6 +494,9 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     Step::Flag(name, v) => signals.set(name, v),
                     Step::Sleep(ms) => std::thread::sleep(std::time::Duration::from_millis(ms)),
                     Step::Edit(f) => f(&mut editor),
+                    Step::CloseWindow => {
+                        close.write(CloseRequest { vetoed: false });
+                    }
                     Step::Until(_) | Step::Wait => {}
                 }
             })
@@ -499,9 +522,17 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 Res<pixl::view::Preview>,
                 Res<pixl::tutorial::Tutorial>,
             ),
+                   (docs, layers): (Res<Documents>, Res<pixl::view::Layers>),
+                   mut closing: MessageReader<CloseRequest>,
                    signals: Signals,
                    mut tick: Local<usize>| {
                 *tick += 1;
+                // The headless run ends by closing the window, which is not
+                // part of the script: what the editor ended with is what it
+                // showed before.
+                if closing.read().any(|c| !c.vetoed) {
+                    return;
+                }
                 // Thumbnails draw on worker threads; the harness waits for
                 // them so what it reports is settled.
                 recents.finish_thumbnails();
@@ -547,6 +578,14 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         .filter_map(|i| signals.get::<String>(&format!("perf_line_{i}")))
                         .collect(),
                     preview: preview.pixels.len(),
+                    tabs: docs.editors(&editor).map(|(_, e)| e.title()).collect(),
+                    front: docs
+                        .front()
+                        .and_then(|f| docs.ids().iter().position(|i| *i == f)),
+                    asking: (signals.get::<bool>("discard_open") == Some(true))
+                        .then(|| signals.get::<String>("discard_text").unwrap_or_default()),
+                    behind_bytes: docs.behind_bytes(),
+                    tiles_written: layers.tiles_written,
                 });
             })
             .after(pixl::view::draw_stage)
@@ -584,6 +623,11 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         perf_lines: end.perf_lines,
         preview: end.preview,
         tutorial,
+        tabs: end.tabs,
+        front: end.front,
+        asking: end.asking,
+        behind_bytes: end.behind_bytes,
+        tiles_written: end.tiles_written,
     }
 }
 

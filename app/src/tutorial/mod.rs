@@ -20,7 +20,7 @@ use pixl_document::{Document, LayerId, Rgba};
 
 use crate::editor::{Editor, Tool};
 use crate::files::shipped::Shipped;
-use crate::files::{Files, Replace};
+use crate::files::{Files, Request};
 use crate::home::Home;
 use crate::ids::ElementIds;
 use crate::panels::escape;
@@ -305,7 +305,7 @@ pub fn run_tutorial(
                 .into_iter()
                 .find(|l| id.strip_prefix("home-") == Some(l.document.slug()))
             {
-                files.queued = Some(Replace::Shipped(lesson.document));
+                files.queued = Some(Request::Shipped(lesson.document));
             }
         }
     } else {
@@ -317,7 +317,7 @@ pub fn run_tutorial(
                 if t.running(&editor).is_some_and(|l| l.id == lesson.id) {
                     t.open = true;
                 } else {
-                    files.queued = Some(Replace::Shipped(lesson.document));
+                    files.queued = Some(Request::Shipped(lesson.document));
                 }
             }
         }

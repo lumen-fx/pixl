@@ -70,6 +70,19 @@ pub struct RigUi {
 }
 
 impl RigUi {
+    /// Hands over the Rig panel's state for the document in front,
+    /// leaving a new document's.
+    pub fn take_document(&mut self) -> RigUi {
+        std::mem::take(self)
+    }
+
+    /// Puts back the state of the document coming to the front.
+    pub fn restore_document(&mut self, mut saved: RigUi) {
+        saved.drag = None;
+        saved.shown = Shown::default();
+        *self = saved;
+    }
+
     /// Whether the stage's pointer belongs to the rig instead of the tools.
     pub fn captures_pointer(&self) -> bool {
         self.mode.is_some()

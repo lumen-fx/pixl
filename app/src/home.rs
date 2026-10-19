@@ -1,5 +1,5 @@
 //! The start screen: what pixl shows when it opens without a file, after
-//! File > Close, and from the Home button. It lists the recent documents,
+//! the last document closes, and from the Home tab. It lists the recent documents,
 //! with the rig demo and the Getting started tutorial pixl ships after them,
 //! and offers a new project or a file to open.
 
@@ -19,13 +19,10 @@ use crate::panels::escape;
 #[derive(Resource, Debug, Default)]
 pub struct Home {
     pub open: bool,
-    /// The editor holds a document the screen can go back to.
+    /// A document is open for the screen to go back to.
     pub can_return: bool,
     /// A file to open on the first tick: the one named on the command line.
     pub pending: Option<PathBuf>,
-    /// The document generation the screen last saw. A new document closes
-    /// the screen.
-    seen_generation: u64,
     shown: Option<String>,
 }
 
@@ -46,44 +43,35 @@ impl Home {
         }
     }
 
-    /// Shows the screen over the editor's current document.
-    pub fn show(&mut self, editor: &Editor, can_return: bool) {
+    /// Shows the screen; `can_return` when a document is open behind it.
+    pub fn show(&mut self, can_return: bool) {
         self.open = true;
         self.can_return = can_return;
-        self.seen_generation = editor.generation;
     }
 }
 
-/// Lists a document on the start screen when it is opened or saved.
-pub fn track_recents(
-    editor: Res<Editor>,
-    mut recents: ResMut<Recents>,
-    mut seen: Local<Option<(u64, u64)>>,
-) {
-    let now = (editor.generation, editor.saved_revision);
-    // The document the editor starts with (generation 0) was not opened
-    // from anything; one opened before this first look (the file named on
-    // the command line) was.
-    let first = if editor.generation == 0 { now } else { (0, 0) };
-    let before = seen.replace(now).unwrap_or(first);
-    if before == now {
+/// Lists the document in front on the start screen when it is opened or
+/// saved. Each document remembers what was noted of it, so bringing one
+/// to the front again lists nothing.
+pub fn track_recents(mut editor: ResMut<Editor>, mut recents: ResMut<Recents>) {
+    let now = editor.saved_revision;
+    if editor.listed == Some(now) {
         return;
     }
-    let Some(path) = editor.recent_path() else {
+    let before = editor.listed.replace(now);
+    let Some(path) = editor.recent_path().cloned() else {
         return;
     };
-    let thumb = if before.0 == now.0 {
+    let thumb = if before.is_some() {
         Thumb::Redraw
     } else {
         Thumb::IfStale
     };
-    recents.note(&path.clone(), &editor.doc, thumb);
+    recents.note(&path, &editor.doc, thumb);
 }
 
-/// Keeps the start screen showing the recent documents, and closes it when
-/// a document opens.
+/// Keeps the start screen showing the recent documents.
 pub fn show_home(
-    editor: Res<Editor>,
     mut home: ResMut<Home>,
     mut recents: ResMut<Recents>,
     settings: Res<crate::settings::Settings>,
@@ -93,10 +81,6 @@ pub fn show_home(
     if recents.limit != settings.files.recent_count {
         recents.limit = settings.files.recent_count;
         home.shown = None;
-    }
-    if editor.generation != home.seen_generation {
-        home.seen_generation = editor.generation;
-        home.open = false;
     }
     if home.open {
         for (which, ..) in EXAMPLES {

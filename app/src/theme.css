@@ -226,6 +226,31 @@ dropdown { height: var(--control-h); min-width: 90; }
 .tool-name { text-color: var(--text); min-width: 96; }
 .option-label { text-color: var(--text-dim); }
 
+/* The tab bar: one tab per open document, the one in front lit and joined
+   to the canvas below it. */
+#tabs {
+  bg: var(--surface-1);
+  border-bottom: 1px solid var(--edge);
+}
+.tab {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  bg: #00000000;
+  border-right: 1px solid var(--edge);
+  border-top: 2px solid #00000000;
+  text-color: var(--text-dim);
+}
+.tab:hover { bg: var(--surface-3); }
+.tab.active {
+  bg: var(--surface-0);
+  border-top: 2px solid var(--accent);
+}
+.tab.active .tab-name { text-color: var(--text); }
+.tab-name { text-color: var(--text-dim); }
+.tab-dirty { text-color: var(--accent); }
+.tab-close { opacity: 0.5; }
+.tab-close:hover { opacity: 1; bg: var(--surface-4); }
+
 #toolbar {
   width: var(--toolbar-w);
   bg: var(--surface-2);

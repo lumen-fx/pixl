@@ -2,6 +2,7 @@
 //! view, over the document model in `pixl-document`, the tools in
 //! `pixl-paint` and the file formats in `pixl-io`.
 
+pub mod documents;
 pub mod editor;
 pub mod files;
 pub mod home;
@@ -23,6 +24,7 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use lumenui_canvas::{CanvasPlugin, CanvasSet};
 
+pub use documents::{DocId, Documents};
 pub use editor::{Editor, Tool};
 pub use files::recents::Recents;
 pub use home::Home;
@@ -49,14 +51,16 @@ pub fn app(file: Option<PathBuf>) -> App {
         .insert_resource(tools::toolbar::Toolbar::user())
 }
 
-/// `app` (an [`editor`]) starting on the start screen over `recents`, or on
-/// `file` when there is one.
+/// `app` (an [`editor`]) starting with no document open: on the start
+/// screen over `recents`, or opening `file` when there is one.
 pub fn starting(app: App, recents: Recents, file: Option<PathBuf>) -> App {
     let home = match file {
         Some(path) => Home::opening(path),
         None => Home::start(),
     };
-    app.insert_resource(recents).insert_resource(home)
+    app.insert_resource(recents)
+        .insert_resource(home)
+        .insert_resource(Documents::empty())
 }
 
 /// pixl's markup and stylesheets. A debug build reads them from `src/` with
@@ -76,7 +80,7 @@ pub fn ui() -> Source {
 }
 
 /// The editor over another copy of the UI sources, open on a blank
-/// document with no start screen, default settings and a recent list kept
+/// document in one tab with no start screen, default settings and a recent list kept
 /// in memory. A
 /// directory source reads `lumen.toml` beside its `src/`, which is how a
 /// test runs the editor with its own settings.
@@ -125,6 +129,10 @@ pub fn editor(source: Source) -> App {
         .insert_signal("img_progress", "")
         .insert_signal("settings_open", false)
         .insert_resource(Editor::blank())
+        .insert_resource(Documents::default())
+        .insert_signal("discard_title", "Close without saving?")
+        .insert_signal("discard_text", "")
+        .insert_signal("discard_yes", "Close without saving")
         .insert_resource(view::View::default())
         .insert_resource(view::ViewColors::default())
         .insert_resource(view::Preview::default())
@@ -206,12 +214,15 @@ pub fn editor(source: Source) -> App {
                         view::measure_stage,
                         view::input::navigate,
                         files::file_commands,
+                        documents::tab_input,
                         workspace::workspace_input,
                         settings::themes::theme_input,
                         files::exports::export_input,
                         files::new_form,
                     )
                     .chain(),
+                    // A document brought to the front, opened or closed.
+                    documents::apply_tabs,
                     // The Select, Image, Filter and View menus.
                     timed!(
                         menus::collect,
@@ -271,7 +282,7 @@ pub fn editor(source: Source) -> App {
                         menus::palette::show_palette,
                         files::exports::show_exports,
                     ),
-                    timed!(home::track_recents, home::show_home).chain(),
+                    timed!(home::track_recents, home::show_home, documents::show_tabs).chain(),
                     timed!(tools::show_tool, tools::toolbox::show_toolbox).chain(),
                     timed!(tools::stage_cursor),
                     timed!(

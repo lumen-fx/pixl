@@ -1,4 +1,4 @@
-//! Documents on disk: new, open, save, save as and close for `.pixl` files,
+//! Documents on disk: new, open, save and save as for `.pixl` files,
 //! import from PNG, GIF and Aseprite, export to PNG and GIF, the documents
 //! pixl ships, and the autosave recovery copy pixl-document keeps beside a saved
 //! document.
@@ -24,6 +24,7 @@ use pixl_io::gif::{GifOptions, export_gif, import_gif};
 use pixl_io::png::{export_frame_png, import_png};
 use pixl_io::sheet::SheetGrid;
 
+use crate::documents::{Documents, TabAction, edit_document};
 use crate::editor::Editor;
 use crate::files::recents::Recents;
 use crate::files::shipped::Shipped;
@@ -33,16 +34,14 @@ use crate::settings::Settings;
 use crate::settings::keymap::KeyCommands;
 use crate::view::parse_hex;
 
-/// Something that replaces the document, waiting for the user to agree to
-/// lose unsaved changes.
+/// A document to open in a tab of its own, which another dialog asked for:
+/// carried out on the next tick.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Replace {
+pub enum Request {
     /// The New project dialog.
     New,
     /// The Open dialog.
     Open,
-    /// File > Close: back to the start screen with no document.
-    Close,
     /// A document from the start screen's list.
     Recent(PathBuf),
     /// A listed document's recovery copy.
@@ -60,16 +59,21 @@ pub struct Files {
     /// Whether opening a document offers its newer recovery copy; the
     /// files settings turn recovery copies off.
     pub offer_recovery: bool,
-    /// A replacement another dialog asked for, carried out (or put to the
-    /// discard question) on the next tick.
-    pub queued: Option<Replace>,
-    /// A replacement waiting on the discard question.
-    pub confirming: Option<Replace>,
-    /// The document whose newer recovery copy is on offer.
-    pub recovery: Option<PathBuf>,
+    /// A request another dialog made, carried out on the next tick.
+    pub queued: Option<Request>,
     /// The document pixl ships just opened, and its generation, for the
     /// tutorial to start the lesson over it.
     pub shipped: Option<(Shipped, u64)>,
+    /// What belongs to the document in front.
+    pub front: FileDocument,
+}
+
+/// The file state of one document: its recovery copy on offer and when it
+/// was last written. A document keeps it while another one is in front.
+#[derive(Clone, Debug, Default)]
+pub struct FileDocument {
+    /// The document whose newer recovery copy is on offer.
+    pub recovery: Option<PathBuf>,
     /// When the recovery copy was last written, and for which revision.
     last_autosave: Option<(Instant, u64)>,
 }
@@ -79,10 +83,48 @@ impl Default for Files {
         Self {
             offer_recovery: true,
             queued: None,
-            confirming: None,
-            recovery: None,
             shipped: None,
-            last_autosave: None,
+            front: FileDocument::default(),
+        }
+    }
+}
+
+impl FileDocument {
+    /// Writes the recovery copy of `editor`'s document when it has edits
+    /// the copy lacks, as autosave would have on its next turn. A document
+    /// that goes behind another one's tab does this, so its copy holds
+    /// every edit while it waits.
+    pub fn write_now(&mut self, editor: &Editor, settings: &Settings) {
+        if settings.autosave_every().is_none() || !editor.is_modified() {
+            return;
+        }
+        let Some(path) = editor.path.as_ref() else {
+            return;
+        };
+        if self
+            .last_autosave
+            .is_some_and(|(_, revision)| revision == editor.revision)
+        {
+            return;
+        }
+        if native::write_recovery(&editor.doc, path).is_ok() {
+            self.last_autosave = Some((Instant::now(), editor.revision));
+        }
+    }
+}
+
+/// A document read and ready to come to the front in a tab of its own.
+pub struct Opening {
+    pub editor: Editor,
+    /// Its file state: the newer recovery copy on offer, if any.
+    pub file: FileDocument,
+}
+
+impl Opening {
+    fn new(editor: Editor) -> Self {
+        Self {
+            editor,
+            file: FileDocument::default(),
         }
     }
 }
@@ -147,36 +189,43 @@ pub fn read_document(path: &Path) -> std::result::Result<Opened, String> {
     }
 }
 
-/// Opens a document into the editor, offering its recovery copy when one
-/// is newer than the file.
-pub fn open_path(editor: &mut Editor, files: &mut Files, path: &Path) {
-    match read_document(path) {
-        Ok(opened) => {
-            let native = !path.extension().is_some_and(|e| {
-                ["png", "gif", "aseprite", "ase"]
-                    .iter()
-                    .any(|x| e.eq_ignore_ascii_case(x))
-            });
-            // An imported file is a new, unsaved document: saving writes a
-            // .pixl, never over the file it came from.
-            let path_kept = native.then(|| path.to_path_buf());
-            editor.replace(opened.doc, path_kept);
-            if !native {
-                editor.imported_from = Some(path.to_path_buf());
-            }
-            editor.message = (!opened.warnings.is_empty()).then(|| opened.warnings.join("; "));
-            files.recovery = (native && files.offer_recovery)
-                .then(|| native::find_recovery(path))
-                .flatten()
-                .map(|_| path.to_path_buf());
-            files.last_autosave = None;
-        }
-        Err(e) => editor.message = Some(e),
+/// Reads the document at `path` for a tab of its own, with the colors and
+/// tool of `window` (the editor in front). Its newer recovery copy is on
+/// offer when `offer_recovery`.
+pub fn open_path(
+    window: &Editor,
+    offer_recovery: bool,
+    path: &Path,
+) -> std::result::Result<Opening, String> {
+    let opened = read_document(path)?;
+    let native = !path.extension().is_some_and(|e| {
+        ["png", "gif", "aseprite", "ase"]
+            .iter()
+            .any(|x| e.eq_ignore_ascii_case(x))
+    });
+    // An imported file is a new, unsaved document: saving writes a .pixl,
+    // never over the file it came from.
+    let mut editor = Editor::opened(opened.doc, native.then(|| path.to_path_buf()), window);
+    if !native {
+        editor.imported_from = Some(path.to_path_buf());
     }
+    editor.message = (!opened.warnings.is_empty()).then(|| opened.warnings.join("; "));
+    let recovery = (native && offer_recovery)
+        .then(|| native::find_recovery(path))
+        .flatten()
+        .map(|_| path.to_path_buf());
+    Ok(Opening {
+        editor,
+        file: FileDocument {
+            recovery,
+            last_autosave: None,
+        },
+    })
 }
 
-/// Opens the recovery copy of the document at `path` in place of the file:
-/// the document keeps the file's path and reads as modified until saved.
+/// Opens the recovery copy of the document at `path` in place of the
+/// document in `editor`: the document keeps the file's path and reads as
+/// modified until saved.
 pub fn recover_path(editor: &mut Editor, path: &Path) {
     match native::load_file(&native::recovery_path(path)) {
         Ok(loaded) => {
@@ -188,20 +237,22 @@ pub fn recover_path(editor: &mut Editor, path: &Path) {
     }
 }
 
-/// Opens an untitled copy of a document pixl ships: it has no file, so
-/// saving asks where to and autosave never writes it.
-pub fn open_shipped(editor: &mut Editor, files: &mut Files, which: Shipped) {
-    match which.load() {
-        Ok(doc) => {
-            editor.replace(doc, None);
-            editor.name = Some(which.name().to_string());
-            editor.message = None;
-            files.recovery = None;
-            files.last_autosave = None;
-            files.shipped = Some((which, editor.generation));
-        }
-        Err(e) => editor.message = Some(e),
-    }
+/// Reads the recovery copy of the document at `path` for a tab of its own.
+pub fn recover_opening(window: &Editor, path: &Path) -> std::result::Result<Opening, String> {
+    let loaded = native::load_file(&native::recovery_path(path))
+        .map_err(|e| format!("could not recover: {e}"))?;
+    let mut editor = Editor::opened(loaded.document, Some(path.to_path_buf()), window);
+    editor.touch();
+    Ok(Opening::new(editor))
+}
+
+/// An untitled copy of a document pixl ships, for a tab of its own: it has
+/// no file, so saving asks where to and autosave never writes it.
+pub fn open_shipped(window: &Editor, which: Shipped) -> std::result::Result<Opening, String> {
+    let doc = which.load()?;
+    let mut editor = Editor::opened(doc, None, window);
+    editor.name = Some(which.name().to_string());
+    Ok(Opening::new(editor))
 }
 
 /// Saves the document as `.pixl` to `path` and drops its recovery copy.
@@ -337,49 +388,33 @@ impl NewProject {
         })
     }
 
-    /// Replaces the editor's document with this new one.
-    pub fn create(&self, editor: &mut Editor) -> std::result::Result<(), String> {
+    /// The new document, with the colors and tool of `window` (the editor
+    /// in front).
+    pub fn create(&self, window: &Editor) -> std::result::Result<Editor, String> {
         let mut doc =
             Document::new(self.width, self.height, self.mode).map_err(|e| e.to_string())?;
         doc.set_background(self.background);
-        editor.replace(doc, None);
+        let mut editor = Editor::opened(doc, None, window);
         editor.name = Some(self.name.clone());
-        Ok(())
+        Ok(editor)
     }
 }
 
-/// Makes a new document from the fields of the New project dialog.
-fn create_from_fields(editor: &mut Editor, signals: &Signals) {
-    let made = NewProject::from_fields(signals).and_then(|p| p.create(editor));
-    if let Err(e) = made {
-        editor.message = Some(e);
-    }
-}
-
-/// Opens a document from the start screen's list, with the recovery offer
-/// when it has a newer recovery copy.
-fn open_recent(editor: &mut Editor, files: &mut Files, signals: &mut Signals, path: &Path) {
-    open_path(editor, files, path);
-    if files.recovery.is_some() {
-        signals.set("recover_open", true);
-    }
-}
-
-/// Carries out a replacement the user agreed to.
+/// Carries out a request for a document.
 fn start(
-    replace: Replace,
+    request: Request,
     editor: &mut Editor,
     files: &mut Files,
-    home: &mut Home,
+    documents: &mut Documents,
     commands: &mut Commands,
     signals: &mut Signals,
 ) {
-    match replace {
-        Replace::New => {
+    match request {
+        Request::New => {
             signals.set("new_name", "untitled".to_string());
             signals.set("new_open", true);
         }
-        Replace::Open => commands.queue(
+        Request::Open => commands.queue(
             FileDialog::open()
                 .filter(OPENABLE.0, OPENABLE.1)
                 .filter(PIXL.0, PIXL.1)
@@ -388,38 +423,75 @@ fn start(
                 .filter(GIF.0, GIF.1)
                 .then(|world: &mut World, paths| opened(world, paths)),
         ),
-        Replace::Close => {
-            editor.replace(
-                Document::new(64, 64, ColorMode::Rgba).expect("64x64 is a valid size"),
-                None,
-            );
-            files.recovery = None;
-            files.last_autosave = None;
-            home.show(editor, false);
+        Request::Recent(path) => {
+            if let Some(id) = documents.showing(editor, &path) {
+                documents.act(TabAction::Switch(id));
+                return;
+            }
+            match open_path(editor, files.offer_recovery, &path) {
+                Ok(opening) => {
+                    if opening.file.recovery.is_some() {
+                        signals.set("recover_open", true);
+                    }
+                    documents.act(TabAction::Open(Box::new(opening)));
+                }
+                Err(e) => editor.message = Some(e),
+            }
         }
-        Replace::Recent(path) => open_recent(editor, files, signals, &path),
-        Replace::Recover(path) => recover_path(editor, &path),
-        Replace::Sheet(path, grid, ms) => {
-            crate::files::sheets::import_into(editor, &path, &grid, ms)
+        Request::Recover(path) => {
+            if let Some(id) = documents.showing(editor, &path) {
+                // The tab that shows the file takes its recovery copy.
+                documents.act(TabAction::Switch(id));
+                documents.act(TabAction::Recover(path));
+                return;
+            }
+            match recover_opening(editor, &path) {
+                Ok(opening) => documents.act(TabAction::Open(Box::new(opening))),
+                Err(e) => editor.message = Some(e),
+            }
         }
-        Replace::Shipped(which) => open_shipped(editor, files, which),
+        Request::Sheet(path, grid, ms) => {
+            match crate::files::sheets::import(editor, &path, &grid, ms) {
+                Ok(new) => documents.act(TabAction::Open(Box::new(Opening::new(new)))),
+                Err(e) => editor.message = Some(e),
+            }
+        }
+        Request::Shipped(which) => match open_shipped(editor, which) {
+            Ok(opening) => {
+                files.shipped = Some((which, opening.editor.generation));
+                documents.act(TabAction::Open(Box::new(opening)));
+            }
+            Err(e) => editor.message = Some(e),
+        },
     }
 }
 
-/// The Open and Import dialogs' answer.
+/// The Open dialog's answer: the document in a tab of its own, or the tab
+/// that already shows it brought to the front.
 fn opened(world: &mut World, paths: Vec<PathBuf>) {
     let Some(path) = paths.into_iter().next() else {
         return;
     };
-    world.resource_scope(|world, mut files: Mut<Files>| {
+    world.resource_scope(|world, mut documents: Mut<Documents>| {
+        let offer = world.resource::<Files>().offer_recovery;
         let mut editor = world.resource_mut::<Editor>();
-        open_path(&mut editor, &mut files, &path);
+        if let Some(id) = documents.showing(&editor, &path) {
+            documents.act(TabAction::Switch(id));
+            return;
+        }
+        match open_path(&editor, offer, &path) {
+            Ok(opening) => {
+                let recover = opening.file.recovery.is_some();
+                documents.act(TabAction::Open(Box::new(opening)));
+                if recover {
+                    world
+                        .resource_mut::<PropertyStore>()
+                        .set(PropertyKey::global("recover_open"), true.into());
+                }
+            }
+            Err(e) => editor.message = Some(e),
+        }
     });
-    if world.resource::<Files>().recovery.is_some() {
-        world
-            .resource_mut::<PropertyStore>()
-            .set(PropertyKey::global("recover_open"), true.into());
-    }
 }
 
 fn save_as(commands: &mut Commands, editor: &Editor) {
@@ -431,33 +503,39 @@ fn save_as(commands: &mut Commands, editor: &Editor) {
             || "untitled.pixl".to_string(),
             |n| n.to_string_lossy().into_owned(),
         );
+    // The answer saves the document the dialog was opened for, in front
+    // or not.
+    let generation = editor.generation;
     commands.queue(
         FileDialog::save()
             .filter(PIXL.0, PIXL.1)
             .file_name(name)
-            .then(|world: &mut World, paths| {
+            .then(move |world: &mut World, paths| {
                 if let Some(path) = paths.into_iter().next() {
-                    let mut editor = world.resource_mut::<Editor>();
-                    if let Err(e) = save_to(&mut editor, &path) {
-                        editor.message = Some(e);
-                    }
+                    edit_document(world, generation, |editor| {
+                        if let Err(e) = save_to(editor, &path) {
+                            editor.message = Some(e);
+                        }
+                    });
                 }
             }),
     );
 }
 
-fn export(commands: &mut Commands, gif: bool) {
+fn export(commands: &mut Commands, editor: &Editor, gif: bool) {
     let (label, exts) = if gif { GIF } else { PNG };
+    let generation = editor.generation;
     commands.queue(
         FileDialog::save()
             .filter(label, exts)
             .file_name(if gif { "untitled.gif" } else { "untitled.png" })
             .then(move |world: &mut World, paths| {
                 if let Some(path) = paths.into_iter().next() {
-                    let mut editor = world.resource_mut::<Editor>();
-                    if let Err(e) = export_to(&mut editor, &path, gif) {
-                        editor.message = Some(e);
-                    }
+                    edit_document(world, generation, |editor| {
+                        if let Err(e) = export_to(editor, &path, gif) {
+                            editor.message = Some(e);
+                        }
+                    });
                 }
             }),
     );
@@ -507,46 +585,50 @@ const FILE_COMMANDS: &[&str] = &[
 /// document is open.
 fn on_start_screen(id: &str) -> bool {
     matches!(id, "file-new" | "file-open")
-        || ["home-", "recent-", "new-", "discard-", "recover-"]
+        || ["home-", "recent-", "new-", "recover-"]
             .iter()
             .any(|p| id.starts_with(p))
 }
 
 /// The File menu, its shortcuts, the start screen's buttons and list, and
-/// the New, discard and recovery dialogs.
+/// the New and recovery dialogs.
 #[allow(clippy::too_many_arguments)]
 pub fn file_commands(
     mut editor: ResMut<Editor>,
     mut files: ResMut<Files>,
     mut home: ResMut<Home>,
     mut recents: ResMut<Recents>,
+    mut documents: ResMut<Documents>,
     mut commands: Commands,
     mut input: FileInput,
     mut signals: Signals,
 ) {
     let editor = &mut *editor;
+    let documents = &mut *documents;
     if let Some(path) = home.pending.take() {
-        let before = editor.generation;
-        open_recent(editor, &mut files, &mut signals, &path);
-        if editor.generation == before {
+        let before = documents.pending();
+        start(
+            Request::Recent(path),
+            editor,
+            &mut files,
+            documents,
+            &mut commands,
+            &mut signals,
+        );
+        if documents.pending() == before {
             // The file did not open: the start screen says why.
-            home.show(editor, false);
+            home.show(documents.count() > 0);
         }
     }
     if let Some(r) = files.queued.take() {
-        if editor.is_modified() {
-            files.confirming = Some(r);
-            signals.set("discard_open", true);
-        } else {
-            start(
-                r,
-                editor,
-                &mut files,
-                &mut home,
-                &mut commands,
-                &mut signals,
-            );
-        }
+        start(
+            r,
+            editor,
+            &mut files,
+            documents,
+            &mut commands,
+            &mut signals,
+        );
     }
     let chosen = input.chosen();
     for id in chosen {
@@ -558,19 +640,20 @@ pub fn file_commands(
                 .and_then(|k| recents.find(k))
                 .map(|r| r.path.clone())
         };
-        let replace = match id.as_str() {
+        let request = match id.as_str() {
             "menu-file" => {
                 signals.toggle("__menu_open:file-menu");
                 None
             }
-            "file-new" | "home-new" => Some(Replace::New),
-            "file-open" | "home-open" => Some(Replace::Open),
-            "file-close" => Some(Replace::Close),
-            "help-rig-demo" | "home-rig-demo" => Some(Replace::Shipped(Shipped::RigDemo)),
-            "go-home" => {
-                home.show(editor, true);
+            "file-new" | "home-new" => Some(Request::New),
+            "file-open" | "home-open" => Some(Request::Open),
+            "file-close" => {
+                if let Some(front) = documents.front() {
+                    documents.act(TabAction::Close(vec![front]));
+                }
                 None
             }
+            "help-rig-demo" | "home-rig-demo" => Some(Request::Shipped(Shipped::RigDemo)),
             "home-back" => {
                 home.open = false;
                 None
@@ -591,51 +674,35 @@ pub fn file_commands(
                 None
             }
             "file-export-png" => {
-                export(&mut commands, false);
+                export(&mut commands, editor, false);
                 None
             }
             "file-export-gif" => {
-                export(&mut commands, true);
+                export(&mut commands, editor, true);
                 None
             }
             "new-create" => {
                 signals.set("new_open", false);
-                create_from_fields(editor, &signals);
+                match NewProject::from_fields(&signals).and_then(|p| p.create(editor)) {
+                    Ok(new) => documents.act(TabAction::Open(Box::new(Opening::new(new)))),
+                    Err(e) => editor.message = Some(e),
+                }
                 None
             }
             "new-cancel" => {
                 signals.set("new_open", false);
                 None
             }
-            "discard-yes" => {
-                signals.set("discard_open", false);
-                if let Some(r) = files.confirming.take() {
-                    start(
-                        r,
-                        editor,
-                        &mut files,
-                        &mut home,
-                        &mut commands,
-                        &mut signals,
-                    );
-                }
-                None
-            }
-            "discard-no" => {
-                signals.set("discard_open", false);
-                files.confirming = None;
-                None
-            }
             "recover-yes" => {
                 signals.set("recover_open", false);
-                if let Some(path) = files.recovery.take() {
+                if let Some(path) = files.front.recovery.take() {
                     recover_path(editor, &path);
                 }
                 None
             }
             "recover-no" => {
                 signals.set("recover_open", false);
-                if let Some(path) = files.recovery.take() {
+                if let Some(path) = files.front.recovery.take() {
                     let _ = native::discard_recovery(&path);
                 }
                 None
@@ -645,10 +712,10 @@ pub fn file_commands(
                     recents.remove(&path);
                     None
                 } else if let Some(path) = listed("recent-recover-") {
-                    Some(Replace::Recover(path))
+                    Some(Request::Recover(path))
                 } else if let Some(path) = listed("recent-") {
                     if path.exists() {
-                        Some(Replace::Recent(path))
+                        Some(Request::Recent(path))
                     } else {
                         editor.message = Some(format!("{} is missing", path.display()));
                         None
@@ -658,20 +725,15 @@ pub fn file_commands(
                 }
             }
         };
-        if let Some(r) = replace {
-            if editor.is_modified() {
-                files.confirming = Some(r);
-                signals.set("discard_open", true);
-            } else {
-                start(
-                    r,
-                    editor,
-                    &mut files,
-                    &mut home,
-                    &mut commands,
-                    &mut signals,
-                );
-            }
+        if let Some(r) = request {
+            start(
+                r,
+                editor,
+                &mut files,
+                documents,
+                &mut commands,
+                &mut signals,
+            );
         }
     }
 }
@@ -726,9 +788,11 @@ pub fn new_form(
     *shown = Some(now);
 }
 
-/// Writes the recovery copy of a modified document that has a file, as
-/// often as the files settings say, unless they turn recovery copies off.
-/// An untitled document has nowhere beside it to keep one.
+/// Writes the recovery copy of the document in front when it is modified
+/// and has a file, as often as the files settings say, unless they turn
+/// recovery copies off. An untitled document has nowhere beside it to keep
+/// one. A document behind another one's tab wrote its copy as it went
+/// there, and does not change until it comes back.
 pub fn autosave(
     editor: Res<Editor>,
     mut files: ResMut<Files>,
@@ -748,11 +812,11 @@ pub fn autosave(
         return;
     }
     let now = Instant::now();
-    match files.last_autosave {
-        None => files.last_autosave = Some((now, editor.saved_revision)),
+    match files.front.last_autosave {
+        None => files.front.last_autosave = Some((now, editor.saved_revision)),
         Some((at, revision)) if revision != editor.revision && now - at >= every => {
             if native::write_recovery(&editor.doc, path).is_ok() {
-                files.last_autosave = Some((now, editor.revision));
+                files.front.last_autosave = Some((now, editor.revision));
             }
         }
         Some((at, _)) => {

@@ -24,6 +24,19 @@ pub struct PreviewPane {
     drawn: Option<Drawn>,
 }
 
+impl PreviewPane {
+    /// Hands over how the preview shows the document in front.
+    pub fn take_document(&mut self) -> PreviewPane {
+        std::mem::take(self)
+    }
+
+    /// Puts back how the preview showed the document coming to the front.
+    pub fn restore_document(&mut self, mut saved: PreviewPane) {
+        saved.drawn = None;
+        *self = saved;
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct Drawn {
     size: (f32, f32),
