@@ -183,7 +183,12 @@ fn script_error(d: &Diagnostic, path: &Path, source: &str, lib: &Library) -> Scr
     // An error raised in a function of the API points into the library.
     // candela reports one place, so the script's own line is lost there;
     // the message names the call instead.
-    let in_lib = !d.filename.is_empty() && Path::new(&d.filename).starts_with(lib.dir());
+    // candela names an imported file by its canonical path, which differs
+    // from the library folder's own name where the temporary folder is a
+    // link (macOS) or takes a `\\?\` prefix (Windows).
+    let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let in_lib = !d.filename.is_empty()
+        && canonical(Path::new(&d.filename)).starts_with(canonical(lib.dir()));
     let text = if d.filename.is_empty() || Path::new(&d.filename) == path {
         Some(source.to_string())
     } else if in_lib {
