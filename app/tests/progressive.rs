@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use pixl::Editor;
 use pixl::editor::Touched;
 use pixl::view::{ItemSource, Layers};
-use pixl_core::{ColorMode, Document, NewLayer, Placement, Rgba, TILE_SIZE};
+use pixl_document::{ColorMode, Document, NewLayer, Placement, Rgba, TILE_SIZE};
 
 fn painted(side: u32) -> Document {
     let mut doc = Document::new(side, side, ColorMode::Rgba).unwrap();
@@ -132,7 +132,7 @@ fn turning_the_onion_skin_off_mid_draw_waits_for_nothing() {
     layers.sync(&editor, &Touched::All, (0.0, 0.0));
     settle(&mut layers, side);
     // The ghosts of a whole frame go to the workers...
-    layers.onion = Some(pixl_core::OnionSkin::default());
+    layers.onion = Some(pixl_document::OnionSkin::default());
     layers.sync(&editor, &Touched::Layers(Vec::new()), (0.0, 0.0));
     assert!(layers.buffer(&ItemSource::Ghosts).is_some());
     assert!(layers.pending() > 0);

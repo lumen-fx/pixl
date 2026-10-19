@@ -1,0 +1,396 @@
+//! The documents the start screen lists: the files most recently opened or
+//! saved, newest first, each with its size and a thumbnail of its first
+//! frame. The list and the thumbnails live in pixl's folder of the user
+//! data directory, never beside the documents.
+
+use std::path::{Path, PathBuf};
+use std::thread::JoinHandle;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use lumenui::lumen_core::app_paths;
+use lumenui::prelude::*;
+use pixl_document::native::write_atomic;
+use pixl_document::{CompositeOptions, Document, Rgba, composite_frame};
+use pixl_io::png::encode_png_rgba;
+use serde_json::{Value, json};
+
+use crate::files::shipped::Shipped;
+
+/// The id pixl keeps its user data under, whatever directory it runs from.
+pub const APP_ID: &str = "pixl";
+
+/// How many documents the list keeps unless the files settings say
+/// otherwise.
+pub const MAX_RECENTS: usize = 30;
+
+/// The most documents a saved list is read with, whatever the setting.
+const READ_AT_MOST: usize = 200;
+
+/// The longest side of a thumbnail. A larger document is sampled down by a
+/// whole step, so its pixels stay square.
+pub const THUMB_SIDE: u32 = 128;
+
+const LIST_FILE: &str = "recents.json";
+const THUMB_DIR: &str = "thumbs";
+
+/// One listed document.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Recent {
+    pub path: PathBuf,
+    pub width: u32,
+    pub height: u32,
+    /// The thumbnail's file name in the thumbnail folder.
+    pub thumb: Option<String>,
+}
+
+/// When a listed document's thumbnail is redrawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Thumb {
+    /// Always: the document was just saved.
+    Redraw,
+    /// Only when there is none, or the file changed since it was drawn: the
+    /// document was just opened.
+    IfStale,
+}
+
+/// The recent documents, and where they are kept.
+#[derive(Resource, Default)]
+pub struct Recents {
+    /// The folder the list and thumbnails are kept in; `None` keeps them in
+    /// memory only.
+    dir: Option<PathBuf>,
+    pub entries: Vec<Recent>,
+    /// How many documents the list keeps and shows.
+    pub limit: usize,
+    /// Bumped on every change, including a thumbnail that finished drawing.
+    pub revision: u64,
+    /// Thumbnails being drawn.
+    work: Vec<JoinHandle<()>>,
+    /// The shipped documents whose thumbnail drawing has started.
+    shipped_started: Vec<Shipped>,
+}
+
+impl Recents {
+    /// The list kept in the user's data directory for pixl.
+    pub fn user() -> Self {
+        Self::load(app_paths::data_dir_for(APP_ID))
+    }
+
+    /// The list kept in `dir`, read from it when it holds one.
+    pub fn load(dir: impl Into<PathBuf>) -> Self {
+        let dir = dir.into();
+        let entries = std::fs::read(dir.join(LIST_FILE))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .map(|v| parse(&v))
+            .unwrap_or_default();
+        Self {
+            dir: Some(dir),
+            entries,
+            limit: MAX_RECENTS,
+            revision: 1,
+            work: Vec::new(),
+            shipped_started: Vec::new(),
+        }
+    }
+
+    /// A list that is never written anywhere.
+    pub fn in_memory() -> Self {
+        Self {
+            limit: MAX_RECENTS,
+            revision: 1,
+            ..Self::default()
+        }
+    }
+
+    /// The entries the start screen shows: the newest [`Self::limit`].
+    pub fn shown(&self) -> &[Recent] {
+        &self.entries[..self.entries.len().min(self.limit.max(1))]
+    }
+
+    /// The thumbnail file of `entry`, when it has one on disk.
+    pub fn thumb_path(&self, entry: &Recent) -> Option<PathBuf> {
+        let path = self
+            .dir
+            .as_ref()?
+            .join(THUMB_DIR)
+            .join(entry.thumb.as_ref()?);
+        path.is_file().then_some(path)
+    }
+
+    /// The thumbnail file of a document pixl ships, when it is drawn. Its
+    /// name holds a hash of the document, so a changed one gets a new
+    /// picture.
+    pub fn shipped_thumb(&self, which: Shipped) -> Option<PathBuf> {
+        let path = self
+            .dir
+            .as_ref()?
+            .join(THUMB_DIR)
+            .join(shipped_thumb_name(which));
+        path.is_file().then_some(path)
+    }
+
+    /// Draws the thumbnail of a document pixl ships on a worker thread,
+    /// once, when it is not on disk yet, and drops older pictures of it.
+    pub fn draw_shipped_thumb(&mut self, which: Shipped) {
+        let Some(dir) = self.dir.clone() else {
+            return;
+        };
+        if self.shipped_started.contains(&which) || self.shipped_thumb(which).is_some() {
+            return;
+        }
+        self.shipped_started.push(which);
+        let thumbs = dir.join(THUMB_DIR);
+        let name = shipped_thumb_name(which);
+        self.work.push(std::thread::spawn(move || {
+            let Ok(doc) = which.load() else {
+                return;
+            };
+            if write_thumbnail(&doc, &thumbs.join(&name)).is_err() {
+                return;
+            }
+            let prefix = format!("{}-", which.slug());
+            for old in std::fs::read_dir(&thumbs).into_iter().flatten().flatten() {
+                let file = old.file_name().to_string_lossy().into_owned();
+                if file.starts_with(&prefix) && file != name {
+                    let _ = std::fs::remove_file(old.path());
+                }
+            }
+        }));
+    }
+
+    /// The entry with this key (see [`key`]).
+    pub fn find(&self, key: &str) -> Option<&Recent> {
+        self.entries.iter().find(|e| self::key(&e.path) == key)
+    }
+
+    /// Puts `path` at the top of the list with `doc`'s size, and draws its
+    /// thumbnail from `doc` on a worker thread when `thumb` asks for it.
+    pub fn note(&mut self, path: &Path, doc: &Document, thumb: Thumb) {
+        let old = self
+            .entries
+            .iter()
+            .position(|e| e.path == path)
+            .map(|i| self.entries.remove(i));
+        let mut entry = Recent {
+            path: path.to_path_buf(),
+            width: doc.width(),
+            height: doc.height(),
+            thumb: old.as_ref().and_then(|e| e.thumb.clone()),
+        };
+        if let Some(dir) = self.dir.clone() {
+            let current = old.as_ref().and_then(|e| self.thumb_path(e));
+            let stale = match (&current, thumb) {
+                (None, _) | (_, Thumb::Redraw) => true,
+                (Some(t), Thumb::IfStale) => newer(path, t),
+            };
+            if stale {
+                let name = thumb_name(path);
+                let out = dir.join(THUMB_DIR).join(&name);
+                let doc = doc.clone();
+                self.work.push(std::thread::spawn(move || {
+                    if write_thumbnail(&doc, &out).is_ok()
+                        && let Some(old) = current
+                    {
+                        let _ = std::fs::remove_file(old);
+                    }
+                }));
+                entry.thumb = Some(name);
+            }
+        }
+        self.entries.insert(0, entry);
+        for dropped in self
+            .entries
+            .split_off(self.entries.len().min(self.limit.max(1)))
+        {
+            if let Some(t) = self.thumb_path(&dropped) {
+                let _ = std::fs::remove_file(t);
+            }
+        }
+        self.changed();
+    }
+
+    /// Takes `path` off the list, with its thumbnail.
+    pub fn remove(&mut self, path: &Path) {
+        let Some(i) = self.entries.iter().position(|e| e.path == path) else {
+            return;
+        };
+        let entry = self.entries.remove(i);
+        if let Some(t) = self.thumb_path(&entry) {
+            let _ = std::fs::remove_file(t);
+        }
+        self.changed();
+    }
+
+    /// Collects the thumbnails that finished drawing, and says whether any
+    /// did.
+    pub fn collect_thumbnails(&mut self) -> bool {
+        let (done, running): (Vec<_>, Vec<_>) =
+            self.work.drain(..).partition(JoinHandle::is_finished);
+        self.work = running;
+        let any = !done.is_empty();
+        for handle in done {
+            let _ = handle.join();
+        }
+        if any {
+            self.revision += 1;
+        }
+        any
+    }
+
+    /// Whether thumbnails are still being drawn.
+    pub fn drawing(&self) -> bool {
+        !self.work.is_empty()
+    }
+
+    /// Waits for every thumbnail being drawn.
+    pub fn finish_thumbnails(&mut self) {
+        if self.work.is_empty() {
+            return;
+        }
+        for handle in self.work.drain(..) {
+            let _ = handle.join();
+        }
+        self.revision += 1;
+    }
+
+    fn changed(&mut self) {
+        self.revision += 1;
+        let Some(dir) = &self.dir else {
+            return;
+        };
+        let list: Vec<Value> = self
+            .entries
+            .iter()
+            .map(|e| {
+                json!({
+                    "path": e.path.to_string_lossy(),
+                    "width": e.width,
+                    "height": e.height,
+                    "thumb": e.thumb,
+                })
+            })
+            .collect();
+        let doc = json!({ "version": 1, "recent": list });
+        if std::fs::create_dir_all(dir).is_ok() {
+            let bytes = serde_json::to_vec_pretty(&doc).unwrap_or_default();
+            let _ = write_atomic(&dir.join(LIST_FILE), &bytes);
+        }
+    }
+}
+
+/// The entries of a saved list. Entries it cannot read are skipped.
+fn parse(v: &Value) -> Vec<Recent> {
+    let Some(list) = v.get("recent").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|e| {
+            let size = |k: &str| e.get(k)?.as_u64().and_then(|n| u32::try_from(n).ok());
+            Some(Recent {
+                path: PathBuf::from(e.get("path")?.as_str()?),
+                width: size("width")?,
+                height: size("height")?,
+                thumb: e.get("thumb").and_then(Value::as_str).map(str::to_string),
+            })
+        })
+        .take(READ_AT_MOST)
+        .collect()
+}
+
+/// A short stable key for a listed path, for element ids.
+pub fn key(path: &Path) -> String {
+    format!("{:016x}", fnv1a(path.to_string_lossy().as_bytes()))
+}
+
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in bytes {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    h
+}
+
+/// The thumbnail file name of a document pixl ships.
+fn shipped_thumb_name(which: Shipped) -> String {
+    format!("{}-{:016x}.png", which.slug(), fnv1a(which.bytes()))
+}
+
+/// A fresh thumbnail file name for `path`: a new name each time, so a view
+/// that cached the last picture loads the new one.
+fn thumb_name(path: &Path) -> String {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!("{}-{stamp:x}.png", key(path))
+}
+
+/// Whether the file at `path` changed after `than` was written.
+fn newer(path: &Path, than: &Path) -> bool {
+    let time = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    match (time(path), time(than)) {
+        (Some(file), Some(thumb)) => file > thumb,
+        _ => true,
+    }
+}
+
+/// The first frame of `doc`, sampled down to fit [`THUMB_SIDE`], as RGBA
+/// pixels with their width and height.
+pub fn thumbnail(doc: &Document) -> (u32, u32, Vec<Rgba>) {
+    let (w, h) = (doc.width(), doc.height());
+    let full = composite_frame(doc, 0, &CompositeOptions::EXPORT);
+    let step = w.max(h).div_ceil(THUMB_SIDE).max(1);
+    if step == 1 {
+        return (w, h, full);
+    }
+    let (tw, th) = (w.div_ceil(step), h.div_ceil(step));
+    let mut out = Vec::with_capacity((tw * th) as usize);
+    for y in 0..th {
+        for x in 0..tw {
+            out.push(full[((y * step) * w + x * step) as usize]);
+        }
+    }
+    (tw, th, out)
+}
+
+/// Draws `doc`'s thumbnail into the PNG file `out`.
+pub fn write_thumbnail(doc: &Document, out: &Path) -> std::result::Result<(), String> {
+    let (w, h, px) = thumbnail(doc);
+    let png = encode_png_rgba(w, h, &px).map_err(|e| e.to_string())?;
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    write_atomic(out, &png).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pixl_document::ColorMode;
+
+    #[test]
+    fn a_large_document_samples_down_by_a_whole_step() {
+        let doc = Document::new(1000, 300, ColorMode::Rgba).unwrap();
+        let (w, h, px) = thumbnail(&doc);
+        // 1000 / 128 rounds up to a step of 8.
+        assert_eq!((w, h), (125, 38));
+        assert_eq!(px.len(), (w * h) as usize);
+        let small = Document::new(20, 10, ColorMode::Rgba).unwrap();
+        assert_eq!(thumbnail(&small).0, 20);
+    }
+
+    #[test]
+    fn a_saved_list_reads_back_and_skips_what_it_cannot_read() {
+        let v = json!({ "version": 1, "recent": [
+            { "path": "/a/b.pixl", "width": 16, "height": 8, "thumb": "x.png" },
+            { "path": "/c.pixl", "width": "wide" },
+            { "path": "/d.png", "width": 4, "height": 4, "thumb": null },
+        ]});
+        let list = parse(&v);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].path, PathBuf::from("/a/b.pixl"));
+        assert_eq!(list[0].thumb.as_deref(), Some("x.png"));
+        assert_eq!(list[1].thumb, None);
+    }
+}

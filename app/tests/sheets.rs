@@ -7,9 +7,9 @@ pub mod common;
 use std::path::PathBuf;
 
 use common::drive::{Step, drive, editor_over};
-use pixl::sheets::{ExportChoice, Sheets, read_sheet_image, write_sheet};
-use pixl_core::sheet::{SheetLayout, SheetOptions};
-use pixl_core::{ColorMode, Document, Rect, Rgba};
+use pixl::files::sheets::{ExportChoice, Sheets, read_sheet_image, write_sheet};
+use pixl_document::{ColorMode, Document, Rect, Rgba};
+use pixl_io::sheet::{SheetLayout, SheetOptions};
 
 /// Four frames of a 16x16 sprite, each with a bar one pixel longer.
 fn animation() -> Document {
@@ -120,8 +120,9 @@ fn an_import_splits_a_sheet_into_a_new_document() {
     assert_eq!((out.doc.width(), out.doc.height()), (16, 16));
     assert_eq!(out.doc.frame_count(), 4);
     assert!(out.doc.frames().iter().all(|f| f.duration_ms == 80));
-    let flat =
-        |d: &Document, f| pixl_core::composite_frame(d, f, &pixl_core::CompositeOptions::EXPORT);
+    let flat = |d: &Document, f| {
+        pixl_document::composite_frame(d, f, &pixl_document::CompositeOptions::EXPORT)
+    };
     let original = animation();
     for f in 0..4 {
         assert_eq!(flat(&out.doc, f), flat(&original, f), "frame {f}");
@@ -135,7 +136,7 @@ fn an_import_splits_a_sheet_into_a_new_document() {
 
 /// The import dialog with `image` already chosen, as the file dialog
 /// leaves it.
-fn chosen(image: pixl::sheets::SheetImage) -> Sheets {
+fn chosen(image: pixl::files::sheets::SheetImage) -> Sheets {
     let mut sheets = Sheets::default();
     sheets.set_image(image);
     sheets

@@ -4,7 +4,7 @@ pub mod common;
 
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
-use pixl_core::{BlendMode, ColorMode, Document, LayerId, Rgba};
+use pixl_document::{BlendMode, ColorMode, Document, LayerId, Rgba};
 
 fn doc() -> Document {
     Document::new(16, 16, ColorMode::Rgba).unwrap()

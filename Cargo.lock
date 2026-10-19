@@ -299,20 +299,36 @@ version = "0.1.0"
 dependencies = [
  "lumenui",
  "lumenui-canvas",
- "pixl-core",
+ "pixl-document",
+ "pixl-io",
+ "pixl-paint",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "pixl-core"
+name = "pixl-document"
 version = "0.1.0"
 dependencies = [
  "crc32fast",
  "flate2",
+]
+
+[[package]]
+name = "pixl-io"
+version = "0.1.0"
+dependencies = [
  "gif",
+ "pixl-document",
  "png",
  "serde_json",
+]
+
+[[package]]
+name = "pixl-paint"
+version = "0.1.0"
+dependencies = [
+ "pixl-document",
 ]
 
 [[package]]

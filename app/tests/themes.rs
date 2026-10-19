@@ -8,11 +8,11 @@ use std::sync::{Arc, Mutex};
 use common::drive::{Step, drive, editor_over};
 use lumenui::ecs::world::World;
 use lumenui::prelude::*;
-use pixl::store::Store;
-use pixl::themes::{UserTheme, import};
+use pixl::settings::store::Store;
+use pixl::settings::themes::{UserTheme, import};
 use pixl::view::ViewColors;
 use pixl::{Settings, Themes};
-use pixl_core::{ColorMode, Document};
+use pixl_document::{ColorMode, Document};
 
 fn editor() -> App {
     editor_over(Document::new(32, 32, ColorMode::Rgba).unwrap())
@@ -100,8 +100,8 @@ fn the_editor_reads_the_tokens_and_an_edit_reaches_the_preview_and_a_saved_theme
     assert_eq!(
         s.accent_field
             .as_deref()
-            .and_then(pixl::themes::parse_color),
-        Some(pixl_core::Rgba::opaque(255, 0, 128))
+            .and_then(pixl::settings::themes::parse_color),
+        Some(pixl_document::Rgba::opaque(255, 0, 128))
     );
     assert_eq!(s.preview_accent.as_deref(), Some("#ff0080"));
     assert_eq!(s.root_accent.as_deref(), Some("#ff0080"));
@@ -130,8 +130,11 @@ fn the_editor_reads_the_tokens_and_an_edit_reaches_the_preview_and_a_saved_theme
     let kept = Themes::load(Store::at(&dir));
     let pink = kept.get("Pink").expect("the theme was saved");
     assert_eq!(pink.base.class(), "dark");
-    assert_eq!(pink.tokens["accent"], pixl_core::Rgba::opaque(255, 0, 128));
-    assert_eq!(pink.tokens.len(), pixl::themes::TOKENS.len());
+    assert_eq!(
+        pink.tokens["accent"],
+        pixl_document::Rgba::opaque(255, 0, 128)
+    );
+    assert_eq!(pink.tokens.len(), pixl::settings::themes::TOKENS.len());
     let _ = std::fs::remove_dir_all(dir);
 }
 

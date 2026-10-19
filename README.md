@@ -21,13 +21,11 @@ source (see Quick start).
 
 ## Status
 
-Early. `pixl-core` (in `core/`) holds the editor core with no UI: the document
-model, compositing, undo history, raster tools, adjustments and filters,
-palettes and their files, transforms, and PNG and sprite sheet I/O (sheets
-carry Aseprite-compatible JSON). The editor itself is the
-`pixl` program in `app/`, built with the Lumen Rust SDK: one document per
-window, with a menu row, the tool bar, tool options, the canvas, and the
-color, palette, layers, history, timeline and preview panels.
+Early. The editor is the `pixl` program in `app/`, built with the Lumen Rust
+SDK: one document per window, with a menu row, the tool bar, tool options,
+the canvas, and the color, palette, layers, history, timeline and preview
+panels. Under it, crates with no UI hold the document, the tools and the
+file formats (see Layout).
 
 Started without a file, pixl opens on its start screen: the documents opened
 or saved most recently, each with a thumbnail of its first frame, its folder,
@@ -50,8 +48,8 @@ through transparency. View > Pixel grid (Ctrl+Shift+') outlines each pixel
 once the view is zoomed in far enough (800 percent unless the settings say
 otherwise); it is off until you turn it on, and stays as you leave it. Each layer is its own pixel buffer that Lumen's renderer
 composites with the layer's blend mode and opacity, on the GPU when the app
-renders there; what the renderer cannot composite the way `pixl-core` does
-(add and subtract, clipping, masks, groups) is composited by `pixl-core` on the
+renders there; what the renderer cannot composite the way `pixl-document` does
+(add and subtract, clipping, masks, groups) is composited by `pixl-document` on the
 CPU instead, and so are the bottom layers of a document whose layers would
 not fit the layer buffer memory set under Performance in the settings. More
 buffers make strokes on lower layers cheaper and every frame of the renderer
@@ -68,7 +66,7 @@ undo history in memory, an estimate of the GPU memory, the worker threads
 and their queue, and the renderer. Lumen does not tell an app when a frame
 reached the screen, so frame times run from one frame's tick to the next.
 
-The tools run on `pixl-core`, and the tool bar shows each as a pixel icon
+The tools run on `pixl-paint`, and the tool bar shows each as a pixel icon
 whose tooltip names the tool and its key:
 
 - Paint: the pencil (pixel-perfect by default), a soft brush (opacity and
@@ -421,6 +419,19 @@ a PNG into the frames of a new document, by cell size or by a count of
 columns and rows, with an offset and padding, leaving out empty cells if
 asked, and previews the cells over the image.
 
+## Layout
+
+- `crates/document` (`pixl-document`): the document model, with no UI:
+  layers, cels, frames, tags and slices, palettes and their files,
+  selections, undo history, compositing, transforms, reference images,
+  skeleton rigs, and the native `.pixl` format.
+- `crates/paint` (`pixl-paint`): the raster tools and filters: the pencil,
+  brushes and inks, fills, gradients, shapes and text, and the adjustments
+  and effects.
+- `crates/io` (`pixl-io`): other programs' formats: Aseprite files, GIF,
+  PNG, and sprite sheets with Aseprite-compatible JSON.
+- `app` (`pixl`): the editor.
+
 ## Quick start
 
 ```sh
@@ -445,12 +456,12 @@ The rig demo and the tutorials' documents are built by
 `app/assets/demo/` match. After changing one, or the `.pixl` format, write
 them again with `PIXL_WRITE_DEMO=1 cargo test -p pixl --test demo`.
 
-`cargo bench -p pixl-core --bench rig` times posing and rendering a
+`cargo bench -p pixl-document --bench rig` times posing and rendering a
 20-bone character, and `cargo bench -p pixl --bench pose -- gpu` (or `cpu`)
 times a pose drag to the frame that shows it (`side=4096 layers=32` puts the
 character in the view bench's document).
 
-`cargo bench -p pixl-core --bench edits` times the brushes, the filters, the
+`cargo bench -p pixl-paint --bench edits` times the brushes, the filters, the
 gradient, palette and indexed conversion, free transform resampling and
 selection grow and border on a 4096x4096 document of 32 layers.
 

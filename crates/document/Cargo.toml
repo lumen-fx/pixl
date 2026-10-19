@@ -1,0 +1,17 @@
+[package]
+name = "pixl-document"
+description = "The pixl document model: layers, cels, frames, palettes, selections, undo history, compositing, transforms, skeleton rigs and the .pixl file format"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+crc32fast.workspace = true
+flate2.workspace = true
+
+[[bench]]
+name = "rig"
+harness = false

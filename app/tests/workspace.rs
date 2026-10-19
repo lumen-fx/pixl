@@ -10,9 +10,9 @@ use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{ContextMenuEvent, PointerButton};
 use lumenui::prelude::*;
 use pixl::Workspace;
-use pixl::store::Store;
+use pixl::settings::store::Store;
 use pixl::workspace::Dock;
-use pixl_core::{ColorMode, Document};
+use pixl_document::{ColorMode, Document};
 
 /// What the window showed of the docks at the end.
 #[derive(Clone, Debug, Default)]

@@ -5,7 +5,7 @@ pub mod common;
 
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
-use pixl_core::{ColorMode, Document, Rect, Rgba};
+use pixl_document::{ColorMode, Document, Rect, Rgba};
 
 const L: PointerButton = PointerButton::Primary;
 
@@ -335,7 +335,7 @@ fn tiled_mode_rulers_and_the_grid_show() {
     assert_eq!(v.tiled, (true, true));
     common::save(&out.frame, "menus-tiled-rulers-grid");
     // The red block repeats to the right of the document.
-    let s = pixl::tools::screen_of(v, pixl_core::Point::new(32 + 5, 5));
+    let s = pixl::tools::screen_of(v, pixl_document::Point::new(32 + 5, 5));
     assert_eq!(
         out.frame.pixel(s.x as u32, s.y as u32),
         Some([0xff, 0x00, 0x00, 0xff])
@@ -351,7 +351,7 @@ fn the_pixel_grid_is_off_until_the_view_menu_or_its_key_turns_it_on() {
         let v = out.views.last().unwrap();
         assert!(v.zoom >= 8.0, "the grid's zoom, not {}", v.zoom);
         let x = v.stage.0.x + (v.origin.0 + 6.0 * v.zoom) as f32;
-        let y = pixl::tools::screen_of(v, pixl_core::Point::new(6, 6)).y;
+        let y = pixl::tools::screen_of(v, pixl_document::Point::new(6, 6)).y;
         let px = out.frame.pixel(x as u32, y as u32);
         (px, out.settings.canvas.pixel_grid, out)
     };
@@ -411,8 +411,8 @@ fn the_grid_starts_at_the_cell_the_canvas_settings_give() {
     let seen = Arc::clone(&cells);
     let app = editor_over(art()).insert_resource(settings).add_systems(
         TickStage::Systems,
-        (move |aids: Res<pixl::aids::Aids>| seen.lock().unwrap().push(aids.grid_cell))
-            .after(pixl::aids::aids_commands),
+        (move |aids: Res<pixl::view::aids::Aids>| seen.lock().unwrap().push(aids.grid_cell))
+            .after(pixl::view::aids::aids_commands),
     );
     let out = drive(
         app,
@@ -437,7 +437,7 @@ fn the_grid_starts_at_the_cell_the_canvas_settings_give() {
 #[test]
 fn a_slice_opens_its_dialog_and_takes_a_9_slice_center() {
     let mut d = art();
-    d.slices_mut().push(pixl_core::Slice {
+    d.slices_mut().push(pixl_document::Slice {
         name: "button".into(),
         bounds: Rect::new(2, 2, 10, 10),
         center: None,

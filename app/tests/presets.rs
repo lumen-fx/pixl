@@ -9,11 +9,11 @@ use std::sync::{Arc, Mutex};
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
 use lumenui::prelude::*;
-use pixl::presets::{Presets, brush_from_png};
-use pixl::toolbox::Toolbox;
+use pixl::tools::presets::{Presets, brush_from_png};
+use pixl::tools::toolbox::Toolbox;
 use pixl::{Editor, Tool};
-use pixl_core::io::encode_png_rgba;
-use pixl_core::{ColorMode, Document, Rgba};
+use pixl_document::{ColorMode, Document, Rgba};
+use pixl_io::png::encode_png_rgba;
 
 #[derive(Clone, Debug, Default)]
 struct Seen {

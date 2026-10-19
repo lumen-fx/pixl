@@ -14,10 +14,10 @@ use lumenui::lumen_core::input::{
     PointerState,
 };
 use lumenui::prelude::*;
-use pixl::recents::Recent;
+use pixl::files::recents::Recent;
 use pixl::view::View;
 use pixl::{Editor, Home, Recents, Settings, Tool};
-use pixl_core::{Document, LayerId, Point, Rgba, Selection};
+use pixl_document::{Document, LayerId, Point, Rgba, Selection};
 
 /// Where a pointer step lands.
 #[derive(Clone, Copy, Debug)]
@@ -472,8 +472,8 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
             // place is read from: before it, an element laid out on the
             // last tick has no place yet.
             .after(lumenui::lumen_script::runtime::ScriptSet::Dispatch)
-            .before(pixl::keymap::read_keys)
-            .before(pixl::input::navigate)
+            .before(pixl::settings::keymap::read_keys)
+            .before(pixl::view::input::navigate)
             .before(pixl::panels::panel_clicks)
             .before(pixl::files::file_commands),
         )

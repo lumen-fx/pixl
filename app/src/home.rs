@@ -8,12 +8,12 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
-use pixl_core::native;
+use pixl_document::native;
 
 use crate::editor::Editor;
+use crate::files::recents::{Recents, Thumb, key};
+use crate::files::shipped::Shipped;
 use crate::panels::escape;
-use crate::recents::{Recents, Thumb, key};
-use crate::shipped::Shipped;
 
 /// Whether the start screen shows, and what it last showed.
 #[derive(Resource, Debug, Default)]

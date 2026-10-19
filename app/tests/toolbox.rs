@@ -6,7 +6,7 @@ pub mod common;
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use pixl::Tool;
-use pixl_core::{ColorMode, Document, Rgba};
+use pixl_document::{ColorMode, Document, Rgba};
 
 const L: PointerButton = PointerButton::Primary;
 const R: PointerButton = PointerButton::Secondary;
@@ -423,7 +423,10 @@ fn crop_text_measure_and_slices() {
     let slice = then(vec![vec![Step::Key("f", false)], drag((2, 2), (9, 5), L)]);
     let out = drive(editor_over(doc()), slice);
     assert_eq!(out.doc.slices().len(), 1);
-    assert_eq!(out.doc.slices()[0].bounds, pixl_core::Rect::new(2, 2, 8, 4));
+    assert_eq!(
+        out.doc.slices()[0].bounds,
+        pixl_document::Rect::new(2, 2, 8, 4)
+    );
 }
 
 #[test]
@@ -472,10 +475,10 @@ fn played(app: lumenui::prelude::App, steps: Vec<Step>) -> (bool, common::drive:
     let out = Arc::clone(&seen);
     let app = app.add_systems(
         TickStage::Systems,
-        (move |tl: Res<pixl::timeline::Timeline>| {
+        (move |tl: Res<pixl::panels::timeline::Timeline>| {
             *out.lock().unwrap() |= tl.playback.playing;
         })
-        .after(pixl::timeline::timeline_input),
+        .after(pixl::panels::timeline::timeline_input),
     );
     let outcome = drive(app, steps);
     let played = *seen.lock().unwrap();
@@ -486,7 +489,7 @@ fn played(app: lumenui::prelude::App, steps: Vec<Step>) -> (bool, common::drive:
 fn enter_finishes_a_polygon_and_plays_the_animation_otherwise() {
     // Under the Aseprite keys Enter also plays the animation.
     let mut settings = pixl::Settings::default();
-    settings.shortcuts.preset = pixl::keymap::Preset::Aseprite;
+    settings.shortcuts.preset = pixl::settings::keymap::Preset::Aseprite;
     let mut d = doc();
     d.insert_frame(1, 100).unwrap();
     let enter = vec![Step::KeyDown(NamedKey::Enter), Step::KeyUp(NamedKey::Enter)];

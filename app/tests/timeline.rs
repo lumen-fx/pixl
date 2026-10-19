@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
-use pixl_core::{ColorMode, Document, LayerId, LoopDirection, NewLayer, Placement, Rgba, Tag};
+use pixl_document::{ColorMode, Document, LayerId, LoopDirection, NewLayer, Placement, Rgba, Tag};
 
 /// Three layers over six frames: a bouncing square on the top layer, a
 /// ground line linked through every frame, and an empty middle layer.
@@ -202,7 +202,7 @@ fn playback_loops_inside_the_tag() {
 fn the_onion_skin_ghosts_the_next_frame() {
     let pixel = |out: &common::drive::Outcome, x: i32, y: i32| {
         let view = out.views.last().unwrap();
-        let at = pixl::tools::screen_of(view, pixl_core::Point::new(x, y));
+        let at = pixl::tools::screen_of(view, pixl_document::Point::new(x, y));
         out.frame.pixel(at.x as u32, at.y as u32).unwrap()
     };
     let plain = drive(editor_over(animation()), vec![Step::Wait, Step::Wait]);
@@ -247,7 +247,7 @@ fn a_tag_end_drags_to_another_frame() {
 fn the_onion_skin_can_go_over_the_frame() {
     let pixel = |out: &common::drive::Outcome, x: i32, y: i32| {
         let view = out.views.last().unwrap();
-        let at = pixl::tools::screen_of(view, pixl_core::Point::new(x, y));
+        let at = pixl::tools::screen_of(view, pixl_document::Point::new(x, y));
         out.frame.pixel(at.x as u32, at.y as u32).unwrap()
     };
     // On frame 2 the ball is where it is again two frames later, so with

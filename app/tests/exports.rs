@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use common::drive::{Step, drive, editor_over};
 use pixl::Editor;
-use pixl_core::{ColorMode, Document};
+use pixl_document::{ColorMode, Document};
 
 fn folder() -> PathBuf {
     std::env::temp_dir().join(format!("pixl-export-ui-{}", std::process::id()))

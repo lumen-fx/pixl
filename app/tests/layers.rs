@@ -7,8 +7,8 @@ pub mod common;
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
 use lumenui::prelude::dom;
-use pixl::layers::List;
-use pixl_core::{ColorMode, Document, LayerId, LayerKind, Locks, NewLayer, Placement, Rgba};
+use pixl::panels::layers::List;
+use pixl_document::{ColorMode, Document, LayerId, LayerKind, Locks, NewLayer, Placement, Rgba};
 
 /// Layer 1 at the bottom with a red pixel at (1, 1), then layers 2 and 3.
 fn doc() -> Document {
@@ -59,7 +59,7 @@ fn in_list(list: List, mut steps: Vec<Step>) -> Vec<Step> {
     out
 }
 
-fn mask_of(doc: &Document, id: LayerId) -> Option<pixl_core::LayerMask> {
+fn mask_of(doc: &Document, id: LayerId) -> Option<pixl_document::LayerMask> {
     match &doc.layer(id)?.kind {
         LayerKind::Raster { mask, .. } => *mask,
         _ => None,
@@ -273,8 +273,8 @@ fn add_reference(e: &mut pixl::Editor) {
         .unwrap()
         .raster
         .set_raw(2, 2, Rgba::opaque(0, 0, 255).to_u32());
-    std::fs::write(&path, pixl_core::io::export_frame_png(&src, 0, 1).unwrap()).unwrap();
-    let img = pixl::layers::reference_image(&path).unwrap();
+    std::fs::write(&path, pixl_io::png::export_frame_png(&src, 0, 1).unwrap()).unwrap();
+    let img = pixl::panels::layers::reference_image(&path).unwrap();
     e.add_reference(img, "ref".into());
 }
 
@@ -291,14 +291,18 @@ fn a_reference_image_shows_but_does_not_export() {
     // The 4x4 image keeps its size, in the middle of the 16x16 canvas.
     let (img, place) = out.doc.reference(reference.id).unwrap();
     assert_eq!((img.width(), img.height()), (4, 4));
-    assert_eq!(place, pixl_core::ReferencePlace::fitted((4, 4), (16, 16)));
+    assert_eq!(
+        place,
+        pixl_document::ReferencePlace::fitted((4, 4), (16, 16))
+    );
     // Its blue pixel shows on screen, half opaque over the checkerboard.
     let view = out.views.last().unwrap();
     let sx = view.stage.0.x as f64 + view.origin.0 + 8.5 * view.zoom;
     let sy = view.stage.0.y as f64 + view.origin.1 + 8.5 * view.zoom;
     let [r, g, b, _] = out.frame.pixel(sx as u32, sy as u32).unwrap();
     assert!(b > r + 40 && b > g + 40, "blue shows: {r} {g} {b}");
-    let exported = pixl_core::composite_frame(&out.doc, 0, &pixl_core::CompositeOptions::EXPORT);
+    let exported =
+        pixl_document::composite_frame(&out.doc, 0, &pixl_document::CompositeOptions::EXPORT);
     assert!(
         exported.iter().all(|c| c.b == 0),
         "references stay out of exports"
@@ -537,7 +541,7 @@ fn an_alt_click_inside_a_group_keeps_the_group_shown() {
     let out = drive(editor_over(d), in_list(List::Timeline, steps));
     common::save(&out.frame, "layers-solo-group");
     assert_eq!(shown(&out.doc), [4, 1], "the group and layer 1");
-    let px = pixl_core::composite_frame(&out.doc, 0, &pixl_core::CompositeOptions::EXPORT);
+    let px = pixl_document::composite_frame(&out.doc, 0, &pixl_document::CompositeOptions::EXPORT);
     assert_eq!(px[16 + 1], Rgba::opaque(255, 0, 0), "layer 1 shows");
     assert_eq!(out.undo, ["Show only"]);
 }

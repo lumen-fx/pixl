@@ -10,8 +10,8 @@ use common::drive::{At, Step, drive, editor_over};
 use lumenui::glam::Vec2;
 use pixl::Settings;
 use pixl::settings::WheelMode;
-use pixl::settings_ui::PAGES;
-use pixl_core::{ColorMode, Document};
+use pixl::settings::dialog::PAGES;
+use pixl_document::{ColorMode, Document};
 
 fn doc() -> Document {
     Document::new(64, 64, ColorMode::Rgba).unwrap()
@@ -179,7 +179,7 @@ fn the_wheel_over_a_dialog_leaves_the_canvas() {
 #[test]
 fn the_menus_show_the_keys_in_force() {
     let mut settings = Settings::default();
-    settings.shortcuts.preset = pixl::keymap::Preset::Aseprite;
+    settings.shortcuts.preset = pixl::settings::keymap::Preset::Aseprite;
     settings
         .shortcuts
         .overrides
@@ -220,9 +220,9 @@ fn a_new_buffer_budget_plans_the_layers_again() {
     let mut doc = Document::new(2048, 2048, ColorMode::Rgba).unwrap();
     for i in 0..4 {
         doc.add_layer(
-            pixl_core::NewLayer::Raster,
+            pixl_document::NewLayer::Raster,
             format!("l{i}"),
-            pixl_core::Placement::default(),
+            pixl_document::Placement::default(),
         )
         .unwrap();
     }
@@ -261,7 +261,7 @@ fn recovery_written(name: &str, settings: Settings) -> bool {
     let path = dir.join(name);
     let mut editor = pixl::Editor::new(doc());
     pixl::files::save_to(&mut editor, &path).unwrap();
-    let _ = pixl_core::native::discard_recovery(&path);
+    let _ = pixl_document::native::discard_recovery(&path);
     drive(
         editor_over(doc())
             .insert_resource(editor)
@@ -275,7 +275,7 @@ fn recovery_written(name: &str, settings: Settings) -> bool {
             Step::Wait,
         ],
     );
-    pixl_core::native::find_recovery(&path).is_some()
+    pixl_document::native::find_recovery(&path).is_some()
 }
 
 #[test]

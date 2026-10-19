@@ -1,5 +1,5 @@
 //! The canvas view, rendered with no window: the document's pixels on
-//! screen, every blend mode against pixl-core's own compositing, the grid,
+//! screen, every blend mode against pixl-document's own compositing, the grid,
 //! zoom, and reference images drawn at screen resolution.
 
 pub mod common;
@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use lumenui::prelude::*;
 use pixl::view::{ItemSource, View, canvas_blend, plan};
 use pixl::{Editor, Settings, editor};
-use pixl_core::{
+use pixl_document::{
     BlendMode, ColorMode, CompositeOptions, Document, LayerId, NewLayer, Placement, Rect,
     ReferencePlace, Rgba, TiledImage, composite,
 };
@@ -113,7 +113,7 @@ fn bands(modes: &[BlendMode]) -> Document {
 }
 
 /// The largest channel difference per mode between the screen and
-/// pixl-core's composite of the same document.
+/// pixl-document's composite of the same document.
 fn blend_errors(backend: &str, modes: &[BlendMode]) -> Vec<(BlendMode, u8)> {
     let doc = bands(modes);
     let expected = composite(&doc, 0, doc.bounds(), &CompositeOptions::default());
@@ -142,7 +142,7 @@ fn blend_errors(backend: &str, modes: &[BlendMode]) -> Vec<(BlendMode, u8)> {
         .collect()
 }
 
-/// Lumen composites a blend mode in 8 bits per channel, pixl-core in
+/// Lumen composites a blend mode in 8 bits per channel, pixl-document in
 /// floating point; one or two steps apart is rounding.
 const ROUNDING: u8 = 3;
 
@@ -169,18 +169,18 @@ fn check_blends(backend: &str) {
     for (mode, worst) in errors {
         assert!(
             worst <= ROUNDING,
-            "{mode:?} on {backend}: off by {worst} from pixl-core"
+            "{mode:?} on {backend}: off by {worst} from pixl-document"
         );
     }
 }
 
 #[test]
-fn every_blend_mode_matches_pixl_core_on_the_cpu_renderer() {
+fn every_blend_mode_matches_pixl_document_on_the_cpu_renderer() {
     check_blends("cpu");
 }
 
 #[test]
-fn every_blend_mode_matches_pixl_core_on_the_gpu_renderer() {
+fn every_blend_mode_matches_pixl_document_on_the_gpu_renderer() {
     check_blends("gpu");
 }
 

@@ -5,7 +5,7 @@ pub mod common;
 
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
-use pixl_core::{ColorMode, Document};
+use pixl_document::{ColorMode, Document};
 
 #[test]
 fn f3_shows_the_overlay_and_a_stroke_is_timed() {

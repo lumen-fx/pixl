@@ -21,9 +21,9 @@ use std::time::{Duration, Instant};
 use lumenui::lumen_core::render_world::SurfaceCapture;
 use lumenui::prelude::*;
 use pixl::Editor;
-use pixl::timeline::Timeline;
+use pixl::panels::timeline::Timeline;
 use pixl::view::Layers;
-use pixl_core::{BlendMode, ColorMode, Document, LayerId, NewLayer, Placement, Rect, Rgba};
+use pixl_document::{BlendMode, ColorMode, Document, LayerId, NewLayer, Placement, Rect, Rgba};
 
 /// Frame steps timed per document.
 const STEPS: usize = 24;
@@ -338,7 +338,7 @@ fn run(doc: Document, backend: &str) {
                 }
             }
         })
-        .before(pixl::timeline::playback),
+        .before(pixl::panels::timeline::playback),
     )
     .add_plugin(BenchCapture(world_capture))
     .run_headless_rendered(HeadlessOptions {

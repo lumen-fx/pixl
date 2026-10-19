@@ -1,6 +1,6 @@
 //! Skeletons in the editor: the Rig panel, drawing and binding bones (bones
 //! mode), posing them (pose mode), the pose library and rendering poses into
-//! frames, over pixl-core's rigs.
+//! frames, over pixl-document's rigs.
 //!
 //! Bones draw on the `rig` canvas of the stage, between the art and the
 //! overlay, in colors the theme gives the probe elements of `rig.lmn`. They
@@ -17,20 +17,20 @@ use lumenui::lumen_core::input::{EditCommitted, ModifiersState, PointerButton};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, CanvasSet, Context2d, PixelBuffer};
-use pixl_core::history::Transaction;
-use pixl_core::rig::{
+use pixl_document::history::Transaction;
+use pixl_document::rig::{
     Bend, Binding, BoneId, BonePose, Easing, NamedPose, Parts, Pose, PoseKey, PosedLayer,
 };
-use pixl_core::rig::{Region, RenderOptions, Rig, Vec2, mirror_name, normalize_angle};
-use pixl_core::{ColorMode, Document, LayerId, LayerKind, NewLayer, Rgba, Scope};
+use pixl_document::rig::{Region, RenderOptions, Rig, Vec2, mirror_name, normalize_angle};
+use pixl_document::{ColorMode, Document, LayerId, LayerKind, NewLayer, Rgba, Scope};
 
 use crate::editor::{Editor, Tool};
 use crate::home::Home;
 use crate::ids::ElementIds;
-use crate::input::{Navigation, Pointer, PointerInput};
-use crate::keymap::KeyCommands;
 use crate::panels::escape;
+use crate::settings::keymap::KeyCommands;
 use crate::tools::set_if_changed;
+use crate::view::input::{Navigation, Pointer, PointerInput};
 use crate::view::{View, ViewColors, parse_hex};
 
 /// Screen pixels around a joint or a pivot that pick it.
@@ -278,7 +278,7 @@ fn edit_rig<R>(
     editor: &mut Editor,
     skeleton: LayerId,
     label: &str,
-    edit: impl FnOnce(&mut Rig) -> std::result::Result<R, pixl_core::Error>,
+    edit: impl FnOnce(&mut Rig) -> std::result::Result<R, pixl_document::Error>,
 ) -> Option<R> {
     let done = editor
         .history
@@ -437,7 +437,7 @@ pub fn rig_clicks(
         }
         match id.as_str() {
             "rig-new" => {
-                let at = pixl_core::Placement::default();
+                let at = pixl_document::Placement::default();
                 let made =
                     editor
                         .history
@@ -588,7 +588,7 @@ pub fn rig_clicks(
                     edit_rig(editor, skeleton, "Unbind", |rig| {
                         rig.unbind(i)
                             .map(|_| ())
-                            .ok_or(pixl_core::Error::BindingNotFound(i))
+                            .ok_or(pixl_document::Error::BindingNotFound(i))
                     });
                 } else if let Some(k) = other
                     .strip_prefix("rig-pose-del-")
@@ -659,7 +659,7 @@ fn bind(editor: &mut Editor, ui: &RigUi, skeleton: LayerId, selection: bool) {
     let Ok(head) = editor.doc.rig(skeleton).and_then(|r| {
         r.bone(bone)
             .map(|b| b.head)
-            .ok_or(pixl_core::Error::BoneNotFound(bone))
+            .ok_or(pixl_document::Error::BoneNotFound(bone))
     }) else {
         return;
     };
@@ -1559,8 +1559,8 @@ fn draw_thumbs(doc: &Document, skeleton: LayerId, rig: &Rig, canvases: &Query<&C
             continue;
         }
         let posed = parts.render(rig, &saved.pose);
-        let area = posed.iter().fold(pixl_core::Rect::EMPTY, |a, p| {
-            a.union(&pixl_core::Rect::new(
+        let area = posed.iter().fold(pixl_document::Rect::EMPTY, |a, p| {
+            a.union(&pixl_document::Rect::new(
                 p.origin.x,
                 p.origin.y,
                 p.pixels.width as i32,
@@ -1588,8 +1588,12 @@ fn draw_thumbs(doc: &Document, skeleton: LayerId, rig: &Rig, canvases: &Query<&C
                     };
                     let i = ((p.origin.y + y - area.y) as u32 * w
                         + (p.origin.x + x - area.x) as u32) as usize;
-                    rgba[i] =
-                        pixl_core::composite::blend(rgba[i], c, pixl_core::BlendMode::Normal, 255);
+                    rgba[i] = pixl_document::composite::blend(
+                        rgba[i],
+                        c,
+                        pixl_document::BlendMode::Normal,
+                        255,
+                    );
                 }
             }
         }

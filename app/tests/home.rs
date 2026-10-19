@@ -8,11 +8,11 @@ use std::path::{Path, PathBuf};
 
 use common::drive::{Outcome, Step, drive, editor_over};
 use lumenui::App;
+use pixl::files::recents::{Recents, Thumb, key};
 use pixl::files::save_to;
-use pixl::recents::{Recents, Thumb, key};
 use pixl::{Editor, Home};
-use pixl_core::native;
-use pixl_core::{Background, ColorMode, Document, Rgba};
+use pixl_document::native;
+use pixl_document::{Background, ColorMode, Document, Rgba};
 
 /// A fresh folder under the test's scratch directory.
 fn scratch(name: &str) -> PathBuf {
@@ -285,7 +285,7 @@ fn saving_lists_the_document_and_draws_its_thumbnail() {
     assert_eq!(out.recents.len(), 1);
     assert_eq!(out.recents[0].path, path);
     let thumb = out.thumbs[0].clone().expect("a thumbnail");
-    let png = pixl_core::io::decode_png(&std::fs::read(thumb).unwrap()).unwrap();
+    let png = pixl_io::png::decode_png(&std::fs::read(thumb).unwrap()).unwrap();
     assert_eq!(png.size(), (8, 8));
     // A second run reads the same list.
     assert_eq!(Recents::load(root.join("data")).entries, out.recents);
@@ -431,11 +431,14 @@ fn the_rig_demo_thumbnail_is_drawn_once_into_the_data_folder() {
     std::fs::create_dir_all(stale.parent().unwrap()).unwrap();
     std::fs::write(&stale, b"old").unwrap();
     let mut recents = Recents::load(&data);
-    assert_eq!(recents.shipped_thumb(pixl::shipped::Shipped::RigDemo), None);
-    recents.draw_shipped_thumb(pixl::shipped::Shipped::RigDemo);
+    assert_eq!(
+        recents.shipped_thumb(pixl::files::shipped::Shipped::RigDemo),
+        None
+    );
+    recents.draw_shipped_thumb(pixl::files::shipped::Shipped::RigDemo);
     recents.finish_thumbnails();
     let thumb = recents
-        .shipped_thumb(pixl::shipped::Shipped::RigDemo)
+        .shipped_thumb(pixl::files::shipped::Shipped::RigDemo)
         .expect("drawn");
     assert!(thumb.starts_with(data.join("thumbs")));
     assert!(!stale.exists(), "an older picture of the demo is dropped");

@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use common::drive::{Step, drive, editor_over};
 use pixl::Editor;
 use pixl::files::{Files, export_to, open_path, read_document, save_to};
-use pixl_core::native;
-use pixl_core::{ColorMode, Document, Rgba};
+use pixl_document::native;
+use pixl_document::{ColorMode, Document, Rgba};
 
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("files");
@@ -68,7 +68,7 @@ fn a_newer_recovery_copy_is_offered_on_open() {
 
 #[test]
 fn aseprite_and_png_files_import_as_new_documents() {
-    let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../core/tests/data/aseprite");
+    let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../crates/io/tests/data/aseprite");
     let ase = read_document(&data.join("layers_and_tags.aseprite")).unwrap();
     assert!(ase.doc.layers().len() > 1);
     let png = read_document(&data.join("basic-16x16.png")).unwrap();
@@ -93,11 +93,11 @@ fn exports_write_png_and_gif() {
     assert_eq!(&bytes[..6], b"GIF89a");
     // Open reads a GIF back as a new document.
     let back = read_document(&gif.with_extension("gif")).unwrap();
-    let shown = pixl_core::composite(
+    let shown = pixl_document::composite(
         &back.doc,
         0,
-        pixl_core::Rect::pixel(3, 4),
-        &pixl_core::CompositeOptions::EXPORT,
+        pixl_document::Rect::pixel(3, 4),
+        &pixl_document::CompositeOptions::EXPORT,
     );
     assert_eq!(shown, [Rgba::opaque(9, 8, 7)]);
 }

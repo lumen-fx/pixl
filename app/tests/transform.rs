@@ -7,7 +7,7 @@ use common::drive::{At, Step, drive, editor_over};
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use pixl::Tool;
-use pixl_core::{ColorMode, Document, Rect, Rgba};
+use pixl_document::{ColorMode, Document, Rect, Rgba};
 
 const L: PointerButton = PointerButton::Primary;
 const RED: Rgba = Rgba::opaque(255, 0, 0);
@@ -149,8 +149,8 @@ fn dragging_inside_moves_and_an_edge_handle_scales() {
 
 #[test]
 fn a_large_box_previews_tile_by_tile_and_applies_the_same_pixels() {
-    use pixl_core::transform::draw_transformed;
-    use pixl_core::{Affine, Pixels, Point, Resample};
+    use pixl_document::transform::draw_transformed;
+    use pixl_document::{Affine, Pixels, Point, Resample};
     // Large enough that the preview goes to the workers.
     let side = 640;
     let mut d = Document::new(side, side, ColorMode::Rgba).unwrap();
@@ -176,7 +176,7 @@ fn a_large_box_previews_tile_by_tile_and_applies_the_same_pixels() {
             Step::Until(|e| e.history.undo_labels().any(|l| l == "Free transform")),
         ],
     );
-    // The same transform drawn at once by pixl-core.
+    // The same transform drawn at once by pixl-document.
     let t = expected.target(l, 0).unwrap();
     let rect = t.raster.content_bounds();
     let lifted = Pixels::from_raster(t.raster, rect);

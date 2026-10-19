@@ -21,7 +21,7 @@ use lumenui::lumen_core::input::{
 use lumenui::prelude::*;
 use pixl::view::{Layers, View};
 use pixl::{Editor, Tool};
-use pixl_core::{BlendMode, ColorMode, Document, NewLayer, Placement, Rect, Rgba};
+use pixl_document::{BlendMode, ColorMode, Document, NewLayer, Placement, Rect, Rgba};
 
 /// Every layer covered: one flat color per 64x64 tile, four blend modes.
 fn document(side: u32, layers: usize) -> Document {
@@ -289,8 +289,8 @@ fn main() {
                 Phase::Done => {}
             }
         })
-        .before(pixl::keymap::read_keys)
-        .before(pixl::input::navigate),
+        .before(pixl::settings::keymap::read_keys)
+        .before(pixl::view::input::navigate),
     )
     .run_headless_rendered(HeadlessOptions {
         dpr: 1.0,

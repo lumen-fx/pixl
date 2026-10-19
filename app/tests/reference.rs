@@ -7,7 +7,7 @@ pub mod common;
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
 use pixl::Editor;
-use pixl_core::{ColorMode, Document, NewLayer, Placement, ReferencePlace, Rgba, TiledImage};
+use pixl_document::{ColorMode, Document, NewLayer, Placement, ReferencePlace, Rgba, TiledImage};
 
 const L: PointerButton = PointerButton::Primary;
 const RED: Rgba = Rgba::opaque(255, 0, 0);
@@ -86,7 +86,7 @@ fn a_drag_inside_the_box_moves_it_as_one_step() {
             .unwrap()
             .unwrap()
             .content_bounds(),
-        pixl_core::Rect::new(10, 15, 1, 1)
+        pixl_document::Rect::new(10, 15, 1, 1)
     );
 }
 

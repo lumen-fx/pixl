@@ -9,8 +9,8 @@ use std::path::Path;
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
 use pixl::Tool;
-use pixl_core::io::decode_png;
-use pixl_core::{ColorMode, Document};
+use pixl_document::{ColorMode, Document};
+use pixl_io::png::decode_png;
 
 /// The icons decode on worker threads from the first tick, and nothing an
 /// app can see says when they are done (lumen-fx/lumen#541); this pause is

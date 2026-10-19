@@ -131,8 +131,8 @@ fn drive(steps: Vec<Step>) -> Vec<View> {
                 }
             }
         })
-        .before(pixl::keymap::read_keys)
-        .before(pixl::input::navigate),
+        .before(pixl::settings::keymap::read_keys)
+        .before(pixl::view::input::navigate),
     )
     .add_systems(
         TickStage::Systems,
@@ -142,7 +142,7 @@ fn drive(steps: Vec<Step>) -> Vec<View> {
                 out.lock().unwrap().push(view.clone());
             }
         })
-        .after(pixl::input::navigate),
+        .after(pixl::view::input::navigate),
     )
     .run_headless_rendered(HeadlessOptions {
         dpr: 1.0,
@@ -239,9 +239,9 @@ fn holding_w_a_s_d_moves_the_view_that_way() {
 fn the_pan_follows_the_time_held_and_shift_is_faster() {
     // Three 60 ms steps at the base speed; the first tick only starts the
     // clock. Slow ticks only add time, never more than the cap per tick.
-    let cap = pixl::input::KEY_PAN_SPEED * pixl::input::KEY_PAN_MAX_STEP.as_secs_f64();
+    let cap = pixl::view::input::KEY_PAN_SPEED * pixl::view::input::KEY_PAN_MAX_STEP.as_secs_f64();
     let (slow, _) = hold("a", Modifiers::default(), false);
-    assert!(slow >= pixl::input::KEY_PAN_SPEED * 0.17, "{slow}");
+    assert!(slow >= pixl::view::input::KEY_PAN_SPEED * 0.17, "{slow}");
     assert!(slow <= cap * 4.0 + 1.0, "{slow}");
     let (fast, _) = hold("a", Modifiers::default(), true);
     assert!(fast > slow * 2.0, "{fast} against {slow}");

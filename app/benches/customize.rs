@@ -15,7 +15,7 @@ use lumenui::ecs::system::{IntoSystem, System};
 use lumenui::ecs::world::World;
 use lumenui::prelude::*;
 use pixl::Editor;
-use pixl_core::{ColorMode, Document, NewLayer, Placement, Rect, Rgba};
+use pixl_document::{ColorMode, Document, NewLayer, Placement, Rect, Rgba};
 
 fn document(side: u32, layers: usize) -> Document {
     let mut doc = Document::new(side, side, ColorMode::Rgba).unwrap();
@@ -126,7 +126,7 @@ fn main() {
     let times: Times = Arc::default();
     let frames: Arc<Mutex<Vec<Duration>>> = Arc::default();
     let frame_out = Arc::clone(&frames);
-    let mut theme = pixl::themes::UserTheme::parse(
+    let mut theme = pixl::settings::themes::UserTheme::parse(
         "/* pixl theme: Bench */ .pixl { --pixl-base: dark; --accent: #ff0080; }",
         "Bench",
     )
@@ -161,15 +161,39 @@ fn main() {
                 pixl::workspace::show_workspace,
                 times.clone(),
             ),
-            timed("theme_input", pixl::themes::theme_input, times.clone()),
-            timed("show_themes", pixl::themes::show_themes, times.clone()),
-            timed("palette_input", pixl::palette::palette_input, times.clone()),
-            timed("show_palette", pixl::palette::show_palette, times.clone()),
-            timed("export_input", pixl::exports::export_input, times.clone()),
-            timed("show_exports", pixl::exports::show_exports, times.clone()),
+            timed(
+                "theme_input",
+                pixl::settings::themes::theme_input,
+                times.clone(),
+            ),
+            timed(
+                "show_themes",
+                pixl::settings::themes::show_themes,
+                times.clone(),
+            ),
+            timed(
+                "palette_input",
+                pixl::menus::palette::palette_input,
+                times.clone(),
+            ),
+            timed(
+                "show_palette",
+                pixl::menus::palette::show_palette,
+                times.clone(),
+            ),
+            timed(
+                "export_input",
+                pixl::files::exports::export_input,
+                times.clone(),
+            ),
+            timed(
+                "show_exports",
+                pixl::files::exports::show_exports,
+                times.clone(),
+            ),
         )
             .chain()
-            .after(pixl::exports::show_exports),
+            .after(pixl::files::exports::show_exports),
     )
     .add_systems(
         TickStage::Systems,

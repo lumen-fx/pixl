@@ -5,8 +5,8 @@ pub mod common;
 
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::PointerButton;
-use pixl_core::rig::{BonePose, Easing, Pose, PoseKey, Vec2};
-use pixl_core::{Binding, ColorMode, Document, LayerId, LayerKind, NewLayer, Placement, Rgba};
+use pixl_document::rig::{BonePose, Easing, Pose, PoseKey, Vec2};
+use pixl_document::{Binding, ColorMode, Document, LayerId, LayerKind, NewLayer, Placement, Rgba};
 
 const L: PointerButton = PointerButton::Primary;
 
@@ -223,7 +223,7 @@ fn keyed_poses_render_eased_in_betweens() {
 /// One part of [`figure`].
 struct Part {
     name: &'static str,
-    rect: pixl_core::Rect,
+    rect: pixl_document::Rect,
     color: Rgba,
     head: Vec2,
     tail: Vec2,
@@ -232,7 +232,7 @@ struct Part {
 
 /// A 48x48 figure of six parts on frame 0 of two: torso, head, upper arm,
 /// forearm and two legs, each on its own layer and bound to its own bone.
-fn figure() -> (Document, LayerId, Vec<pixl_core::rig::BoneId>) {
+fn figure() -> (Document, LayerId, Vec<pixl_document::rig::BoneId>) {
     let mut d = Document::new(48, 48, ColorMode::Rgba).unwrap();
     d.insert_frame(1, 100).unwrap();
     let first = d.layers()[0].id;
@@ -243,7 +243,7 @@ fn figure() -> (Document, LayerId, Vec<pixl_core::rig::BoneId>) {
     // tail, and the index of the parent bone.
     let part = |name, (x, y, w, h), c, head: (f64, f64), tail: (f64, f64), parent| Part {
         name,
-        rect: pixl_core::Rect::new(x, y, w, h),
+        rect: pixl_document::Rect::new(x, y, w, h),
         color: c,
         head: Vec2::new(head.0, head.1),
         tail: Vec2::new(tail.0, tail.1),

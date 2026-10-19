@@ -1,0 +1,46 @@
+//! The pixl document: layers, cels, frames, tags and slices, the palette,
+//! selections, undo history, compositing, transforms, references, skeletons
+//! and pose-to-frame, and the native `.pixl` file format. It has no UI
+//! dependency; the editor's UI drives it, and `pixl-paint` and `pixl-io`
+//! build on it.
+
+pub mod bytes;
+pub mod color;
+pub mod composite;
+pub mod document;
+pub mod error;
+pub mod geom;
+pub mod history;
+pub mod image;
+pub mod merge;
+pub mod native;
+pub mod palettes;
+pub mod progress;
+pub mod reference;
+pub mod rig;
+pub mod selection;
+pub mod shapes;
+pub mod transform;
+
+pub use color::{Color, ColorMode, Hsl, Palette, Rgba};
+pub use composite::{CompositeOptions, OnionSkin, composite, composite_frame, composite_ghosts};
+pub use document::{
+    Background, BlendMode, Cel, Document, Frame, ImageId, Layer, LayerId, LayerKind, LayerMask,
+    LayerProps, Locks, LoopDirection, NewLayer, PixelAspect, Placement, Slice, Tag, Target,
+};
+pub use error::Error;
+pub use geom::{Point, Rect};
+pub use history::{History, Scope, Transaction};
+pub use image::{Raster, TILE_SIZE, TiledImage};
+pub use palettes::Bayer;
+pub use progress::Progress;
+pub use reference::ReferencePlace;
+pub use rig::{
+    Bend, Binding, Bone, BoneId, BonePose, Easing, NamedPose, Parts, Pose, PoseKey, PosedLayer,
+    Region, RenderOptions, Rig, RigFrame, Rigid, Vec2,
+};
+pub use selection::{SelectOp, Selection};
+pub use transform::{
+    Affine, CanvasTransform, CelTransform, Pixels, Resample, crop, resize_canvas, transform_canvas,
+    transform_cel,
+};

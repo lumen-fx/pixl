@@ -4,8 +4,8 @@
 //! canvases the other tutorials open. `tests/demo.rs` checks the files in
 //! `assets/demo/` are what this builds.
 
-use pixl_core::rig::{BonePose, Easing, NamedPose, Pose, PoseKey, RenderOptions, Vec2};
-use pixl_core::{Binding, ColorMode, Document, LayerId, NewLayer, Placement, Rgba};
+use pixl_document::rig::{BonePose, Easing, NamedPose, Pose, PoseKey, RenderOptions, Vec2};
+use pixl_document::{Binding, ColorMode, Document, LayerId, NewLayer, Placement, Rgba};
 
 /// The canvas side of the rig demo and the rig lesson.
 pub const SIDE: u32 = 48;
@@ -188,7 +188,7 @@ pub fn rig_demo() -> Document {
     let body = rig
         .add_bone("body", None, v(29.5), v(18.5))
         .expect("a bone");
-    let bone = |rig: &mut pixl_core::rig::Rig, name, head, tail| {
+    let bone = |rig: &mut pixl_document::rig::Rig, name, head, tail| {
         rig.add_bone(name, Some(body), v(head), v(tail))
             .expect("a bone")
     };
@@ -346,7 +346,7 @@ pub fn layers_lesson() -> Document {
 
 /// The selections lesson: an apple, a star and a leaf to select.
 pub fn selection_lesson() -> Document {
-    use pixl::lessons::{APPLE, LEAF, STAR};
+    use pixl::tutorial::lessons::{APPLE, LEAF, STAR};
     let (mut d, layer) = canvas("Picture");
     disc(&mut d, layer, APPLE, 4, Rgba::opaque(0xbe, 0x26, 0x33));
     let stem = Rgba::opaque(0x49, 0x3c, 0x2b);

@@ -8,10 +8,10 @@ use std::sync::{Arc, Mutex};
 use common::drive::{Step, drive, editor_over};
 use lumenui::lumen_core::input::NamedKey;
 use lumenui::prelude::*;
-use pixl::recents::Thumb;
+use pixl::files::recents::Thumb;
 use pixl::{Recents, Tool};
-use pixl_core::native::{SaveOptions, save_file};
-use pixl_core::{ColorMode, Document};
+use pixl_document::native::{SaveOptions, save_file};
+use pixl_document::{ColorMode, Document};
 
 fn editor() -> App {
     editor_over(Document::new(32, 32, ColorMode::Rgba).unwrap())

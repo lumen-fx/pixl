@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core", "app"]
+members = ["crates/*", "app"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,6 +9,23 @@ rust-version = "1.97"
 publish = false
 license = "MIT"
 repository = "https://github.com/lumen-fx/pixl"
+
+[workspace.dependencies]
+pixl-document = { path = "crates/document" }
+pixl-io = { path = "crates/io" }
+pixl-paint = { path = "crates/paint" }
+
+crc32fast = "1"
+flate2 = "1"
+gif = { version = "0.14", default-features = false, features = ["std", "raii_no_panic"] }
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+# Both link the prebuilt engine of one Lumen release; move them together, and
+# keep rust-toolchain.toml on the compiler that release names.
+lumenui = "0.0.10"
+lumenui-canvas = "0.0.10"
 
 [profile.test]
 opt-level = 1

@@ -20,8 +20,10 @@ use lumenui::prelude::*;
 use pixl::Editor;
 use pixl::rig::{RigMode, RigUi};
 use pixl::view::{Layers, View};
-use pixl_core::rig::Vec2;
-use pixl_core::{Binding, ColorMode, Document, LayerId, NewLayer, Placement, Point, Rect, Rgba};
+use pixl_document::rig::Vec2;
+use pixl_document::{
+    Binding, ColorMode, Document, LayerId, NewLayer, Placement, Point, Rect, Rgba,
+};
 
 const MOVES: usize = 60;
 /// Frames timed before the drag, with nothing changing: the renderer's own
@@ -281,7 +283,7 @@ fn main() {
             cap.request();
             *n += 1;
         })
-        .before(pixl::input::navigate),
+        .before(pixl::view::input::navigate),
     )
     .add_plugin(BenchCapture(world_capture))
     .run_headless_rendered(HeadlessOptions {

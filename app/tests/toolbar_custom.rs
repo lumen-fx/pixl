@@ -11,9 +11,9 @@ use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{ContextMenuEvent, PointerButton};
 use lumenui::prelude::*;
 use pixl::Tool;
-use pixl::store::Store;
-use pixl::toolbar::Toolbar;
-use pixl_core::{ColorMode, Document};
+use pixl::settings::store::Store;
+use pixl::tools::toolbar::Toolbar;
+use pixl_document::{ColorMode, Document};
 
 #[derive(Clone, Debug, Default)]
 struct Bar {
@@ -121,7 +121,7 @@ fn right_click(app: App, tool: &'static str) -> App {
                 local: None,
             });
         })
-        .before(pixl::toolbar::toolbar_input),
+        .before(pixl::tools::toolbar::toolbar_input),
     )
 }
 

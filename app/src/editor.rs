@@ -5,10 +5,11 @@
 use std::path::PathBuf;
 
 use lumenui::prelude::*;
-use pixl_core::{
-    Brush, ColorMode, Document, History, LayerId, LayerKind, NewLayer, Placement, Rect, Rgba,
-    Scope, Selection, Symmetry,
+use pixl_document::{
+    ColorMode, Document, History, LayerId, LayerKind, NewLayer, Placement, Rect, Rgba, Scope,
+    Selection,
 };
+use pixl_paint::{Brush, Symmetry};
 
 /// The tools of the tool bar, with the key that picks each.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -483,7 +484,7 @@ impl Editor {
         &mut self,
         label: &str,
         id: LayerId,
-        edit: impl FnOnce(&mut pixl_core::LayerProps),
+        edit: impl FnOnce(&mut pixl_document::LayerProps),
     ) {
         let done = self
             .history

@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::home::Home;
 use crate::ids::ElementIds;
-use crate::keymap::KeyCommands;
 use crate::panels::escape;
-use crate::store::Store;
+use crate::settings::keymap::KeyCommands;
+use crate::settings::store::Store;
 
 /// The file the workspace is kept in.
 pub const FILE: &str = "workspace.json";

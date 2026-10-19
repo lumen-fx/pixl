@@ -11,12 +11,14 @@ use common::drive::{At, Step, drive, editor_over};
 use common::script::{Script, drag, trace};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use lumenui::prelude::*;
-use pixl::layers::List;
-use pixl::lessons::{ANIMATION, LAYERS, LEAF, LESSONS, PALETTES, SELECTIONS, STAR, START};
-use pixl::shipped::Shipped;
+use pixl::files::shipped::Shipped;
+use pixl::panels::layers::List;
 use pixl::tutorial::Lesson;
+use pixl::tutorial::lessons::{
+    ANIMATION, LAYERS, LEAF, LESSONS, PALETTES, SELECTIONS, STAR, START,
+};
 use pixl::{Editor, Recents, Workspace};
-use pixl_core::{ColorMode, Document, LayerId, Rgba};
+use pixl_document::{ColorMode, Document, LayerId, Rgba};
 
 fn blank() -> App {
     editor_over(Document::new(16, 16, ColorMode::Rgba).unwrap())

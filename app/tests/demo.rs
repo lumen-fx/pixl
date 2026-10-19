@@ -16,9 +16,9 @@ use common::demo::{
 };
 use common::drive::{Step, drive, editor_over};
 use pixl::Recents;
-use pixl::shipped::Shipped;
-use pixl_core::native::{self, SaveOptions};
-use pixl_core::{ColorMode, CompositeOptions, Document, composite_frame};
+use pixl::files::shipped::Shipped;
+use pixl_document::native::{self, SaveOptions};
+use pixl_document::{ColorMode, CompositeOptions, Document, composite_frame};
 
 #[test]
 fn the_shipped_documents_are_what_the_code_builds() {

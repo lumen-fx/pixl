@@ -9,13 +9,13 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# Both link the prebuilt engine of one Lumen release; move them together, and
-# keep rust-toolchain.toml on the compiler that release names.
-lumenui = "0.0.10"
-lumenui-canvas = "0.0.10"
-pixl-core = { path = "../core" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+lumenui.workspace = true
+lumenui-canvas.workspace = true
+pixl-document.workspace = true
+pixl-io.workspace = true
+pixl-paint.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [[bench]]
 name = "view"

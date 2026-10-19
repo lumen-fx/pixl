@@ -6,7 +6,7 @@ pub mod common;
 use common::drive::{At, Step, drive, editor_over};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use pixl::Tool;
-use pixl_core::{ColorMode, Document, Point, Rgba, Selection};
+use pixl_document::{ColorMode, Document, Point, Rgba, Selection};
 
 const BLACK: Rgba = Rgba::BLACK;
 const L: PointerButton = PointerButton::Primary;
@@ -217,7 +217,7 @@ fn pen_pressure_sizes_the_brush() {
 fn painting_shows_on_screen_on_the_same_tick() {
     let out = drive(editor_over(doc()), drag((3, 3), (3, 3), L));
     let v = out.views.last().unwrap();
-    let at = pixl::tools::screen_of(v, pixl_core::Point::new(3, 3));
+    let at = pixl::tools::screen_of(v, pixl_document::Point::new(3, 3));
     assert_eq!(
         out.frame.pixel(at.x as u32, at.y as u32),
         Some([0, 0, 0, 255])

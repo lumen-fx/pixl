@@ -12,10 +12,10 @@ use common::script::{Script, click, drag, press};
 use lumenui::lumen_core::input::{NamedKey, PointerButton};
 use lumenui::prelude::*;
 use pixl::Workspace;
-use pixl::lessons::RIG;
-use pixl::shipped::Shipped;
-use pixl_core::rig::Rig;
-use pixl_core::{ColorMode, Document, LayerKind};
+use pixl::files::shipped::Shipped;
+use pixl::tutorial::lessons::RIG;
+use pixl_document::rig::Rig;
+use pixl_document::{ColorMode, Document, LayerKind};
 
 const L: PointerButton = PointerButton::Primary;
 
@@ -32,7 +32,11 @@ fn layer_row(name: &str) -> &'static str {
         .find(|(_, l)| l.props.name == name)
         .map(|(_, l)| l.id)
         .expect("the layer");
-    Box::leak(pixl::layers::List::Timeline.row(id).into_boxed_str())
+    Box::leak(
+        pixl::panels::layers::List::Timeline
+            .row(id)
+            .into_boxed_str(),
+    )
 }
 
 fn skeleton_rig(doc: &Document) -> &Rig {
@@ -128,9 +132,10 @@ fn each_step_ticks_off_when_the_editor_shows_it_done() {
     // Turning the body on the last frame carried the head along: its tip
     // moved though the head's own pose did not change.
     let end = rig.pose_at(LESSON_FRAMES - 1).unwrap();
-    let posed =
-        |pose: &pixl_core::rig::Pose, b| rig.posed(pose).into_iter().find(|x| x.id == b).unwrap();
-    let rest = pixl_core::rig::Pose::default();
+    let posed = |pose: &pixl_document::rig::Pose, b| {
+        rig.posed(pose).into_iter().find(|x| x.id == b).unwrap()
+    };
+    let rest = pixl_document::rig::Pose::default();
     assert_eq!(end.get(head).rotation, 0.0);
     assert_ne!(end.get(body).rotation, 0.0);
     assert!((posed(&end, head).tail - posed(&rest, head).tail).length() > 2.0);

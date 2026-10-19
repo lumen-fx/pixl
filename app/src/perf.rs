@@ -24,13 +24,13 @@ use lumenui::lumen_core::render_world::FrameDirty;
 use lumenui::lumen_core::tick::{Tick, WakeDeadline};
 use lumenui::prelude::*;
 use lumenui_canvas::{Canvas, Context2d};
-use pixl_core::{Document, ImageId, LayerKind};
+use pixl_document::{Document, ImageId, LayerKind};
 
 use crate::editor::Editor;
-use crate::keymap::KeyCommands;
 use crate::settings::Settings;
-use crate::toolbox::Toolbox;
+use crate::settings::keymap::KeyCommands;
 use crate::tools::Gesture;
+use crate::tools::toolbox::Toolbox;
 use crate::view::{Layers, parse_hex};
 
 /// How far back the overlay's numbers and graph look.
@@ -574,7 +574,7 @@ pub fn show_perf(
         return;
     }
     perf.shown = Some(now);
-    let renderer = renderer.get_or_insert_with(crate::settings_ui::renderer_text);
+    let renderer = renderer.get_or_insert_with(crate::settings::dialog::renderer_text);
     for (i, line) in overlay_lines(&perf, &layers, renderer, now)
         .into_iter()
         .enumerate()
@@ -610,7 +610,7 @@ fn draw_graph(perf: &Perf, w: f64, h: f64) {
     ctx.clear();
     let budget = 1000.0 / 60.0;
     let top = 3.0 * budget;
-    let color = |c: pixl_core::Rgba| {
+    let color = |c: pixl_document::Rgba| {
         lumenui_canvas::Rgba::new(
             f64::from(c.r) / 255.0,
             f64::from(c.g) / 255.0,
@@ -691,13 +691,13 @@ mod tests {
 
     #[test]
     fn document_memory_counts_each_image_once() {
-        let mut doc = Document::new(128, 64, pixl_core::ColorMode::Rgba).unwrap();
+        let mut doc = Document::new(128, 64, pixl_document::ColorMode::Rgba).unwrap();
         assert_eq!(document_bytes(&doc), 0);
         let l = doc.layers()[0].id;
         let t = doc.target(l, 0).unwrap();
         t.raster.fill_rect_raw(
-            &pixl_core::Rect::new(0, 0, 1, 1),
-            pixl_core::Rgba::BLACK.to_u32(),
+            &pixl_document::Rect::new(0, 0, 1, 1),
+            pixl_document::Rgba::BLACK.to_u32(),
         );
         let one = document_bytes(&doc);
         assert!(one >= 64 * 64 * 4, "{one}");

@@ -1,43 +1,17 @@
 //! The pixl editor: the start screen, the window, its panels and the canvas
-//! view, over the document model in `pixl-core`.
+//! view, over the document model in `pixl-document`, the tools in
+//! `pixl-paint` and the file formats in `pixl-io`.
 
-pub mod adjust;
-pub mod aids;
 pub mod editor;
-pub mod exports;
 pub mod files;
 pub mod home;
 pub mod ids;
-pub mod image_menu;
-pub mod input;
-pub mod jobs;
-pub mod keymap;
-pub mod layers;
-pub mod lessons;
 pub mod menus;
-pub mod palette;
 pub mod panels;
 pub mod perf;
-pub mod presets;
-pub mod preview;
-pub mod progressive;
-pub mod recents;
-pub mod reference;
-pub mod refview;
 pub mod rig;
-pub mod select;
 pub mod settings;
-pub mod settings_ui;
-pub mod sheets;
-pub mod shipped;
-pub mod slices;
-pub mod store;
-pub mod themes;
-pub mod timeline;
-pub mod toolbar;
-pub mod toolbox;
 pub mod tools;
-pub mod transform_tool;
 pub mod tutorial;
 pub mod view;
 pub mod workspace;
@@ -50,10 +24,10 @@ use lumenui::prelude::*;
 use lumenui_canvas::{CanvasPlugin, CanvasSet};
 
 pub use editor::{Editor, Tool};
+pub use files::recents::Recents;
 pub use home::Home;
-pub use recents::Recents;
+pub use settings::themes::Themes;
 pub use settings::{Look, Settings, SettingsStore};
-pub use themes::Themes;
 pub use workspace::Workspace;
 
 /// The largest document side the view shows: one canvas buffer per layer,
@@ -70,9 +44,9 @@ pub fn app(file: Option<PathBuf>) -> App {
         .insert_resource(store)
         .insert_resource(Workspace::user())
         .insert_resource(Themes::user())
-        .insert_resource(exports::Exports::user())
-        .insert_resource(presets::Presets::user())
-        .insert_resource(toolbar::Toolbar::user())
+        .insert_resource(files::exports::Exports::user())
+        .insert_resource(tools::presets::Presets::user())
+        .insert_resource(tools::toolbar::Toolbar::user())
 }
 
 /// `app` (an [`editor`]) starting on the start screen over `recents`, or on
@@ -115,12 +89,12 @@ pub fn editor(source: Source) -> App {
         .insert_resource(Look::default())
         .insert_resource(Settings::default())
         .insert_resource(SettingsStore::default())
-        .insert_resource(keymap::Keymap::default())
-        .insert_resource(keymap::KeyCommands::default())
-        .insert_resource(settings_ui::SettingsDialog::default())
+        .insert_resource(settings::keymap::Keymap::default())
+        .insert_resource(settings::keymap::KeyCommands::default())
+        .insert_resource(settings::dialog::SettingsDialog::default())
         .insert_resource(perf::Perf::default())
         .insert_resource(perf::SystemTimes::default())
-        .insert_resource(sheets::Sheets::default())
+        .insert_resource(files::sheets::Sheets::default())
         .insert_signal("sheet_export_open", false)
         .insert_signal("sheet_import_open", false)
         .insert_signal("sx_layout", "Horizontal strip")
@@ -156,7 +130,7 @@ pub fn editor(source: Source) -> App {
         .insert_resource(view::Preview::default())
         .insert_resource(view::Drawn::default())
         .insert_resource(view::Layers::default())
-        .insert_resource(input::Navigation::default())
+        .insert_resource(view::input::Navigation::default())
         .insert_resource(Home::default())
         .insert_resource(Recents::in_memory())
         .insert_signal("new_name", "untitled")
@@ -169,13 +143,13 @@ pub fn editor(source: Source) -> App {
         .insert_signal("home_filter", "")
         .insert_signal("home_can_return", false)
         .insert_resource(tools::Gesture::default())
-        .insert_resource(toolbox::Toolbox::default())
+        .insert_resource(tools::toolbox::Toolbox::default())
         .insert_resource(menus::Chosen::default())
-        .insert_resource(select::Selections::default())
-        .insert_resource(image_menu::ImageMenu::default())
-        .insert_resource(adjust::Adjust::default())
-        .insert_resource(aids::Aids::default())
-        .insert_resource(transform_tool::FreeTransform::default())
+        .insert_resource(menus::select::Selections::default())
+        .insert_resource(menus::image::ImageMenu::default())
+        .insert_resource(menus::adjust::Adjust::default())
+        .insert_resource(view::aids::Aids::default())
+        .insert_resource(tools::transform::FreeTransform::default())
         .insert_resource(panels::Panels::default())
         .insert_resource(files::Files::default())
         .insert_resource(Workspace::in_memory())
@@ -186,19 +160,19 @@ pub fn editor(source: Source) -> App {
         .insert_signal("themes_open", false)
         .insert_signal("th_name", "")
         .insert_signal("th_message", "")
-        .insert_resource(palette::Palette::default())
-        .insert_resource(exports::Exports::in_memory())
+        .insert_resource(menus::palette::Palette::default())
+        .insert_resource(files::exports::Exports::in_memory())
         .insert_signal("ex_open", false)
         .insert_signal("ex_is_sheet", false)
         .insert_signal("ex_is_tag", false)
-        .insert_signal("ex_hint", exports::PATH_HINT)
+        .insert_signal("ex_hint", files::exports::PATH_HINT)
         .insert_signal("cp_open", false)
         .insert_signal("cp_query", "")
-        .insert_resource(timeline::Timeline::default())
-        .insert_resource(timeline::LayerTree::default())
-        .insert_resource(preview::PreviewPane::default())
-        .insert_resource(layers::LayerPanel::default())
-        .insert_resource(reference::ReferenceBox::default())
+        .insert_resource(panels::timeline::Timeline::default())
+        .insert_resource(panels::timeline::LayerTree::default())
+        .insert_resource(panels::preview::PreviewPane::default())
+        .insert_resource(panels::layers::LayerPanel::default())
+        .insert_resource(tools::reference::ReferenceBox::default())
         .insert_signal("lp_open", false)
         .insert_signal("lp_has_mask", false)
         .insert_signal("lp_is_reference", false)
@@ -219,52 +193,52 @@ pub fn editor(source: Source) -> App {
                 (
                     timed!(
                         perf::tick_begin,
-                        keymap::read_keys,
-                        palette::palette_input,
-                        settings_ui::settings_commands,
-                        settings_ui::keys_page,
-                        settings_ui::settings_form,
+                        settings::keymap::read_keys,
+                        menus::palette::palette_input,
+                        settings::dialog::settings_commands,
+                        settings::dialog::keys_page,
+                        settings::dialog::settings_form,
                         settings::look_switches,
                         settings::show_look,
-                        sheets::sheet_commands,
+                        files::sheets::sheet_commands,
                         view::read_view_colors,
                         view::measure_stage,
-                        input::navigate,
+                        view::input::navigate,
                         files::file_commands,
                         workspace::workspace_input,
-                        themes::theme_input,
-                        exports::export_input,
+                        settings::themes::theme_input,
+                        files::exports::export_input,
                         files::new_form,
                     )
                     .chain(),
                     // The Select, Image, Filter and View menus.
                     timed!(
                         menus::collect,
-                        select::select_commands,
-                        image_menu::image_commands,
-                        adjust::filter_commands,
-                        aids::read_aid_colors,
-                        aids::follow_grid_setting,
-                        aids::aids_commands,
-                        aids::aids_input,
+                        menus::select::select_commands,
+                        menus::image::image_commands,
+                        menus::adjust::filter_commands,
+                        view::aids::read_aid_colors,
+                        view::aids::follow_grid_setting,
+                        view::aids::aids_commands,
+                        view::aids::aids_input,
                     )
                     .chain(),
                     // then the panels and the tools.
                     timed!(
-                        layers::layer_input,
+                        panels::layers::layer_input,
                         panels::panel_clicks,
                         panels::history_keys,
                         panels::layer_controls,
                         panels::color_controls,
-                        timeline::timeline_input,
-                        preview::preview_controls,
+                        panels::timeline::timeline_input,
+                        panels::preview::preview_controls,
                         tools::pick_tool,
                         tools::tool_options,
                         tools::use_tools,
-                        toolbox::toolbox_options,
-                        toolbox::use_toolbox,
-                        transform_tool::use_transform,
-                        reference::place_reference,
+                        tools::toolbox::toolbox_options,
+                        tools::toolbox::use_toolbox,
+                        tools::transform::use_transform,
+                        tools::reference::place_reference,
                         perf::note_stroke,
                     )
                     .chain(),
@@ -273,37 +247,37 @@ pub fn editor(source: Source) -> App {
                 // Then what the window shows of it.
                 (
                     timed!(
-                        timeline::playback,
-                        timeline::onion_to_view,
+                        panels::timeline::playback,
+                        panels::timeline::onion_to_view,
                         perf::composite_begin,
                         view::sync_layers,
                         view::draw_stage,
                         perf::composite_end,
-                        aids::draw_rulers,
-                        timeline::show_timeline,
-                        preview::draw_preview,
+                        view::aids::draw_rulers,
+                        panels::timeline::show_timeline,
+                        panels::preview::draw_preview,
                         tools::track_pointer,
                         panels::show_panels,
-                        layers::show_layers,
+                        panels::layers::show_layers,
                         files::autosave,
                         files::show_message,
                     )
                     .chain(),
                     timed!(
                         workspace::show_workspace,
-                        themes::show_themes,
-                        palette::show_palette,
-                        exports::show_exports,
+                        settings::themes::show_themes,
+                        menus::palette::show_palette,
+                        files::exports::show_exports,
                     ),
                     timed!(home::track_recents, home::show_home).chain(),
-                    timed!(tools::show_tool, toolbox::show_toolbox).chain(),
+                    timed!(tools::show_tool, tools::toolbox::show_toolbox).chain(),
                     timed!(tools::stage_cursor),
                     timed!(
                         settings::save_settings,
-                        settings_ui::pressure_preview,
-                        settings_ui::menu_labels,
+                        settings::dialog::pressure_preview,
+                        settings::dialog::menu_labels,
                         perf::show_perf,
-                        sheets::sheet_forms,
+                        files::sheets::sheet_forms,
                     )
                     .chain(),
                 )
@@ -325,8 +299,8 @@ pub fn editor(source: Source) -> App {
         );
     let app = rig::install(app);
     let app = tutorial::install(app);
-    let app = presets::install(app, presets::Presets::in_memory());
-    toolbar::install(app, toolbar::Toolbar::in_memory())
+    let app = tools::presets::install(app, tools::presets::Presets::in_memory());
+    tools::toolbar::install(app, tools::toolbar::Toolbar::in_memory())
 }
 
 /// Puts `class` on `node` or takes it off. A class edit restyles the node

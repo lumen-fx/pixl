@@ -36,7 +36,7 @@ use lumenui::prelude::*;
 use pixl::Editor;
 use pixl::perf::SystemTimes;
 use pixl::view::{Layers, View};
-use pixl_core::{
+use pixl_document::{
     BlendMode, ColorMode, Document, NewLayer, Placement, Rect, ReferencePlace, Rgba, TiledImage,
 };
 
@@ -543,14 +543,14 @@ fn main() {
                 }
                 Phase::Export => {
                     let t = Instant::now();
-                    let png = pixl_core::io::export_frame_png(&editor.doc, 0, 1)
+                    let png = pixl_io::png::export_frame_png(&editor.doc, 0, 1)
                         .expect("the frame exports");
                     results.export = Some((t.elapsed(), png.len()));
                     let t = Instant::now();
-                    let sheet = pixl_core::sheet::sprite_sheet(
+                    let sheet = pixl_io::sheet::sprite_sheet(
                         &editor.doc,
-                        &pixl_core::sheet::SheetOptions {
-                            layout: pixl_core::sheet::SheetLayout::Packed,
+                        &pixl_io::sheet::SheetOptions {
+                            layout: pixl_io::sheet::SheetLayout::Packed,
                             trim: true,
                             ..Default::default()
                         },
@@ -563,8 +563,8 @@ fn main() {
                 Phase::Done => {}
             }
         })
-        .before(pixl::keymap::read_keys)
-        .before(pixl::input::navigate),
+        .before(pixl::settings::keymap::read_keys)
+        .before(pixl::view::input::navigate),
     )
     .add_plugin(BenchCapture(world_capture))
     .run_headless_rendered(HeadlessOptions {
