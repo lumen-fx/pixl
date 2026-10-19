@@ -528,11 +528,9 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                    mut tick: Local<usize>| {
                 *tick += 1;
                 // The headless run ends by closing the window, which is not
-                // part of the script: what the editor ended with is what it
-                // showed before.
-                if closing.read().any(|c| !c.vetoed) {
-                    return;
-                }
+                // part of the script: the question that asks over unsaved
+                // edits is left out of what the editor ended with.
+                let closing = closing.read().any(|c| !c.vetoed);
                 // Thumbnails draw on worker threads; the harness waits for
                 // them so what it reports is settled.
                 recents.finish_thumbnails();
@@ -552,6 +550,16 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         outlined,
                     });
                 }
+                let asking = if closing {
+                    end_out
+                        .lock()
+                        .unwrap()
+                        .as_ref()
+                        .and_then(|e| e.asking.clone())
+                } else {
+                    (signals.get::<bool>("discard_open") == Some(true))
+                        .then(|| signals.get::<String>("discard_text").unwrap_or_default())
+                };
                 *end_out.lock().unwrap() = Some(Snapshot {
                     doc: editor.doc.clone(),
                     fg: editor.fg,
@@ -582,8 +590,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     front: docs
                         .front()
                         .and_then(|f| docs.ids().iter().position(|i| *i == f)),
-                    asking: (signals.get::<bool>("discard_open") == Some(true))
-                        .then(|| signals.get::<String>("discard_text").unwrap_or_default()),
+                    asking,
                     behind_bytes: docs.behind_bytes(),
                     tiles_written: layers.tiles_written,
                 });
