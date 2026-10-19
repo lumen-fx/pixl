@@ -1,0 +1,30 @@
+/* The Dynamics popup of the brush tools' options. */
+
+.dynamics-popup {
+  display: none;
+  position: absolute;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  bg: var(--surface-2);
+  border: 1px solid var(--edge);
+  radius: var(--radius);
+  shadow: 0 6 16 #00000073;
+}
+.dynamics-popup.open { display: flex; }
+.dyn-head { align: center; gap: var(--space-3); }
+.dyn-row { align: center; gap: var(--space-2); }
+.dyn-label { width: 56; text-color: var(--text-dim); }
+.dyn-inputs { gap: var(--space-4); }
+.dyn-input { gap: var(--space-1); }
+.dyn-curve {
+  width: 200;
+  height: 64;
+  bg: var(--surface-0);
+  border: 1px solid var(--edge);
+}
+.dyn-hint { text-color: var(--text-faint); font-size: var(--font-size-small); }
+
+/* The colors the curves draw with. */
+#probe-curve { bg: var(--accent); }
+#probe-curve-grid { bg: var(--edge-soft); }

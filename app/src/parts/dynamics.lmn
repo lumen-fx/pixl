@@ -1,0 +1,96 @@
+<!-- The Dynamics popup of the brush tools' options: which part of the
+     brush follows pen pressure or the pointer's speed, and how each input
+     responds. It opens under its button in the tool options. -->
+<column id="dynamics-popup" class="dynamics-popup">
+  <row class="dyn-head">
+    <label class="dialog-title" bind-text="dyn_title" text="Dynamics"/>
+    <spacer/>
+    <button id="dyn-close" class="flat small" text="Done"/>
+  </row>
+  <row class="dyn-row">
+    <label class="dyn-label" text="Size"/>
+    <dropdown id="dyn-size" class="option-choice" bind-value="dyn_size">
+      <option value="Off"/>
+      <option value="Pressure"/>
+      <option value="Velocity"/>
+    </dropdown>
+    <input id="dyn-size-min" class="number-field" type="number" min="0" max="400" step="5" bind-text="dyn_size_min"/>
+    <label class="option-label" text="to"/>
+    <input id="dyn-size-max" class="number-field" type="number" min="0" max="400" step="5" bind-text="dyn_size_max"/>
+    <label class="option-label" text="% of the size"/>
+  </row>
+  <if signal="dyn_show_angle" mode="hide">
+    <row class="dyn-row">
+      <label class="dyn-label" text="Angle"/>
+      <dropdown id="dyn-angle" class="option-choice" bind-value="dyn_angle">
+        <option value="Off"/>
+        <option value="Pressure"/>
+        <option value="Velocity"/>
+      </dropdown>
+      <input id="dyn-angle-min" class="number-field" type="number" min="-360" max="360" step="5" bind-text="dyn_angle_min"/>
+      <label class="option-label" text="to"/>
+      <input id="dyn-angle-max" class="number-field" type="number" min="-360" max="360" step="5" bind-text="dyn_angle_max"/>
+      <label class="option-label" text="degrees"/>
+    </row>
+  </if>
+  <if signal="dyn_show_color" mode="hide">
+    <row class="dyn-row">
+      <label class="dyn-label" text="Color"/>
+      <dropdown id="dyn-color" class="option-choice" bind-value="dyn_color">
+        <option value="Off"/>
+        <option value="Pressure"/>
+        <option value="Velocity"/>
+      </dropdown>
+      <dropdown id="dyn-dither" class="option-choice" bind-value="dyn_dither">
+        <option value="Blend"/>
+        <option value="Bayer 2x2"/>
+        <option value="Bayer 4x4"/>
+        <option value="Bayer 8x8"/>
+        <option value="Blue noise"/>
+        <option value="Pattern"/>
+      </dropdown>
+      <label class="option-label" text="background to foreground"/>
+    </row>
+  </if>
+  <row class="dyn-inputs">
+    <column class="dyn-input">
+      <label class="settings-section" text="Pressure"/>
+      <row class="dyn-row">
+        <label class="dyn-label" text="Curve"/>
+        <slider id="dyn-p-curve" class="option-slider short" min="0.2" max="5" step="0.1" value="1" bind-value="dyn_p_curve"/>
+        <label class="option-value" bind-text="dyn_p_curve_text" text="1.0"/>
+      </row>
+      <row class="dyn-row">
+        <label class="dyn-label" text="From"/>
+        <slider id="dyn-p-min" class="option-slider short" min="0" max="100" step="1" value="0" bind-value="dyn_p_min"/>
+        <label class="option-value" bind-text="dyn_p_min_text" text="0%"/>
+      </row>
+      <row class="dyn-row">
+        <label class="dyn-label" text="Full at"/>
+        <slider id="dyn-p-max" class="option-slider short" min="0" max="100" step="1" value="100" bind-value="dyn_p_max"/>
+        <label class="option-value" bind-text="dyn_p_max_text" text="100%"/>
+      </row>
+      <canvas id="dyn-pressure-curve" class="dyn-curve"/>
+    </column>
+    <column class="dyn-input">
+      <label class="settings-section" text="Velocity"/>
+      <row class="dyn-row">
+        <label class="dyn-label" text="Curve"/>
+        <slider id="dyn-v-curve" class="option-slider short" min="0.2" max="5" step="0.1" value="1" bind-value="dyn_v_curve"/>
+        <label class="option-value" bind-text="dyn_v_curve_text" text="1.0"/>
+      </row>
+      <row class="dyn-row">
+        <label class="dyn-label" text="From"/>
+        <slider id="dyn-v-min" class="option-slider short" min="0" max="100" step="1" value="0" bind-value="dyn_v_min"/>
+        <label class="option-value" bind-text="dyn_v_min_text" text="0%"/>
+      </row>
+      <row class="dyn-row">
+        <label class="dyn-label" text="Full at"/>
+        <slider id="dyn-v-max" class="option-slider short" min="0" max="100" step="1" value="100" bind-value="dyn_v_max"/>
+        <label class="option-value" bind-text="dyn_v_max_text" text="100%"/>
+      </row>
+      <canvas id="dyn-velocity-curve" class="dyn-curve"/>
+    </column>
+  </row>
+  <label class="dyn-hint" text="A mouse presses at full pressure. Full velocity is a fast flick across the screen."/>
+</column>

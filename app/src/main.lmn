@@ -57,8 +57,8 @@
     <if signal="show_pixel_perfect" mode="hide">
       <checkbox id="opt-pixel-perfect" label="Pixel perfect" checked="true" bind-checked="opt_pixel_perfect"/>
     </if>
-    <if signal="show_pressure" mode="hide">
-      <checkbox id="opt-pressure" label="Pressure size" checked="true" bind-checked="opt_pressure"/>
+    <if signal="show_dynamics" mode="hide">
+      <tooltip text="What pen pressure and the pointer's speed do to the brush"><button id="opt-dynamics" class="flat small" text="Dynamics"/></tooltip>
     </if>
     <if signal="show_filled" mode="hide">
       <checkbox id="opt-filled" label="Filled" bind-checked="opt_filled"/>
@@ -196,6 +196,7 @@
   <include src="parts/layer-menus.lmn"/>
   <include src="parts/presets.lmn"/>
   <include src="parts/toolbar-custom.lmn"/>
+  <include src="parts/dynamics.lmn"/>
 
   <dialog open="new_open">
     <column class="dialog-card new-card">

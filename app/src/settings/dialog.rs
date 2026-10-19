@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
-use lumenui_canvas::Context2d;
 
 use crate::ids::ElementIds;
 use crate::panels::escape;
@@ -17,9 +16,8 @@ use crate::settings::{Settings, Theme, UiFont, WheelMode};
 use crate::view::{Layers, ViewColors, parse_hex};
 
 /// The pages of the dialog, in the order the page list shows them.
-pub const PAGES: [&str; 7] = [
+pub const PAGES: [&str; 6] = [
     "navigation",
-    "pen",
     "canvas",
     "interface",
     "files",
@@ -293,21 +291,6 @@ fn fields() -> Vec<Field> {
                 true
             },
         },
-        // Pen.
-        flag!("set_pressure", |s| s.pen.pressure),
-        Field {
-            signal: "set_pressure_curve",
-            get: |s, _| Val::Num(s.pen.curve),
-            set: |s, v, _| match v.number().filter(|n| (0.1..=10.0).contains(n)) {
-                Some(n) => {
-                    s.pen.curve = (n * 10.0).round() / 10.0;
-                    true
-                }
-                None => false,
-            },
-        },
-        number!("set_pen_min", 0, 400, |s| s.pen.min_size, u32),
-        number!("set_pen_max", 1, 400, |s| s.pen.max_size, u32),
         // Canvas.
         number!("set_checker_size", 1, 128, |s| s.canvas.checker_size, u32),
         flag!("set_pixel_grid", |s| s.canvas.pixel_grid),
@@ -475,8 +458,6 @@ pub struct SettingsDialog {
     keys_for: Option<(Keymap, Option<String>)>,
     /// What the Performance page says of the renderer.
     renderer: Option<String>,
-    /// The pressure curve as last drawn.
-    curve_drawn: Option<(f64, u32, u32, bool)>,
 }
 
 /// The page a page button opens.
@@ -556,7 +537,6 @@ pub fn reset_page(settings: &mut Settings, page: &str) {
     let d = Settings::default();
     match page {
         "navigation" => settings.navigation = d.navigation,
-        "pen" => settings.pen = d.pen,
         "canvas" => settings.canvas = d.canvas,
         "interface" => settings.interface = d.interface,
         "files" => settings.files = d.files,
@@ -627,13 +607,6 @@ pub fn settings_form(
             }
         }
     }
-    let curve = num_text(settings.pen.curve);
-    let curve = if curve.contains('.') {
-        curve
-    } else {
-        format!("{curve}.0")
-    };
-    crate::tools::set_if_changed(&mut signals, "set_pressure_curve_text", curve);
     let renderer = dialog.renderer.get_or_insert_with(renderer_text).clone();
     crate::tools::set_if_changed(&mut signals, "set_renderer", renderer);
     let workers = format!("0 uses one per core; {} running.", layers.workers());
@@ -826,77 +799,6 @@ pub fn keys_page(
     }
 }
 
-fn canvas_color(c: pixl_document::Rgba) -> lumenui_canvas::Rgba {
-    lumenui_canvas::Rgba::new(
-        f64::from(c.r) / 255.0,
-        f64::from(c.g) / 255.0,
-        f64::from(c.b) / 255.0,
-        f64::from(c.a) / 255.0,
-    )
-}
-
-/// Draws the pressure curve: the brush size (up) each pressure (across)
-/// paints with, in the theme's colors.
-pub fn pressure_preview(
-    mut dialog: ResMut<SettingsDialog>,
-    settings: Res<Settings>,
-    canvases: Query<(
-        &lumenui_canvas::Canvas,
-        &lumenui::lumen_core::components::Transform,
-    )>,
-) {
-    let Some((_, t)) = canvases.iter().find(|(c, _)| c.id == "pressure-preview") else {
-        return;
-    };
-    let (w, h) = (t.size.x.round() as u32, t.size.y.round() as u32);
-    if w < 8 || h < 8 {
-        return;
-    }
-    let pen = &settings.pen;
-    let key = (pen.curve, pen.min_size, pen.max_size, pen.pressure);
-    let drawn = (key.0, key.1 * 1000 + key.2, w * 10000 + h, key.3);
-    if dialog.curve_drawn == Some(drawn) {
-        return;
-    }
-    let probe = |id: &str| {
-        dom::get_by_id(id)?
-            .computed_style_of("bg")
-            .as_deref()
-            .and_then(parse_hex)
-    };
-    let (Some(line), Some(grid)) = (probe("probe-curve"), probe("probe-curve-grid")) else {
-        return;
-    };
-    let ctx = Context2d::new("pressure-preview");
-    ctx.resize(w as f32, h as f32);
-    ctx.clear();
-    let (fw, fh) = (f64::from(w), f64::from(h));
-    let pad = 4.0;
-    let top = f64::from(pen.max_size.max(pen.min_size).max(100)) / 100.0;
-    let y_of = |share: f64| fh - pad - (share / top) * (fh - 2.0 * pad);
-    ctx.set_fill_color(canvas_color(grid));
-    // The tool's own size, for reference.
-    ctx.fill_rect(pad, y_of(1.0).round(), fw - 2.0 * pad, 1.0);
-    ctx.fill_rect(pad, fh - pad, fw - 2.0 * pad, 1.0);
-    ctx.set_stroke_color(canvas_color(line));
-    ctx.set_line_width(2.0);
-    ctx.begin_path();
-    let steps = 48;
-    for i in 0..=steps {
-        let p = i as f32 / steps as f32;
-        let share = if pen.pressure { pen.scale(p) } else { 1.0 };
-        let x = pad + f64::from(p) * (fw - 2.0 * pad);
-        let y = y_of(share);
-        if i == 0 {
-            ctx.move_to(x, y);
-        } else {
-            ctx.line_to(x, y);
-        }
-    }
-    ctx.stroke();
-    dialog.curve_drawn = Some(drawn);
-}
-
 /// The menu items that name a command, by their text before the shortcut.
 const MENU_COMMANDS: &[(&str, &str)] = &[
     ("New...", "file-new"),
@@ -998,10 +900,10 @@ mod tests {
     #[test]
     fn every_page_resets_to_its_defaults() {
         let mut s = Settings::default();
-        s.pen.curve = 3.0;
+        s.navigation.pan_speed = 3.0;
         s.interface.scale = 200;
-        reset_page(&mut s, "pen");
-        assert_eq!(s.pen, Settings::default().pen);
+        reset_page(&mut s, "navigation");
+        assert_eq!(s.navigation, Settings::default().navigation);
         assert_eq!(s.interface.scale, 200);
     }
 }

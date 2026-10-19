@@ -127,8 +127,24 @@ symmetry (mirror left and right, top and bottom, both, or radial with any
 number of copies) sit in the tool options bar. [ and ] step the brush size. X swaps the foreground and
 background colors, the secondary button paints with the background color,
 and Shift snaps lines to clean pixel steps and shapes to squares and
-circles. Every tool keeps to the selection. With a pen, pressure sets the
-brush size; the pen's eraser end erases.
+circles. Every tool keeps to the selection. The pen's eraser end erases.
+
+The brush tools (the pencil, eraser, soft brush, shading, dither, clone and
+pattern stamps, smudge, blur and replace color) have a Dynamics button in
+the tool options. Its popup sets what pen pressure and the pointer's speed
+do to a stroke: each of the brush size, the brush angle and, for the pencil,
+the color can follow pressure or speed. Size runs between two percentages of
+the tool's size; angle between two angles, turning square and custom brushes
+with RotSprite so a turned brush keeps clean one-pixel edges; color runs from
+the background color to the foreground color, blended, or dithered with a
+Bayer matrix, blue noise or the pattern stamp's pattern so only those two
+colors appear, which keeps an indexed image on its palette. Each input has a
+threshold below which it reads as nothing, one from which it reads as full,
+and a curve between, drawn beside its sliders. A mouse presses at full
+pressure, so mouse strokes use speed. Each tool keeps its own dynamics in the
+settings; the pencil and the eraser start with pressure setting the size.
+The pen settings of earlier versions (Settings > Pen) are replaced by the
+pencil's and the eraser's dynamics, which take over their values.
 
 The Select menu selects everything, nothing, the inverse, every pixel of
 the foreground color or of the layer's content, grows, shrinks or borders the
@@ -251,9 +267,10 @@ in `toolbar.json` in pixl's data folder.
 
 The Brushes panel is a library of named brushes: each keeps a shape (round,
 square, or a custom mask), a size, opacity and hardness for the soft brush,
-dithering, pixel-perfect, the stroke stabilizer and the pen's pressure
-mapping. A click makes one the brush in use. Save keeps the current brush
-under the name typed beside it; Selection makes a brush of the selected
+dithering, pixel-perfect, the stroke stabilizer and the dynamics, which
+picking the brush gives the tool in use; brushes saved by an older pixl
+bring their pressure mapping as dynamics. A click makes one the brush in
+use. Save keeps the current brush under the name typed beside it; Selection makes a brush of the selected
 pixels; PNG... makes one of an image's opaque pixels; Import... and
 Export... share brushes as a `.pixlbrushes` pack. The Presets button at the
 end of the tool options keeps a tool's whole set of options under a name and
@@ -337,9 +354,7 @@ inks, and share pixl's license.
 
 Edit > Settings (Ctrl+,) sets how the view moves (what the wheel does, zoom
 speed, zooming around the pointer, scroll and pan key speeds, an inverted
-wheel), how the pen paints (pressure on or off, the pressure curve with a
-preview, the brush size at the lightest and the firmest touch), how the
-canvas looks (checkerboard size and colors, whether the pixel grid shows,
+wheel), how the canvas looks (checkerboard size and colors, whether the pixel grid shows,
 its color and the zoom it shows from, a new custom grid's cell, the color
 around the
 document), the interface (theme, UI font, UI scale, tooltips), files

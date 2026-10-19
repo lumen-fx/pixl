@@ -8,7 +8,6 @@
     <split id="settings-split" class="settings-split">
       <column id="settings-nav" class="settings-nav">
         <button id="settings-page-navigation" class="settings-tab active" text="Navigation"/>
-        <button id="settings-page-pen" class="settings-tab" text="Pen"/>
         <button id="settings-page-canvas" class="settings-tab" text="Canvas"/>
         <button id="settings-page-interface" class="settings-tab" text="Interface"/>
         <button id="settings-page-files" class="settings-tab" text="Files"/>
@@ -49,31 +48,6 @@
               <label class="setting-label" text="With Shift"/>
               <input id="set-key-pan-fast" class="setting-number" type="number" min="1" max="20" step="0.5" bind-text="set_key_pan_fast"/>
               <label class="setting-hint" text="Times faster with Shift held."/>
-            </row>
-          </column>
-        </if>
-        <if signal="settings_on_pen" mode="hide">
-          <column class="settings-page">
-            <checkbox id="set-pressure" label="Pressure sets the brush size" bind-checked="set_pressure"/>
-            <row class="setting">
-              <label class="setting-label" text="Curve"/>
-              <slider id="set-pressure-curve" class="setting-slider" min="0.2" max="5" step="0.1" value="1" bind-value="set_pressure_curve"/>
-              <label class="setting-value" bind-text="set_pressure_curve_text" text="1.0"/>
-            </row>
-            <row class="setting">
-              <label class="setting-label" text="Lightest touch"/>
-              <input id="set-pen-min" class="setting-number" type="number" min="0" max="400" step="5" bind-text="set_pen_min"/>
-              <label class="setting-hint" text="Percent of the tool's size."/>
-            </row>
-            <row class="setting">
-              <label class="setting-label" text="Full pressure"/>
-              <input id="set-pen-max" class="setting-number" type="number" min="1" max="400" step="5" bind-text="set_pen_max"/>
-              <label class="setting-hint" text="Percent of the tool's size."/>
-            </row>
-            <row class="setting">
-              <label class="setting-label" text="Preview"/>
-              <canvas id="pressure-preview" class="pressure-preview"/>
-              <label class="setting-hint" text="Size (up) by pressure."/>
             </row>
           </column>
         </if>

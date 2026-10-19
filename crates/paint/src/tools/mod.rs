@@ -6,6 +6,7 @@
 //! [`Canvas::plot`], so every tool honors all of them.
 
 pub mod brushes;
+pub mod dynamics;
 pub mod fill;
 pub mod gradient;
 pub mod paint;
@@ -14,7 +15,6 @@ pub mod text;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use pixl_document::Bayer;
 use pixl_document::color::{Color, Palette, Rgba};
 use pixl_document::document::{Document, LayerId, Target};
 use pixl_document::error::Error;
@@ -25,6 +25,8 @@ use pixl_document::selection::Selection;
 use pixl_document::shapes;
 use pixl_document::transform::Pixels;
 
+use crate::tools::gradient::DitherPattern;
+
 /// What a tool writes at each pixel it touches.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Ink {
@@ -32,13 +34,14 @@ pub enum Ink {
     Paint(Color),
     /// Writes transparency.
     Erase,
-    /// An ordered dither between two colors; `second: None` leaves those
-    /// pixels untouched. The pattern is anchored to the canvas, so strokes
-    /// line up with each other.
+    /// A dither between two colors, `amount` (0 to 255) of the pixels
+    /// taking the first; `second: None` leaves the others untouched. The
+    /// pattern is anchored to the canvas, so strokes line up with each
+    /// other.
     Dither {
         first: Color,
         second: Option<Color>,
-        matrix: Bayer,
+        pattern: DitherPattern,
         amount: u8,
     },
     /// Moves a pixel `step` entries along a ramp (negative is darker by the
@@ -136,6 +139,73 @@ impl Brush {
         }
     }
 
+    /// The brush at `size`: a square or circle of that edge, or a custom
+    /// mask scaled (nearest neighbor) so its longer side is `size`.
+    pub fn resized(&self, size: u32) -> Brush {
+        let size = size.max(1);
+        match &self.shape {
+            BrushShape::Custom {
+                width,
+                height,
+                mask,
+            } => {
+                let long = (*width).max(*height).max(1);
+                if long == size {
+                    return self.clone();
+                }
+                let w = (u64::from(*width) * u64::from(size) / u64::from(long)).max(1) as u32;
+                let h = (u64::from(*height) * u64::from(size) / u64::from(long)).max(1) as u32;
+                let scaled = mask_pixels(*width, *height, mask).scale_nearest(w, h);
+                Brush::from_mask(&scaled).unwrap_or_else(|| self.clone())
+            }
+            shape => Brush {
+                shape: shape.clone(),
+                size,
+            },
+        }
+    }
+
+    /// The brush turned `degrees` clockwise with RotSprite, so a turned
+    /// mask keeps one-pixel lines connected and adds no stray pixels. A
+    /// circle, and a one-pixel brush, look the same at every angle.
+    pub fn rotated(&self, degrees: f64) -> Brush {
+        let quarter = (degrees / 90.0 - (degrees / 90.0).round()).abs() < 1e-9;
+        if matches!(self.shape, BrushShape::Circle)
+            || self.is_pixel()
+            || (quarter && matches!(self.shape, BrushShape::Square))
+        {
+            return self.clone();
+        }
+        let px = match &self.shape {
+            BrushShape::Custom {
+                width,
+                height,
+                mask,
+            } => mask_pixels(*width, *height, mask),
+            _ => {
+                let s = self.size.max(1);
+                Pixels::new(s, s, 1)
+            }
+        };
+        let (w, h) = px.rotated_size(degrees);
+        let turned = px.rotsprite(degrees, w, h, 0);
+        Brush::from_mask(&turned).unwrap_or_else(|| self.clone())
+    }
+
+    /// A custom brush of the set (nonzero) pixels of `px`, or `None` when
+    /// none is set.
+    fn from_mask(px: &Pixels) -> Option<Brush> {
+        let mask: Vec<bool> = px.data.iter().map(|&v| v != 0).collect();
+        mask.iter().any(|&b| b).then(|| Brush {
+            shape: BrushShape::Custom {
+                width: px.width,
+                height: px.height,
+                mask: Arc::new(mask),
+            },
+            size: px.width.max(px.height).max(1),
+        })
+    }
+
     /// Whether this brush covers exactly one pixel.
     pub fn is_pixel(&self) -> bool {
         self.offsets() == [Point::new(0, 0)]
@@ -169,6 +239,15 @@ impl Brush {
                     .collect()
             }
         }
+    }
+}
+
+/// A brush mask as pixels: 1 where it is set, 0 elsewhere.
+fn mask_pixels(width: u32, height: u32, mask: &[bool]) -> Pixels {
+    Pixels {
+        width,
+        height,
+        data: mask.iter().map(|&b| u32::from(b)).collect(),
     }
 }
 
@@ -421,10 +500,10 @@ impl<'a> Canvas<'a> {
             Ink::Dither {
                 first,
                 second,
-                matrix,
+                pattern,
                 amount,
             } => {
-                if matrix.picks_first(x, y, *amount) {
+                if pattern.picks_first(x, y, *amount) {
                     Some(self.resolve(*first))
                 } else {
                     second.map(|c| self.resolve(c))
@@ -648,6 +727,7 @@ pub fn edit_mask<R>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pixl_document::Bayer;
     use pixl_document::color::ColorMode;
 
     #[test]
@@ -769,7 +849,7 @@ mod tests {
             let dither = Ink::Dither {
                 first: Color::Index(1),
                 second: Some(Color::Index(2)),
-                matrix: Bayer::B2,
+                pattern: DitherPattern::Bayer(Bayer::B2),
                 amount: 128,
             };
             for x in 0..4 {

@@ -28,7 +28,6 @@ struct CopyPath {
 
 impl PencilStroke {
     pub fn new(canvas: &Canvas, brush: Brush, ink: Ink, pixel_perfect: bool) -> Self {
-        let pixel_perfect = pixel_perfect && brush.is_pixel();
         let copies = (0..canvas.symmetry().rotations())
             .map(|_| CopyPath {
                 path: Vec::new(),
@@ -44,15 +43,27 @@ impl PencilStroke {
         }
     }
 
+    /// Changes the brush the stroke paints with from here on. Pixel-perfect
+    /// applies while the brush is one pixel.
+    pub fn set_brush(&mut self, brush: Brush) {
+        self.brush = brush;
+    }
+
+    /// Changes the ink the stroke paints with from here on.
+    pub fn set_ink(&mut self, ink: Ink) {
+        self.ink = ink;
+    }
+
     /// Extends the stroke to `p` and paints what is final.
     pub fn add(&mut self, canvas: &mut Canvas, p: Point) {
         let sym = canvas.symmetry();
+        let pixel_perfect = self.pixel_perfect && self.brush.is_pixel();
         let from = self.last.unwrap_or(p);
         self.last = Some(p);
         for (k, copy) in self.copies.iter_mut().enumerate() {
             let seg = shapes::line(sym.rotate(from, k), sym.rotate(p, k));
             for q in seg {
-                if self.pixel_perfect {
+                if pixel_perfect {
                     shapes::push_pixel_perfect(&mut copy.path, q);
                     // A pixel already painted is never removed: only the
                     // pending last pixel can be.
@@ -61,7 +72,7 @@ impl PencilStroke {
                     copy.path.push(q);
                 }
             }
-            let ready = if self.pixel_perfect {
+            let ready = if pixel_perfect {
                 copy.path.len().saturating_sub(1)
             } else {
                 copy.path.len()

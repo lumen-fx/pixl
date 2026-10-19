@@ -36,12 +36,6 @@
 .setting-slider { width: 180; }
 .setting-value { width: 36; text-color: var(--text-dim); font-size: var(--font-size-small); }
 .setting-color { width: 64; }
-.pressure-preview {
-  width: 180;
-  height: 72;
-  bg: var(--surface-0);
-  border: 1px solid var(--edge);
-}
 
 .keys-message { text-color: var(--text); font-size: var(--font-size-small); }
 .keys-conflict { align: center; gap: var(--space-3); }
@@ -60,9 +54,6 @@
 .key-row.clash .key-chord { border: 1px solid var(--accent); }
 .key-row.capturing .key-chord { bg: var(--accent); text-color: var(--on-accent); }
 
-/* The colors the pressure preview draws with. */
-#probe-curve { bg: var(--accent); }
-#probe-curve-grid { bg: var(--edge-soft); }
 
 /* Interface > Show tooltips off. */
 .pixl.no-tooltips .tooltip { display: none; }

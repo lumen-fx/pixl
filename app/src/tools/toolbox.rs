@@ -11,7 +11,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use lumenui::ecs::system::SystemParam;
-use lumenui::lumen_core::input::{PointerButton, PointerState};
+use lumenui::glam::Vec2;
+use lumenui::lumen_core::input::{PointerButton, PointerData, PointerState};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_document::history::Transaction;
@@ -31,6 +32,8 @@ use pixl_paint::{Brush, Canvas, Ink, SymmetryMode, ToolContext};
 
 use crate::editor::{BrushShape, Editor, Tool};
 use crate::ids::ElementIds;
+use crate::settings::Settings;
+use crate::tools::dynamics::Live;
 use crate::tools::{Place, context, paint_color, refuse};
 use crate::view::Preview;
 use crate::view::input::{Pointer, PointerInput};
@@ -345,6 +348,8 @@ struct StrokeSession {
     stroke: Stroke,
     stabilizer: Stabilizer,
     at: Point,
+    /// The stroke's dynamics, when something follows an input.
+    live: Option<Live>,
 }
 
 enum Stroke {
@@ -453,10 +458,10 @@ fn begin_stroke(
     editor: &mut Editor,
     toolbox: &mut Toolbox,
     tool: Tool,
-    button: PointerButton,
-    p: Point,
-    alt: bool,
+    press: &Press,
+    settings: &Settings,
 ) -> Option<Session> {
+    let (button, p, alt) = (press.button, press.p, press.alt);
     if tool == Tool::CloneStamp && alt {
         toolbox.clone_source = Some(p);
         editor.message = Some(format!("Clone source set at {}, {}", p.x, p.y));
@@ -483,7 +488,7 @@ fn begin_stroke(
         Tool::DitherBrush => Some(Ink::Dither {
             first: Color::Rgba(color),
             second: Some(Color::Rgba(other)),
-            matrix: o.dither_matrix,
+            pattern: DitherPattern::Bayer(o.dither_matrix),
             amount: (u32::from(o.dither_amount) * 255 / 100) as u8,
         }),
         Tool::PatternStamp => {
@@ -552,6 +557,7 @@ fn begin_stroke(
             pixel_perfect,
         )),
     };
+    let live = crate::tools::dynamics::live_for(editor, toolbox, settings, tool, button);
     let mut session = StrokeSession {
         button,
         ctx,
@@ -559,8 +565,15 @@ fn begin_stroke(
         stroke,
         stabilizer: Stabilizer::new(f64::from(o.stabilizer)),
         at: p,
+        live,
     };
-    stroke_to(editor, toolbox, &mut session, p);
+    stroke_to(
+        editor,
+        toolbox,
+        &mut session,
+        p,
+        Some((press.at, &press.data)),
+    );
     Some(Session::Stroke(Box::new(session)))
 }
 
@@ -569,8 +582,24 @@ fn editor_size(brush: &Brush) -> u32 {
     brush.size.max(1)
 }
 
-/// Moves a stroke to `p`, through the stabilizer.
-fn stroke_to(editor: &mut Editor, toolbox: &mut Toolbox, s: &mut StrokeSession, p: Point) {
+/// Moves a stroke to `p`, through the stabilizer, with the pointer event
+/// that brought it there (none for a spray held still).
+fn stroke_to(
+    editor: &mut Editor,
+    toolbox: &mut Toolbox,
+    s: &mut StrokeSession,
+    p: Point,
+    event: Option<(Vec2, &PointerData)>,
+) {
+    if let (Some(live), Some(event)) = (&mut s.live, event) {
+        let stroke = &mut s.stroke;
+        crate::tools::dynamics::follow(editor, live, event, |brush, _| match stroke {
+            Stroke::Soft(st) => st.set_size(brush.size),
+            Stroke::Inked(st) => st.set_brush(brush),
+            Stroke::Smudge(st) => st.set_brush(brush),
+            Stroke::Spray { .. } => {}
+        });
+    }
     let (x, y) = s
         .stabilizer
         .feed(f64::from(p.x) + 0.5, f64::from(p.y) + 0.5);
@@ -683,7 +712,21 @@ fn gradient_of(
         }
         _ => vec![Color::Rgba(first), Color::Rgba(last)],
     };
-    let dither = match o.gradient_dither.as_str() {
+    Gradient {
+        shape: o.gradient_shape,
+        from,
+        to,
+        colors,
+        dither: dither_named(editor, toolbox, &o.gradient_dither),
+        repeat: o.gradient_repeat,
+    }
+}
+
+/// The dither a menu name stands for: a Bayer matrix, blue noise, hard
+/// steps, or the pattern stamp's pattern by its lightness (a Bayer 4x4
+/// while there is no pattern).
+pub fn dither_named(editor: &Editor, toolbox: &Toolbox, name: &str) -> DitherPattern {
+    match name {
         "Bayer 2x2" => DitherPattern::Bayer(Bayer::B2),
         "Bayer 8x8" => DitherPattern::Bayer(Bayer::B8),
         "Blue noise" => DitherPattern::BlueNoise,
@@ -715,14 +758,6 @@ fn gradient_of(
             None => DitherPattern::Bayer(Bayer::B4),
         },
         _ => DitherPattern::Bayer(Bayer::B4),
-    };
-    Gradient {
-        shape: o.gradient_shape,
-        from,
-        to,
-        colors,
-        dither,
-        repeat: o.gradient_repeat,
     }
 }
 
@@ -754,19 +789,29 @@ fn wand(editor: &Editor, toolbox: &Toolbox, p: Point) -> Option<Selection> {
 /// What a press on the stage carries.
 struct Press {
     p: Point,
+    /// The window position, and the pointer's state.
+    at: Vec2,
+    data: PointerData,
     button: PointerButton,
     shift: bool,
     alt: bool,
     double: bool,
 }
 
-fn begin(editor: &mut Editor, toolbox: &mut Toolbox, preview: &mut Preview, press: Press) {
+fn begin(
+    editor: &mut Editor,
+    toolbox: &mut Toolbox,
+    preview: &mut Preview,
+    press: Press,
+    settings: &Settings,
+) {
     let Press {
         p,
         button,
         shift,
         alt,
         double,
+        ..
     } = press;
     let tool = editor.tool;
     // A gesture that spans several presses takes this one.
@@ -833,7 +878,7 @@ fn begin(editor: &mut Editor, toolbox: &mut Toolbox, preview: &mut Preview, pres
     let before = editor.selection.clone();
     let op = select_op(&toolbox.options, shift, alt);
     toolbox.session = match tool {
-        t if sized(t) && t != Tool::Contour => begin_stroke(editor, toolbox, t, button, p, alt),
+        t if sized(t) && t != Tool::Contour => begin_stroke(editor, toolbox, t, &press, settings),
         Tool::Curve => Some(Session::Curve {
             button,
             ends: (p, p),
@@ -982,12 +1027,18 @@ fn finish_corners(
     }
 }
 
-fn extend(editor: &mut Editor, toolbox: &mut Toolbox, preview: &mut Preview, p: Point) {
+fn extend(
+    editor: &mut Editor,
+    toolbox: &mut Toolbox,
+    preview: &mut Preview,
+    p: Point,
+    event: (Vec2, &PointerData),
+) {
     let Some(mut session) = toolbox.session.take() else {
         return;
     };
     match &mut session {
-        Session::Stroke(s) => stroke_to(editor, toolbox, s, p),
+        Session::Stroke(s) => stroke_to(editor, toolbox, s, p, Some(event)),
         Session::Curve {
             ends,
             dragging,
@@ -1206,6 +1257,7 @@ pub struct BoxKeys<'w> {
     home: Res<'w, crate::Home>,
     colors: Res<'w, crate::view::ViewColors>,
     pointer: Res<'w, PointerState>,
+    settings: Res<'w, Settings>,
 }
 
 /// The options bar's buttons, and the file dialog the font button opens.
@@ -1307,7 +1359,7 @@ pub fn use_toolbox(
     let over = place.over_stage();
     for event in pointer.events() {
         match event {
-            Pointer::Down { at, button, .. } => {
+            Pointer::Down { at, button, data } => {
                 let held_session = toolbox.session.is_some();
                 let multi = matches!(
                     toolbox.session,
@@ -1331,16 +1383,24 @@ pub fn use_toolbox(
                 toolbox.last_press = Some((now, p));
                 let press = Press {
                     p,
+                    at,
+                    data,
                     button,
                     shift,
                     alt,
                     double,
                 };
-                begin(editor, toolbox, &mut preview, press);
+                begin(editor, toolbox, &mut preview, press, &keys.settings);
             }
-            Pointer::Move { at, .. } => {
+            Pointer::Move { at, data } => {
                 if toolbox.session.is_some() {
-                    extend(editor, toolbox, &mut preview, view.doc_pixel(at));
+                    extend(
+                        editor,
+                        toolbox,
+                        &mut preview,
+                        view.doc_pixel(at),
+                        (at, &data),
+                    );
                 } else if editor.tool == Tool::Text && view.contains(at) && over {
                     // The text shows where a click would set it.
                     let p = view.doc_pixel(at);
@@ -1384,7 +1444,7 @@ pub fn use_toolbox(
             let mut taken = toolbox.session.take();
             if let Some(Session::Stroke(s)) = &mut taken {
                 let at = s.at;
-                stroke_to(editor, toolbox, s, at);
+                stroke_to(editor, toolbox, s, at, None);
             }
             toolbox.session = taken;
         }

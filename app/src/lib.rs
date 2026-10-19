@@ -287,7 +287,6 @@ pub fn editor(source: Source) -> App {
                     timed!(tools::stage_cursor),
                     timed!(
                         settings::save_settings,
-                        settings::dialog::pressure_preview,
                         settings::dialog::menu_labels,
                         perf::show_perf,
                         files::sheets::sheet_forms,
@@ -313,6 +312,7 @@ pub fn editor(source: Source) -> App {
     let app = rig::install(app);
     let app = tutorial::install(app);
     let app = tools::presets::install(app, tools::presets::Presets::in_memory());
+    let app = tools::dynamics::install(app);
     tools::toolbar::install(app, tools::toolbar::Toolbar::in_memory())
 }
 

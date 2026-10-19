@@ -188,8 +188,6 @@ pub struct ToolOptions {
     pub tolerance: u8,
     /// Bucket: grow from the clicked pixel, or take every match.
     pub contiguous: bool,
-    /// Pen pressure scales the brush size.
-    pub pressure_size: bool,
 }
 
 impl Default for ToolOptions {
@@ -200,7 +198,6 @@ impl Default for ToolOptions {
             filled: false,
             tolerance: 0,
             contiguous: true,
-            pressure_size: true,
         }
     }
 }

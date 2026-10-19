@@ -2,6 +2,7 @@
 //! pixl-paint: freehand strokes, shapes, the bucket, the eyedropper, the
 //! rectangle selection and moving pixels.
 
+pub mod dynamics;
 pub mod presets;
 pub mod reference;
 pub mod slices;
@@ -11,7 +12,7 @@ pub mod transform;
 
 use lumenui::ecs::system::SystemParam;
 use lumenui::glam::Vec2;
-use lumenui::lumen_core::input::{ModifiersState, PointerButton, PointerData, PointerKind};
+use lumenui::lumen_core::input::{ModifiersState, PointerButton, PointerData};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_document::history::Transaction;
@@ -28,8 +29,9 @@ use pixl_paint::{Brush, Canvas, Ink, ToolContext};
 use crate::editor::{Editor, Tool};
 use crate::home::Home;
 use crate::ids::ElementIds;
+use crate::settings::Settings;
 use crate::settings::keymap::KeyCommands;
-use crate::settings::{PenSettings, Settings};
+use crate::tools::dynamics::Live;
 use crate::view::input::{Navigation, Pointer, PointerInput};
 use crate::view::{Preview, View};
 
@@ -48,12 +50,12 @@ enum Session {
     /// A freehand stroke of the pencil or the eraser.
     Stroke {
         button: PointerButton,
-        ink: Ink,
         ctx: ToolContext,
         tx: Option<Transaction>,
-        line: Line,
-        last: Point,
+        stroke: PencilStroke,
         stabilizer: Stabilizer,
+        /// The stroke's dynamics, when something follows an input.
+        live: Option<Box<Live>>,
     },
     /// A line, rectangle or ellipse from where the press landed.
     Shape {
@@ -96,23 +98,6 @@ impl Session {
             | Session::Move { button, .. } => *button,
         }
     }
-}
-
-/// How a freehand stroke lays its pixels down.
-enum Line {
-    /// One brush for the whole stroke, through pixl-paint's stroke, which
-    /// drops L-shaped corners when pixel-perfect is on.
-    Steady(PencilStroke),
-    /// A brush sized by pen pressure at each point, through the pen
-    /// settings' curve.
-    Pressure { size: u32, pen: PenSettings },
-}
-
-/// The brush size a pen press of `pressure` paints with, for a tool size
-/// of `size`: the pen settings map pressure to a share of it.
-pub fn pressure_size(size: u32, pressure: f32, pen: &PenSettings) -> u32 {
-    let px = (f64::from(size) * pen.scale(pressure)).round();
-    (px.max(1.0) as u32).min(size.max(1) * 4)
 }
 
 /// The color a button paints: the foreground for the primary button, the
@@ -327,14 +312,26 @@ pub fn use_tools(
                 } else {
                     button
                 };
+                let tool = if eraser_end {
+                    Tool::Eraser
+                } else {
+                    editor.tool
+                };
+                let live = matches!(tool, Tool::Pencil | Tool::Eraser)
+                    .then(|| {
+                        crate::tools::dynamics::live_for(&editor, &toolbox, &settings, tool, button)
+                    })
+                    .flatten()
+                    .map(Box::new);
                 let press = Press {
                     p,
+                    at,
                     button,
                     data,
                     eraser_end,
                     shift,
                     alt,
-                    pen: settings.pen.clone(),
+                    live,
                     stabilizer: toolbox.options.stabilizer,
                 };
                 gesture.0 = begin(&mut editor, &mut preview, press);
@@ -344,15 +341,7 @@ pub fn use_tools(
                     continue;
                 };
                 let p = view.doc_pixel(at);
-                extend(
-                    &mut editor,
-                    &mut preview,
-                    session,
-                    p,
-                    data.pressure,
-                    data.kind,
-                    shift,
-                );
+                extend(&mut editor, &mut preview, session, p, (at, &data), shift);
             }
             Pointer::Up { at, button, .. } => {
                 let ends = gesture
@@ -372,15 +361,17 @@ pub fn use_tools(
 
 /// A press that may start a gesture.
 struct Press {
-    /// The document pixel under the press.
+    /// The document pixel under the press, and the window position.
     p: Point,
+    at: Vec2,
     button: PointerButton,
     data: PointerData,
     /// The pen's eraser end, which erases whatever the tool.
     eraser_end: bool,
     shift: bool,
     alt: bool,
-    pen: PenSettings,
+    /// The stroke's dynamics, when something follows an input.
+    live: Option<Box<Live>>,
     /// The stroke stabilizer's string length in pixels; 0 is off.
     stabilizer: u32,
 }
@@ -389,12 +380,13 @@ struct Press {
 fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Session> {
     let Press {
         p,
+        at,
         button,
         data,
         eraser_end,
         shift,
         alt,
-        pen,
+        live,
         stabilizer,
     } = press;
     let tool = if eraser_end {
@@ -414,41 +406,29 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
                     return None;
                 }
             };
-            let size = editor.options.size;
-            let pressure = data.kind == PointerKind::Pen && pen.pressure && size > 1;
-            let steady = editor.brush(size);
+            let brush = editor.brush(editor.options.size);
             let pixel_perfect = editor.options.pixel_perfect;
-            let line = if pressure {
-                Line::Pressure { size, pen }
-            } else {
-                // The stroke reads the canvas's symmetry to know how many
-                // copies it draws.
-                match editor.target() {
-                    Ok(target) => {
-                        let canvas = Canvas::new(target, &ctx);
-                        Line::Steady(PencilStroke::new(
-                            &canvas,
-                            steady,
-                            ink.clone(),
-                            pixel_perfect,
-                        ))
-                    }
-                    Err(e) => {
-                        refuse(editor, e);
-                        return None;
-                    }
+            // The stroke reads the canvas's symmetry to know how many
+            // copies it draws.
+            let stroke = match editor.target() {
+                Ok(target) => {
+                    let canvas = Canvas::new(target, &ctx);
+                    PencilStroke::new(&canvas, brush, ink, pixel_perfect)
+                }
+                Err(e) => {
+                    refuse(editor, e);
+                    return None;
                 }
             };
             let mut session = Session::Stroke {
                 button,
-                ink,
                 ctx,
                 tx: Some(tx),
-                line,
-                last: p,
+                stroke,
                 stabilizer: Stabilizer::new(f64::from(stabilizer)),
+                live,
             };
-            stroke_to(editor, &mut session, p, data.pressure);
+            stroke_to(editor, &mut session, p, (at, &data));
             Some(session)
         }
         Tool::Line | Tool::Rectangle | Tool::Ellipse => {
@@ -544,36 +524,35 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
     }
 }
 
-/// Extends a freehand stroke to `p`.
-fn stroke_to(editor: &mut Editor, session: &mut Session, p: Point, pressure: f32) {
+/// Extends a freehand stroke to `p`, with the pointer event that brought
+/// it there.
+fn stroke_to(editor: &mut Editor, session: &mut Session, p: Point, event: (Vec2, &PointerData)) {
     let Session::Stroke {
-        ink,
         ctx,
-        line,
-        last,
+        stroke,
         stabilizer,
+        live,
         ..
     } = session
     else {
         return;
     };
+    if let Some(live) = live {
+        crate::tools::dynamics::follow(editor, live, event, |brush, ink| {
+            stroke.set_brush(brush);
+            if let Some(ink) = ink {
+                stroke.set_ink(ink);
+            }
+        });
+    }
     // The stabilizer's string trails the pointer; the stroke follows it.
     let (sx, sy) = stabilizer.feed(f64::from(p.x) + 0.5, f64::from(p.y) + 0.5);
     let p = Point::new(sx.floor() as i32, sy.floor() as i32);
-    let pressed = match line {
-        Line::Pressure { size, pen } => Some(editor.brush(pressure_size(*size, pressure, pen))),
-        Line::Steady(_) => None,
-    };
     let Ok(target) = editor.target() else {
         return;
     };
     let mut canvas = Canvas::new(target, ctx);
-    match (line, pressed) {
-        (Line::Steady(stroke), _) => stroke.add(&mut canvas, p),
-        (Line::Pressure { .. }, Some(b)) => paint::line(&mut canvas, *last, p, &b, ink),
-        (Line::Pressure { .. }, None) => {}
-    }
-    *last = p;
+    stroke.add(&mut canvas, p);
     if !canvas.dirty().is_empty() {
         editor.touch_pixels();
     }
@@ -584,19 +563,11 @@ fn extend(
     preview: &mut Preview,
     session: &mut Session,
     p: Point,
-    pressure: f32,
-    kind: PointerKind,
+    event: (Vec2, &PointerData),
     shift: bool,
 ) {
     match session {
-        Session::Stroke { .. } => {
-            let pressure = if kind == PointerKind::Pen {
-                pressure
-            } else {
-                1.0
-            };
-            stroke_to(editor, session, p, pressure);
-        }
+        Session::Stroke { .. } => stroke_to(editor, session, p, event),
         Session::Shape { to, .. } => {
             if *to != p {
                 *to = p;
@@ -639,11 +610,12 @@ fn extend(
 fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point, shift: bool) {
     match session {
         Session::Stroke {
-            mut tx, line, ctx, ..
+            mut tx,
+            stroke,
+            ctx,
+            ..
         } => {
-            if let Line::Steady(stroke) = line
-                && let Ok(target) = editor.target()
-            {
+            if let Ok(target) = editor.target() {
                 let mut canvas = Canvas::new(target, &ctx);
                 stroke.finish(&mut canvas);
                 if !canvas.dirty().is_empty() {
@@ -906,7 +878,7 @@ pub fn show_tool(
         "show_pixel_perfect",
         matches!(tool, Pencil | Eraser) || crate::tools::toolbox::pixel_perfect_tool(tool),
     );
-    signals.set("show_pressure", matches!(tool, Pencil | Eraser));
+    signals.set("show_dynamics", crate::tools::dynamics::dynamic(tool));
     signals.set("show_filled", matches!(tool, Rectangle | Ellipse | Polygon));
     signals.set("show_bucket", tool == Bucket);
     signals.set(
@@ -928,18 +900,11 @@ pub fn show_tool(
 /// control.
 pub fn tool_options(
     mut editor: ResMut<Editor>,
-    mut settings: ResMut<Settings>,
     mut synced: Local<Option<crate::editor::ToolOptions>>,
     mut signals: Signals,
     wake: Option<Res<WakeDeadline>>,
 ) {
     let mut o = editor.options;
-    // The options bar's pressure switch is the pen setting.
-    if synced.is_none_or(|s| s.pressure_size == o.pressure_size)
-        && o.pressure_size != settings.pen.pressure
-    {
-        o.pressure_size = settings.pen.pressure;
-    }
     if let Some(last) = *synced {
         let num = |s: &Signals, name: &str| s.get::<f64>(name);
         if let Some(v) = num(&signals, "opt_size") {
@@ -958,9 +923,6 @@ pub fn tool_options(
         if flag(&signals, "opt_pixel_perfect", last.pixel_perfect) != last.pixel_perfect {
             o.pixel_perfect = !last.pixel_perfect;
         }
-        if flag(&signals, "opt_pressure", last.pressure_size) != last.pressure_size {
-            o.pressure_size = !last.pressure_size;
-        }
         if flag(&signals, "opt_filled", last.filled) != last.filled {
             o.filled = !last.filled;
         }
@@ -971,16 +933,12 @@ pub fn tool_options(
     if o != editor.options {
         editor.options = o;
     }
-    if settings.pen.pressure != o.pressure_size {
-        settings.pen.pressure = o.pressure_size;
-    }
     if *synced != Some(o) {
         signals.set("opt_size", f64::from(o.size));
         signals.set("opt_size_text", format!("{} px", o.size));
         signals.set("opt_tolerance", f64::from(o.tolerance));
         signals.set("opt_tolerance_text", o.tolerance.to_string());
         signals.set("opt_pixel_perfect", o.pixel_perfect);
-        signals.set("opt_pressure", o.pressure_size);
         signals.set("opt_filled", o.filled);
         signals.set("opt_contiguous", o.contiguous);
         *synced = Some(o);
@@ -1019,19 +977,6 @@ mod tests {
         for tool in Tool::ALL {
             assert!(!map.chords(tool.button_id()).is_empty(), "{tool:?}");
         }
-    }
-
-    #[test]
-    fn pressure_scales_the_brush_but_never_below_one_pixel() {
-        let pen = PenSettings::default();
-        assert_eq!(pressure_size(8, 1.0, &pen), 8);
-        assert_eq!(pressure_size(8, 0.5, &pen), 4);
-        assert_eq!(pressure_size(8, 0.0, &pen), 1);
-        let firm = PenSettings {
-            curve: 2.0,
-            ..PenSettings::default()
-        };
-        assert_eq!(pressure_size(8, 0.5, &firm), 2);
     }
 
     #[test]

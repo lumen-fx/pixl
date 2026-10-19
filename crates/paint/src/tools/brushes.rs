@@ -116,6 +116,11 @@ impl SoftStroke {
         }
     }
 
+    /// Changes the dab's diameter from here on.
+    pub fn set_size(&mut self, size: u32) {
+        self.brush.size = size.max(1);
+    }
+
     /// Extends the stroke to `p`.
     pub fn add(&mut self, canvas: &mut Canvas, p: Point) {
         let sym = canvas.symmetry();
@@ -254,6 +259,17 @@ impl SmudgeStroke {
             keep_colors: keep_colors || matches!(canvas.raster(), Raster::Indexed(_)),
             last: None,
             carried: vec![vec![None; mirrors]; sym.rotations()],
+        }
+    }
+
+    /// Changes the brush from here on. The brush puts down what it
+    /// carried and picks up again under its new shape.
+    pub fn set_brush(&mut self, brush: Brush) {
+        if brush != self.brush {
+            self.brush = brush;
+            for copy in &mut self.carried {
+                copy.fill(None);
+            }
         }
     }
 

@@ -40,6 +40,16 @@ pub enum DitherPattern {
 }
 
 impl DitherPattern {
+    /// Whether `(x, y)` takes the first of two colors at `amount` (0 none,
+    /// 255 all). Without a pattern, every pixel takes the first color from
+    /// half the amount on.
+    pub fn picks_first(&self, x: i32, y: i32, amount: u8) -> bool {
+        match self {
+            DitherPattern::Bayer(m) => m.picks_first(x, y, amount),
+            _ => f64::from(amount) / 255.0 >= self.threshold(x, y),
+        }
+    }
+
     /// The threshold at a canvas position, from 0 (exclusive) to 1.
     fn threshold(&self, x: i32, y: i32) -> f64 {
         match self {

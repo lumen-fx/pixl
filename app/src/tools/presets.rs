@@ -1,6 +1,6 @@
 //! Brushes and tool presets: the brush library (named brushes, each a
 //! shape, a size, opacity, hardness, dithering, pixel-perfect, the
-//! stabilizer and the pen's pressure mapping; made from the current tool,
+//! stabilizer and the dynamics; made from the current tool,
 //! from the selection or from a PNG; shared as `.pixlbrushes` packs), named
 //! presets of a tool's whole set of options, and the quick bar of the
 //! colors and brushes painted with last. All of it is kept in pixl's data
@@ -26,6 +26,7 @@ use crate::ids::ElementIds;
 use crate::panels::escape;
 use crate::settings::Settings;
 use crate::settings::store::Store;
+use crate::tools::dynamics::ToolDynamics;
 use crate::tools::hex;
 use crate::tools::toolbox::Toolbox;
 
@@ -128,13 +129,26 @@ impl Shape {
     }
 }
 
-/// How pen pressure shapes the brush: the pen settings a brush brings.
+/// How pen pressure shaped a brush in the files of an older pixl. It
+/// reads as the brush's dynamics.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Pressure {
     pub on: bool,
     pub curve: f64,
     pub min_size: u32,
     pub max_size: u32,
+}
+
+impl From<&Pressure> for ToolDynamics {
+    fn from(p: &Pressure) -> ToolDynamics {
+        let pen = serde_json::json!({
+            "pressure": p.on,
+            "curve": p.curve,
+            "min_size": p.min_size,
+            "max_size": p.max_size,
+        });
+        ToolDynamics::from_pen(&pen).unwrap_or_default()
+    }
 }
 
 /// One brush of the library.
@@ -152,6 +166,12 @@ pub struct BrushPreset {
     pub pixel_perfect: bool,
     /// Stabilizer string length in pixels; 0 is off.
     pub stabilizer: u32,
+    /// What pressure and velocity do to the brush; `None` leaves the tool's
+    /// own dynamics.
+    pub dynamics: Option<ToolDynamics>,
+    /// An older file's pressure mapping, read as `dynamics` when the brush
+    /// has none, and never written.
+    #[serde(skip_serializing)]
     pub pressure: Option<Pressure>,
 }
 
@@ -166,6 +186,7 @@ impl Default for BrushPreset {
             dithered: false,
             pixel_perfect: true,
             stabilizer: 0,
+            dynamics: None,
             pressure: None,
         }
     }
@@ -220,7 +241,6 @@ impl BrushPreset {
     /// The brush the editor paints with now, named `name`.
     pub fn capture(name: &str, editor: &Editor, toolbox: &Toolbox, settings: &Settings) -> Self {
         let o = &toolbox.options;
-        let pen = &settings.pen;
         BrushPreset {
             name: name.to_string(),
             shape: Shape::of(&editor.brush_shape),
@@ -230,13 +250,20 @@ impl BrushPreset {
             dithered: o.dithered,
             pixel_perfect: editor.options.pixel_perfect,
             stabilizer: o.stabilizer,
-            pressure: Some(Pressure {
-                on: pen.pressure,
-                curve: pen.curve,
-                min_size: pen.min_size,
-                max_size: pen.max_size,
-            }),
+            dynamics: Some(settings.dynamics(editor.tool)),
+            pressure: None,
         }
+    }
+
+    /// The brush as this pixl keeps it: an older file's pressure mapping
+    /// becomes its dynamics.
+    fn upgraded(mut self) -> Self {
+        if let Some(p) = self.pressure.take()
+            && self.dynamics.is_none()
+        {
+            self.dynamics = Some(ToolDynamics::from(&p));
+        }
+        self
     }
 
     /// Makes this the brush the editor paints with.
@@ -251,13 +278,11 @@ impl BrushPreset {
         o.hardness = self.hardness.min(100);
         o.dithered = self.dithered;
         o.stabilizer = self.stabilizer.min(64);
-        if let Some(p) = &self.pressure {
-            let pen = &mut settings.pen;
-            pen.pressure = p.on;
-            pen.curve = p.curve;
-            pen.min_size = p.min_size;
-            pen.max_size = p.max_size;
-            editor.options.pressure_size = p.on;
+        // The dynamics go to the tool in use, when it has dynamics.
+        if let Some(d) = &self.dynamics
+            && crate::tools::dynamics::dynamic(editor.tool)
+        {
+            settings.set_dynamics(editor.tool, d.clone());
         }
     }
 
@@ -275,6 +300,9 @@ impl BrushPreset {
         }
         if self.stabilizer > 0 {
             parts.push(format!("steady {}", self.stabilizer));
+        }
+        if let Some(d) = self.dynamics.as_ref().and_then(ToolDynamics::summary) {
+            parts.push(d);
         }
         parts.join(", ")
     }
@@ -388,7 +416,11 @@ pub fn unpack(bytes: &[u8]) -> std::result::Result<Vec<BrushPreset>, String> {
     if pack.version == 0 || pack.brushes.is_empty() {
         return Err("no pixl brushes in the file".into());
     }
-    Ok(pack.brushes)
+    Ok(pack
+        .brushes
+        .into_iter()
+        .map(BrushPreset::upgraded)
+        .collect())
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -430,12 +462,25 @@ impl Presets {
     pub fn load(store: Store) -> Self {
         let brushes = store
             .load::<Library>("brushes.json")
-            .map(|l| l.brushes)
+            .map(|l| {
+                l.brushes
+                    .into_iter()
+                    .map(BrushPreset::upgraded)
+                    .collect::<Vec<_>>()
+            })
             .filter(|b| !b.is_empty())
             .unwrap_or_else(BrushPreset::starters);
         let tools = store
             .load::<ToolPresets>("tool-presets.json")
-            .map(|t| t.presets)
+            .map(|t| {
+                t.presets
+                    .into_iter()
+                    .map(|p| ToolPreset {
+                        brush: p.brush.clone().upgraded(),
+                        ..p
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         let quick: Quick = store.load("quickbar.json").unwrap_or_default();
         Self {
@@ -537,6 +582,7 @@ impl Presets {
     /// Notes a brush painted with, newest first.
     fn note_brush(&mut self, mut b: BrushPreset) {
         b.name = String::new();
+        b.dynamics = None;
         b.pressure = None;
         if self.recent_brushes.first() == Some(&b) {
             return;
@@ -931,6 +977,25 @@ mod tests {
         assert_eq!(unpack(&pack(&brushes)).unwrap(), brushes);
         assert!(unpack(b"{\"brushes\": []}").is_err());
         assert!(unpack(b"not json").is_err());
+    }
+
+    #[test]
+    fn an_older_brush_reads_its_pressure_mapping_as_dynamics() {
+        let old = br#"{"pixl brushes": 1, "brushes": [{"name": "Old", "shape": "round", "size": 6,
+            "pressure": {"on": true, "curve": 2.0, "min_size": 25, "max_size": 100}}]}"#;
+        let brushes = unpack(old).unwrap();
+        let d = brushes[0].dynamics.clone().unwrap();
+        assert_eq!(brushes[0].pressure, None);
+        assert_eq!(d.size, crate::tools::dynamics::Follow::Pressure);
+        assert_eq!((d.min_size, d.pressure.curve), (25, 2.0));
+        assert!(brushes[0].summary().contains("size by pressure"));
+        // Written again, it keeps them as dynamics.
+        let again = unpack(&pack(&brushes)).unwrap();
+        assert_eq!(again[0].dynamics, Some(d));
+        assert_eq!(again[0].pressure, None);
+        // A brush from before dynamics or pressure brings none.
+        let plain = unpack(br#"{"pixl brushes": 1, "brushes": [{"name": "P"}]}"#).unwrap();
+        assert_eq!(plain[0].dynamics, None);
     }
 
     #[test]

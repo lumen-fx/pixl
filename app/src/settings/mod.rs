@@ -1,5 +1,5 @@
-//! The user's settings: how the view navigates, how the pen paints, how
-//! the canvas and the interface look, how files are kept, how the editor
+//! The user's settings: how the view navigates, each brush tool's
+//! dynamics, how the canvas and the interface look, how files are kept, how the editor
 //! spends its time, and the keyboard shortcuts. They are kept as JSON in
 //! pixl's folder of the user data directory and take effect as they change.
 //!
@@ -20,9 +20,11 @@ use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::editor::Tool;
 use crate::home::Home;
 use crate::ids::ElementIds;
 use crate::settings::store::Store;
+use crate::tools::dynamics::ToolDynamics;
 
 /// The settings file in pixl's data folder.
 pub const SETTINGS_FILE: &str = "settings.json";
@@ -73,44 +75,6 @@ impl Default for NavigationSettings {
             key_pan_fast: crate::view::input::KEY_PAN_FAST,
             invert_wheel: false,
         }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(default)]
-pub struct PenSettings {
-    /// Pen pressure sets the brush size.
-    pub pressure: bool,
-    /// The pressure curve's exponent: below 1 a light touch already paints
-    /// wide, above 1 it takes a firm press.
-    pub curve: f64,
-    /// The brush size at the lightest touch and at full pressure, as
-    /// percentages of the tool's size.
-    pub min_size: u32,
-    pub max_size: u32,
-}
-
-impl Default for PenSettings {
-    fn default() -> Self {
-        Self {
-            pressure: true,
-            curve: 1.0,
-            min_size: 0,
-            max_size: 100,
-        }
-    }
-}
-
-impl PenSettings {
-    /// The share of the tool's size a press of `pressure` paints with.
-    pub fn scale(&self, pressure: f32) -> f64 {
-        let p = f64::from(pressure.clamp(0.0, 1.0));
-        let curved = p.powf(self.curve.clamp(0.1, 10.0));
-        let (lo, hi) = (
-            f64::from(self.min_size.min(400)) / 100.0,
-            f64::from(self.max_size.min(400)) / 100.0,
-        );
-        lo + (hi - lo) * curved
     }
 }
 
@@ -315,7 +279,9 @@ pub struct ShortcutSettings {
 pub struct Settings {
     pub version: u32,
     pub navigation: NavigationSettings,
-    pub pen: PenSettings,
+    /// Each brush tool's dynamics, by the tool's button id. A tool that is
+    /// not listed has the dynamics it starts with.
+    pub dynamics: BTreeMap<String, ToolDynamics>,
     pub canvas: CanvasSettings,
     pub interface: InterfaceSettings,
     pub files: FileSettings,
@@ -329,7 +295,7 @@ impl Default for Settings {
         Self {
             version: 1,
             navigation: NavigationSettings::default(),
-            pen: PenSettings::default(),
+            dynamics: BTreeMap::new(),
             canvas: CanvasSettings::default(),
             interface: InterfaceSettings::default(),
             files: FileSettings::default(),
@@ -361,7 +327,7 @@ impl Settings {
                 };
             }
             read!(navigation);
-            read!(pen);
+            read!(dynamics);
             read!(canvas);
             read!(interface);
             read!(files);
@@ -370,8 +336,33 @@ impl Settings {
             read!(color);
             s
         });
+        // The pen settings of an older pixl sized the pencil and the
+        // eraser by pressure; they carry over as those tools' dynamics.
+        if value.get("dynamics").is_none()
+            && let Some(d) = value.get("pen").and_then(ToolDynamics::from_pen)
+        {
+            for tool in [Tool::Pencil, Tool::Eraser] {
+                s.dynamics.insert(tool.button_id().to_string(), d.clone());
+            }
+        }
         s.clamp();
         s
+    }
+
+    /// The dynamics `tool` paints with.
+    pub fn dynamics(&self, tool: Tool) -> ToolDynamics {
+        self.dynamics
+            .get(tool.button_id())
+            .cloned()
+            .unwrap_or_else(|| ToolDynamics::for_tool(tool))
+    }
+
+    /// Sets the dynamics `tool` paints with.
+    pub fn set_dynamics(&mut self, tool: Tool, mut d: ToolDynamics) {
+        d.clamp();
+        if self.dynamics(tool) != d {
+            self.dynamics.insert(tool.button_id().to_string(), d);
+        }
     }
 
     pub fn to_json(&self) -> Vec<u8> {
@@ -385,10 +376,9 @@ impl Settings {
         n.pan_speed = finite(n.pan_speed, 1.0).clamp(0.1, 8.0);
         n.key_pan_speed = finite(n.key_pan_speed, 900.0).clamp(50.0, 10000.0);
         n.key_pan_fast = finite(n.key_pan_fast, 3.0).clamp(1.0, 20.0);
-        let p = &mut self.pen;
-        p.curve = finite(p.curve, 1.0).clamp(0.1, 10.0);
-        p.min_size = p.min_size.min(400);
-        p.max_size = p.max_size.clamp(1, 400);
+        for d in self.dynamics.values_mut() {
+            d.clamp();
+        }
         let c = &mut self.canvas;
         c.checker_size = c.checker_size.clamp(1, 128);
         c.grid_from_zoom = finite(c.grid_from_zoom, 800.0).clamp(100.0, 6400.0);
@@ -649,8 +639,8 @@ mod tests {
 
     #[test]
     fn a_partial_or_broken_file_keeps_the_defaults_it_lacks() {
-        let s = Settings::from_json(br#"{"pen": {"curve": 2.0}, "canvas": "nonsense"}"#);
-        assert_eq!(s.pen.curve, 2.0);
+        let s = Settings::from_json(br#"{"navigation": {"pan_speed": 2.0}, "canvas": "nonsense"}"#);
+        assert_eq!(s.navigation.pan_speed, 2.0);
         assert_eq!(s.canvas, CanvasSettings::default());
         assert_eq!(Settings::from_json(b"not json"), Settings::default());
     }
@@ -666,14 +656,28 @@ mod tests {
     }
 
     #[test]
-    fn the_pressure_curve_maps_between_the_sizes() {
-        let mut pen = PenSettings::default();
-        assert_eq!(pen.scale(1.0), 1.0);
-        assert_eq!(pen.scale(0.0), 0.0);
-        pen.curve = 2.0;
-        assert!((pen.scale(0.5) - 0.25).abs() < 1e-9);
-        pen.min_size = 50;
-        assert!((pen.scale(0.0) - 0.5).abs() < 1e-9);
+    fn an_older_files_pen_settings_carry_over_to_the_pencil_and_the_eraser() {
+        let s = Settings::from_json(
+            br#"{"pen": {"pressure": true, "curve": 2.0, "min_size": 20, "max_size": 100}}"#,
+        );
+        for tool in [Tool::Pencil, Tool::Eraser] {
+            let d = s.dynamics(tool);
+            assert_eq!(d.pressure.curve, 2.0, "{tool:?}");
+            assert_eq!(d.min_size, 20, "{tool:?}");
+        }
+        assert_eq!(s.dynamics(Tool::Brush), ToolDynamics::for_tool(Tool::Brush));
+        let off = Settings::from_json(br#"{"pen": {"pressure": false}}"#);
+        assert_eq!(
+            off.dynamics(Tool::Pencil).size,
+            crate::tools::dynamics::Follow::Off
+        );
+        // A file with dynamics of its own ignores the old key.
+        let mut mine = Settings::default();
+        mine.set_dynamics(Tool::Pencil, ToolDynamics::default());
+        let mut json: serde_json::Value = serde_json::from_slice(&mine.to_json()).unwrap();
+        json["pen"] = serde_json::json!({"curve": 3.0});
+        let back = Settings::from_json(json.to_string().as_bytes());
+        assert_eq!(back.dynamics(Tool::Pencil), ToolDynamics::default());
     }
 
     #[test]
@@ -683,12 +687,15 @@ mod tests {
         let (mut s, mut store) = SettingsStore::load(Store::at(&dir));
         let t0 = Instant::now();
         assert_eq!(store.save(&s, t0), None);
-        s.pen.pressure = false;
+        s.set_dynamics(Tool::Brush, ToolDynamics::for_tool(Tool::Pencil));
         assert!(store.save(&s, t0).is_some());
         assert!(!path.exists());
         assert_eq!(store.save(&s, t0 + SAVE_AFTER), None);
         let (back, _) = SettingsStore::load(Store::at(&dir));
-        assert!(!back.pen.pressure);
+        assert_eq!(
+            back.dynamics(Tool::Brush),
+            ToolDynamics::for_tool(Tool::Pencil)
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
