@@ -298,7 +298,7 @@ impl PaintJob {
             return false;
         }
         if let Some(tx) = self.tx.take() {
-            editor.history.commit(&editor.doc, tx);
+            editor.history.commit(&mut editor.doc, tx);
         }
         true
     }

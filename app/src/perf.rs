@@ -444,7 +444,7 @@ pub fn document_bytes(doc: &Document) -> u64 {
     let mut total = 0u64;
     for (_, layer) in doc.walk() {
         let ids: Vec<ImageId> = match &layer.kind {
-            LayerKind::Raster { cels, mask } => cels
+            LayerKind::Raster { cels, mask, .. } => cels
                 .iter()
                 .flatten()
                 .map(|c| c.image)

@@ -91,13 +91,16 @@ fn deep_copy(doc: &mut Document, layer: &Layer) -> Layer {
         if let Some(c) = copies.get(&image) {
             return *c;
         }
-        let raster = doc.images[&image].clone();
-        let fresh = doc.alloc_image(raster);
+        let fresh = doc.copy_image(image);
         copies.insert(image, fresh);
         fresh
     };
     let kind = match &layer.kind {
-        LayerKind::Raster { cels, mask } => {
+        LayerKind::Raster {
+            cels,
+            mask,
+            tileset,
+        } => {
             let cels = cels
                 .iter()
                 .map(|c| {
@@ -111,7 +114,11 @@ fn deep_copy(doc: &mut Document, layer: &Layer) -> Layer {
                 image: copy(doc, m.image),
                 enabled: m.enabled,
             });
-            LayerKind::Raster { cels, mask }
+            LayerKind::Raster {
+                cels,
+                mask,
+                tileset: *tileset,
+            }
         }
         LayerKind::Group { children } => LayerKind::Group {
             children: children.iter().map(|c| deep_copy(doc, c)).collect(),
@@ -201,6 +208,7 @@ impl Document {
         let LayerKind::Raster {
             cels: below_cels,
             mask: below_mask,
+            ..
         } = &below.kind
         else {
             return Err(Error::NotRaster(below_id));
@@ -263,13 +271,15 @@ impl Document {
             result.push(cel);
         }
         let keep_mask = below_mask.filter(|m| !m.enabled);
-        if let Some(LayerKind::Raster { cels, mask }) =
+        if let Some(LayerKind::Raster { cels, mask, .. }) =
             self.layer_mut(below_id).map(|l| &mut l.kind)
         {
             *cels = result;
             *mask = keep_mask;
         }
         self.remove_layer(id)?;
+        // Merged onto a tilemap layer, the new cels are cut into tiles.
+        self.retile_missing();
         Ok(below_id)
     }
 
@@ -306,7 +316,11 @@ impl Document {
         let flat = Layer {
             id,
             props: LayerProps::named("Flattened"),
-            kind: LayerKind::Raster { cels, mask: None },
+            kind: LayerKind::Raster {
+                cels,
+                mask: None,
+                tileset: None,
+            },
         };
         let roots = std::mem::take(&mut self.s.layers);
         let first = roots
@@ -333,6 +347,7 @@ impl Document {
             LayerKind::Raster {
                 cels,
                 mask: Some(m),
+                ..
             } => (cels.clone(), *m),
             _ => return Err(Error::NotRaster(id)),
         };
@@ -385,11 +400,13 @@ impl Document {
             done.insert(cel.image, image);
             fresh.push(Some(Cel { image, ..*cel }));
         }
-        if let Some(LayerKind::Raster { cels, mask }) = self.layer_mut(id).map(|l| &mut l.kind) {
+        if let Some(LayerKind::Raster { cels, mask, .. }) = self.layer_mut(id).map(|l| &mut l.kind)
+        {
             *cels = fresh;
             *mask = None;
         }
         self.collect_garbage();
+        self.retile_missing();
         Ok(self.bounds())
     }
 }

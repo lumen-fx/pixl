@@ -1,9 +1,13 @@
 //! Aseprite files saved by Aseprite itself, checked against PNGs of the same
-//! frames. The files come from the test data of the asefile crate
+//! frames (and, for tilesets, PNGs of their tiles). The files come from the
+//! test data of the asefile crate
 //! (<https://github.com/alpine-alpaca/asefile>), MIT licensed; the license is
 //! in `tests/data/aseprite/LICENSE`.
 
-use pixl_document::{ColorMode, CompositeOptions, Document, LayerKind, composite_frame};
+use pixl_document::{
+    ColorMode, CompositeOptions, Document, LayerId, LayerKind, Point, Rgba, TilesetId,
+    composite_frame,
+};
 use pixl_io::aseprite::{ImportWarning, export_aseprite, import_aseprite};
 use pixl_io::png::decode_png;
 
@@ -177,14 +181,174 @@ fn cels_larger_than_the_canvas_are_cropped() {
     assert_eq!((r.width(), r.height()), (d.width(), d.height()));
 }
 
+/// The tilemap layers of a document, bottom first.
+fn tilemaps(d: &Document) -> Vec<LayerId> {
+    d.walk()
+        .iter()
+        .filter(|(_, l)| l.is_tilemap())
+        .map(|(_, l)| l.id)
+        .collect()
+}
+
+/// A tile's pixels as RGBA, row-major.
+fn tile_rgba(d: &Document, ts: TilesetId, index: u32) -> Vec<Rgba> {
+    let set = d.tileset(ts).unwrap();
+    set.tile(index)
+        .unwrap()
+        .iter()
+        .map(|&v| match d.mode() {
+            ColorMode::Rgba => Rgba::from_u32(v),
+            ColorMode::Indexed => d.palette().get(v as u8),
+        })
+        .collect()
+}
+
+/// Compares RGBA pixels with a PNG; fully transparent pixels match any
+/// color.
+fn assert_pixels(actual: &[Rgba], png: &str) {
+    let expected = decode_png(&file(png)).unwrap().to_rgba();
+    assert_eq!(actual.len(), expected.len(), "{png}");
+    for (i, (a, e)) in actual.iter().zip(&expected).enumerate() {
+        assert!(
+            a == e || (a.a == 0 && e.a == 0),
+            "{png}: pixel {i} is {a:?}, expected {e:?}"
+        );
+    }
+}
+
 #[test]
-fn tilemap_layers_are_skipped_with_a_warning() {
-    let (_, w) = import("tilemap.aseprite");
-    assert!(
-        w.iter()
-            .any(|w| matches!(w, ImportWarning::TilemapSkipped { .. })),
-        "{w:?}"
+fn tilemaps_open_as_tilemap_layers() {
+    for (name, png) in [
+        ("tilemap.aseprite", "tilemap.png"),
+        ("tilemap_indexed.aseprite", "tilemap_indexed.png"),
+        ("tilemap_grayscale.aseprite", "tilemap_grayscale.png"),
+    ] {
+        let (d, w) = import(name);
+        assert!(
+            w.iter()
+                .all(|w| matches!(w, ImportWarning::GrayscaleConverted)),
+            "{name}: {w:?}"
+        );
+        assert!(!d.tilesets().is_empty(), "{name}");
+        assert_eq!(d.tilesets()[0].name, "test_tileset");
+        assert!(!tilemaps(&d).is_empty(), "{name}");
+        assert_frame(&d, 0, png);
+    }
+}
+
+#[test]
+fn tilesets_keep_their_tiles() {
+    let (d, _) = import("tileset.aseprite");
+    let ts = d.tilesets()[0].id;
+    let set = d.tileset(ts).unwrap();
+    assert_eq!(set.tile_size(), (16, 16));
+    // Aseprite's tileset image: every tile, the empty one first, in a column.
+    let strip: Vec<Rgba> = (0..set.len() as u32)
+        .flat_map(|i| tile_rgba(&d, ts, i))
+        .collect();
+    assert_pixels(&strip, "tileset.png");
+    assert_pixels(&tile_rgba(&d, ts, 1), "tileset_1.png");
+}
+
+#[test]
+fn tilemaps_share_tilesets_and_keep_their_cells() {
+    let (d, _) = import("tilemap_multi.aseprite");
+    assert_frame(&d, 0, "tilemap_multi.png");
+    let maps = tilemaps(&d);
+    assert_eq!(maps.len(), 2);
+    for (layer, png) in maps
+        .iter()
+        .zip(["tilemap_multi_map1.png", "tilemap_multi_map2.png"])
+    {
+        // One layer alone, as Aseprite exports it.
+        let mut alone = d.clone();
+        for (_, l) in d.walk() {
+            alone
+                .update_layer(l.id, |p| p.visible = l.id == *layer)
+                .unwrap();
+        }
+        assert_frame(&alone, 0, png);
+    }
+    let map1 = d
+        .walk()
+        .iter()
+        .find(|(_, l)| l.props.name == "Tilemap 1")
+        .map(|(_, l)| l.id)
+        .unwrap();
+    let ts = d.layer_tileset(map1).unwrap();
+    assert_eq!(d.tileset(ts).unwrap().tile_size(), (20, 16));
+    assert_pixels(&tile_rgba(&d, ts, 3), "tilemap_single_tile_1.png");
+    // Cells as asefile reads them, relative to the cel's own grid.
+    let grid = d.tile_grid(map1, 0).unwrap().unwrap();
+    let cell = |x: i32, y: i32| {
+        let p = Point::new(grid.origin.x, grid.origin.y);
+        let at = d
+            .tile_at(map1, 0, Point::new(p.x + x * 20, p.y + y * 16))
+            .unwrap();
+        at.map_or(0, |(_, t)| t.index())
+    };
+    // The grid starts at the canvas's first column of cells; asefile counts
+    // from the cel's first stored cell, which is the same here.
+    assert_eq!(
+        (cell(0, 0), cell(0, 2), cell(0, 3), cell(11, 5), cell(4, 7)),
+        (0, 4, 2, 3, 3)
     );
+}
+
+#[test]
+fn tiles_at_the_edges_keep_their_empty_pixels() {
+    let (d, _) = import("tilemap_empty_edges.aseprite");
+    let layer = tilemaps(&d)[0];
+    let ts = d.layer_tileset(layer).unwrap();
+    let grid = d.tile_grid(layer, 0).unwrap().unwrap();
+    let o = grid.origin;
+    let t00 = d.tile_at(layer, 0, o).unwrap().unwrap().1;
+    assert_eq!(t00.index(), 1);
+    assert_pixels(
+        &tile_rgba(&d, ts, t00.index()),
+        "tilemap_empty_edges_0_0.png",
+    );
+    let t01 = d
+        .tile_at(layer, 0, Point::new(o.x, o.y + 16))
+        .unwrap()
+        .unwrap()
+        .1;
+    assert_pixels(
+        &tile_rgba(&d, ts, t01.index()),
+        "tilemap_empty_edges_0_1.png",
+    );
+}
+
+#[test]
+fn tilemaps_survive_a_round_trip() {
+    for name in [
+        "tilemap.aseprite",
+        "tilemap_indexed.aseprite",
+        "tilemap_multi.aseprite",
+        "tileset.aseprite",
+    ] {
+        let d = import_aseprite(&file(name)).unwrap().document;
+        let again = import_aseprite(&export_aseprite(&d).unwrap().bytes)
+            .unwrap()
+            .document;
+        assert_eq!(again.tilesets().len(), d.tilesets().len(), "{name}");
+        for (a, b) in d.tilesets().iter().zip(again.tilesets()) {
+            assert_eq!(a.tiles().collect::<Vec<_>>(), b.tiles().collect::<Vec<_>>());
+            assert_eq!((&a.name, a.base_index), (&b.name, b.base_index));
+        }
+        let (ma, mb) = (tilemaps(&d), tilemaps(&again));
+        assert_eq!(ma.len(), mb.len(), "{name}");
+        for (a, b) in ma.iter().zip(&mb) {
+            for f in 0..d.frame_count() {
+                let cells = |doc: &Document, l: LayerId| {
+                    doc.tile_grid(l, f)
+                        .unwrap()
+                        .map(|g| (g.origin, g.to_cells()))
+                };
+                assert_eq!(cells(&d, *a), cells(&again, *b), "{name} frame {f}");
+            }
+        }
+    }
 }
 
 #[test]
@@ -194,6 +358,7 @@ fn truncated_samples_error_cleanly() {
         "linked_cels.aseprite",
         "slice_advanced.aseprite",
         "tilemap.aseprite",
+        "tilemap_multi.aseprite",
     ] {
         let bytes = file(name);
         for len in 0..bytes.len() {

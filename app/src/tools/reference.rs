@@ -169,7 +169,7 @@ pub fn place_reference(
     let Some((size, now)) = reference.filter(|_| active) else {
         // A drag ends with its layer: what it did so far is kept.
         if let Some(d) = state.drag.take() {
-            editor.history.commit(&editor.doc, d.tx);
+            editor.history.commit(&mut editor.doc, d.tx);
         }
         if state.shown.take().is_some() {
             aids.transform_box = None;
@@ -248,7 +248,7 @@ pub fn place_reference(
                 ..
             } => {
                 if let Some(d) = state.drag.take() {
-                    editor.history.commit(&editor.doc, d.tx);
+                    editor.history.commit(&mut editor.doc, d.tx);
                     editor.touch();
                 }
             }

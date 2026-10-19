@@ -325,7 +325,7 @@ pub fn jump_to(editor: &mut Editor, k: usize) {
 /// Ends an opacity or blend edit, making it one undo step.
 pub fn close_edit(editor: &mut Editor, panels: &mut Panels) {
     if let Some(tx) = panels.editing.take() {
-        editor.history.commit(&editor.doc, tx);
+        editor.history.commit(&mut editor.doc, tx);
         editor.touch();
     }
 }

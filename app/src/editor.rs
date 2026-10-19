@@ -342,13 +342,21 @@ impl Editor {
         self.touch_layers(&[layer]);
     }
 
-    /// Records that only the pixels of `layers` changed.
+    /// Records that only the pixels of `layers` changed. An edit to a
+    /// tilemap layer can change the tiles every layer of its tileset shows,
+    /// so those count as changed too.
     pub fn touch_layers(&mut self, layers: &[LayerId]) {
         self.revision += 1;
         if let Touched::Layers(ids) = &mut self.touched {
             for layer in layers {
-                if !ids.contains(layer) {
-                    ids.push(*layer);
+                let sharing = match self.doc.layer(*layer).and_then(|l| l.tileset()) {
+                    Some(ts) => self.doc.tilemap_layers(ts),
+                    None => vec![*layer],
+                };
+                for l in sharing.into_iter().chain([*layer]) {
+                    if !ids.contains(&l) {
+                        ids.push(l);
+                    }
                 }
             }
         }

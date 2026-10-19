@@ -323,7 +323,7 @@ fn finish(editor: &mut Editor, mut s: Session, keep: bool) {
         // What the preview has still to draw is the result.
         pump(editor, &mut s, None);
         if let Some(tx) = s.tx.take() {
-            editor.history.commit(&editor.doc, tx);
+            editor.history.commit(&mut editor.doc, tx);
         }
     } else {
         s.job = None;

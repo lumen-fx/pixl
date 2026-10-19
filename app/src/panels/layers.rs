@@ -1507,7 +1507,7 @@ pub fn layer_input(
         && let Some(paint) = panel.paint.take()
         && let Some(tx) = paint.tx
     {
-        editor.history.commit(&editor.doc, tx);
+        editor.history.commit(&mut editor.doc, tx);
         editor.touch();
     }
     if released

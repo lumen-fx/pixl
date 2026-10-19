@@ -445,14 +445,17 @@ document. A file from a newer pixl opens in an older one when the newer data
 is optional; what the older version cannot read is skipped with a warning.
 Format 1.2 added full-resolution reference images: a pixl that reads format
 1.1 opens such a file without its references, and references in older files
-open where they were, one image pixel to a canvas pixel.
+open where they were, one image pixel to a canvas pixel. Format 1.3 added
+tilesets and tilemap layers: a pixl that reads format 1.2 opens each tilemap
+layer as an ordinary layer showing the same pixels, without its tileset.
 
 Aseprite `.ase` and `.aseprite` files open and save as a first-class format:
-layers and groups, linked cels, RGBA and indexed color, the palette, tags and
-slices carry over. An Aseprite reference layer opens as a reference at the
-cel's own size and place. What one side cannot hold (pixl's layer masks and
-clipping, Aseprite's tilemaps) is listed as a warning instead of dropped
-silently. Saving as Aseprite leaves reference layers out, as every export
+layers and groups, linked cels, RGBA and indexed color, the palette, tags,
+slices, tilesets and tilemap layers carry over, with each cell's tile and
+flips. An Aseprite reference layer opens as a reference at the cel's own
+size and place. What one side cannot hold (pixl's layer masks and clipping,
+tilesets Aseprite keeps in another file) is listed as a warning instead of
+dropped silently. Saving as Aseprite leaves reference layers out, as every export
 does, and lists each one.
 
 Animations export as GIF with each frame's duration. One palette covers the
@@ -542,7 +545,7 @@ something different.
 - `crates/document` (`pixl-document`): the document model, with no UI:
   layers, cels, frames, tags and slices, palettes and their files,
   selections, undo history, compositing, transforms, reference images,
-  skeleton rigs, and the native `.pixl` format.
+  skeleton rigs, tilesets and tilemap layers, and the native `.pixl` format.
 - `crates/paint` (`pixl-paint`): the raster tools and filters: the pencil,
   brushes and inks, fills, gradients, shapes and text, and the adjustments
   and effects.

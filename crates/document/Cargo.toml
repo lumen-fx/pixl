@@ -1,6 +1,6 @@
 [package]
 name = "pixl-document"
-description = "The pixl document model: layers, cels, frames, palettes, selections, undo history, compositing, transforms, skeleton rigs and the .pixl file format"
+description = "The pixl document model: layers, cels, frames, palettes, selections, undo history, compositing, transforms, skeleton rigs, tilesets and tilemaps, and the .pixl file format"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

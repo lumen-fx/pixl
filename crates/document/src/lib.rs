@@ -1,6 +1,6 @@
 //! The pixl document: layers, cels, frames, tags and slices, the palette,
 //! selections, undo history, compositing, transforms, references, skeletons
-//! and pose-to-frame, and the native `.pixl` file format. It has no UI
+//! and pose-to-frame, tilesets and tilemap layers, and the native `.pixl` file format. It has no UI
 //! dependency; the editor's UI drives it, and `pixl-paint` and `pixl-io`
 //! build on it.
 
@@ -20,6 +20,7 @@ pub mod reference;
 pub mod rig;
 pub mod selection;
 pub mod shapes;
+pub mod tiles;
 pub mod transform;
 
 pub use color::{Color, ColorMode, Hsl, Hsv, Palette, Rgba};
@@ -40,6 +41,7 @@ pub use rig::{
     Region, RenderOptions, Rig, RigFrame, Rigid, Vec2,
 };
 pub use selection::{SelectOp, Selection};
+pub use tiles::{TileFlags, TileGrid, TileMode, TileRef, Tileset, TilesetId};
 pub use transform::{
     Affine, CanvasTransform, CelTransform, Pixels, Resample, crop, resize_canvas, transform_canvas,
     transform_cel,

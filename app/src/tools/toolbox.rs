@@ -635,7 +635,7 @@ fn end_stroke(editor: &mut Editor, s: StrokeSession) {
         stroke.finish(&mut canvas);
     }
     if let Some(tx) = tx {
-        editor.history.commit(&editor.doc, tx);
+        editor.history.commit(&mut editor.doc, tx);
         editor.touch_pixels();
     }
 }

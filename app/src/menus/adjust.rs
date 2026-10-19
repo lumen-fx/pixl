@@ -365,7 +365,7 @@ pub fn filter_commands(
     let finished = s.job.as_ref().is_none_or(|(_, j)| j.complete());
     if s.applying && finished {
         if let Some(tx) = s.tx.take() {
-            editor.history.commit(&editor.doc, tx);
+            editor.history.commit(&mut editor.doc, tx);
         }
         editor.touch_pixels();
         let _ = s.title;

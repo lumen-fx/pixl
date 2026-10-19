@@ -908,7 +908,7 @@ pub fn timeline_input(
                 index,
                 ..
             }) => {
-                editor.history.commit(&editor.doc, *tx);
+                editor.history.commit(&mut editor.doc, *tx);
                 editor.touch();
                 select_tag(tl, editor, index, &order);
             }

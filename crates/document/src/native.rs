@@ -46,6 +46,22 @@
 //!   holds them) and where it sits over the canvas (center, scale per axis,
 //!   turn). They are left out of `LAYR` and their images out of `IMAG`, so a
 //!   1.1 reader skips them with a warning and opens the rest.
+//! - `TSET` (since 1.3) the tilesets: each one's id, name, tile width and
+//!   height, base index, the flips Auto mode matches (bit 0 X, bit 1 Y, bit
+//!   2 diagonal), then its tiles after the empty tile 0, each tile's pixels
+//!   row-major as the document's color mode stores them (4 bytes RGBA, or 1
+//!   byte index).
+//! - `TMAP` (since 1.3) the tilemap layers: each one's layer id and tileset
+//!   id, then the grid of every tilemap cel by the cel's image id: the
+//!   canvas position of cell (0, 0), columns, rows and a u32 per cell, row
+//!   by row, packed as Aseprite packs them (tile index in the low 29 bits,
+//!   then diagonal, Y and X flips in bits 29, 30 and 31).
+//!
+//! A tilemap layer is also an ordinary raster layer in `LAYR`, its cels in
+//! `CELS` and their images, the grids drawn out, in `IMAG`. A 1.2 reader
+//! skips `TSET` and `TMAP` with a warning and opens each tilemap layer as a
+//! raster layer showing the same pixels. A 1.3 reader draws the cels from
+//! their grids again on opening, so the grids are what counts.
 //!
 //! Compression is zlib (deflate) through `flate2`: pure Rust, already used by
 //! PNG and needed for Aseprite cels, so pixl carries one codec for all three.
@@ -69,12 +85,13 @@ use crate::reference::ReferencePlace;
 use crate::rig::{
     Binding, Bone, BoneId, BonePose, Easing, NamedPose, Pose, PoseKey, Region, Rig, RigFrame, Vec2,
 };
+use crate::tiles::{TileFlags, TileGrid, TileRef, Tileset, TilesetId};
 
 /// The first 8 bytes of every `.pixl` file.
 pub const SIGNATURE: [u8; 8] = *b"\x89PXL\r\n\x1a\n";
 /// The format version this build writes. It reads every file of the same
 /// major version.
-pub const VERSION: (u16, u16) = (1, 2);
+pub const VERSION: (u16, u16) = (1, 3);
 
 const CRITICAL: u32 = 1;
 const COMPRESSED: u32 = 2;
@@ -404,6 +421,10 @@ fn read_vec2(r: &mut Reader) -> Result<Vec2, Error> {
     Ok(Vec2::new(read_f64(r)?, read_f64(r)?))
 }
 
+fn flips_code(f: TileFlags) -> u8 {
+    f.x as u8 | (f.y as u8) << 1 | (f.d as u8) << 2
+}
+
 fn easing_code(e: Easing) -> u8 {
     match e {
         Easing::Linear => 0,
@@ -692,7 +713,10 @@ pub fn save(doc: &Document, opts: SaveOptions) -> Vec<u8> {
     cels.u32(0);
     masks.u32(0);
     for (_, l) in doc.walk() {
-        if let LayerKind::Raster { cels: list, mask } = &l.kind {
+        if let LayerKind::Raster {
+            cels: list, mask, ..
+        } = &l.kind
+        {
             for (frame, cel) in list.iter().enumerate() {
                 if let Some(c) = cel {
                     cels.u32(l.id.0);
@@ -793,6 +817,56 @@ pub fn save(doc: &Document, opts: SaveOptions) -> Vec<u8> {
         out.chunk(b"REFS", false, w.buf);
     }
 
+    if !s.tilesets.is_empty() {
+        let mut w = Writer::new();
+        w.u32(s.tilesets.len() as u32);
+        for ts in &s.tilesets {
+            w.u32(ts.id.0);
+            string(&mut w, &ts.name);
+            let (tw, th) = ts.tile_size();
+            w.u32(tw);
+            w.u32(th);
+            w.i32(ts.base_index);
+            w.u8(flips_code(ts.match_flips));
+            w.u32(ts.len() as u32 - 1);
+            for tile in ts.tiles().skip(1) {
+                for &v in tile {
+                    match s.mode {
+                        ColorMode::Rgba => rgba(&mut w, Rgba::from_u32(v)),
+                        ColorMode::Indexed => w.u8(v as u8),
+                    }
+                }
+            }
+        }
+        out.chunk(b"TSET", false, w.buf);
+
+        let mut w = Writer::new();
+        let maps: Vec<&Layer> = doc
+            .walk()
+            .into_iter()
+            .map(|(_, l)| l)
+            .filter(|l| l.is_tilemap())
+            .collect();
+        w.u32(maps.len() as u32);
+        for l in &maps {
+            w.u32(l.id.0);
+            w.u32(l.tileset().expect("a tilemap layer").0);
+        }
+        let grids: Vec<(&ImageId, &TileGrid)> = s.tilemaps.iter().collect();
+        w.u32(grids.len() as u32);
+        for (img, g) in grids {
+            w.u32(img.0);
+            w.i32(g.origin.x);
+            w.i32(g.origin.y);
+            w.u32(g.cols());
+            w.u32(g.rows());
+            for t in g.to_cells() {
+                w.u32(t.0);
+            }
+        }
+        out.chunk(b"TMAP", false, w.buf);
+    }
+
     out.chunk(b"END ", true, Vec::new());
     out.out
 }
@@ -822,7 +896,23 @@ struct Parts {
     rigs: Option<Vec<(u32, u32, Layer)>>,
     /// Reference layers with their images, from `REFS`.
     refs: Option<Vec<(u32, u32, Layer, RawImage)>>,
+    tilesets: Option<Vec<RawTileset>>,
+    /// Tilemap layers with their tilesets, and the grids by cel image.
+    tilemaps: Option<RawTilemaps>,
 }
+
+/// A tileset as `TSET` holds it, before the color mode is known.
+struct RawTileset {
+    id: TilesetId,
+    name: String,
+    size: (u32, u32),
+    base_index: i32,
+    match_flips: TileFlags,
+    count: usize,
+    pixels: Vec<u8>,
+}
+
+type RawTilemaps = (Vec<(LayerId, TilesetId)>, Vec<(ImageId, TileGrid)>);
 
 fn once<T>(slot: &mut Option<T>, value: T, tag: &str) -> Result<(), Error> {
     if slot.is_some() {
@@ -869,8 +959,11 @@ fn read_head(r: &mut Reader) -> Result<Structure, Error> {
         frames: Vec::new(),
         tags: Vec::new(),
         slices: Vec::new(),
+        tilesets: Vec::new(),
+        tilemaps: BTreeMap::new(),
         next_layer,
         next_image,
+        next_tileset: 1,
     })
 }
 
@@ -941,6 +1034,7 @@ fn read_layer(r: &mut Reader, depth: usize) -> Result<Layer, Error> {
         KIND_RASTER => LayerKind::Raster {
             cels: Vec::new(),
             mask: None,
+            tileset: None,
         },
         KIND_GROUP => {
             let n = r.count(12)?;
@@ -1147,6 +1241,76 @@ fn read_chunk_payload(tag: &[u8; 4], r: &mut Reader, parts: &mut Parts) -> Resul
             }
             once(&mut parts.refs, refs, "REFS")?;
         }
+        b"TSET" => {
+            // Pixels are stored in the color mode, which HEAD, always first,
+            // gives.
+            let bpp = match parts.head.as_ref().map(|h| h.mode) {
+                Some(ColorMode::Rgba) => 4,
+                Some(ColorMode::Indexed) => 1,
+                None => return Err(corrupt("TSET chunk before HEAD")),
+            };
+            let n = r.count(25)?;
+            let mut sets = Vec::with_capacity(n);
+            for _ in 0..n {
+                let id = TilesetId(r.u32()?);
+                let name = read_string(r)?;
+                let size = (r.u32()?, r.u32()?);
+                let base_index = r.i32()?;
+                let f = r.u8()?;
+                let match_flips = TileFlags {
+                    x: f & 1 != 0,
+                    y: f & 2 != 0,
+                    d: f & 4 != 0,
+                };
+                let count = r.u32()? as usize;
+                if size.0 == 0
+                    || size.1 == 0
+                    || size.0 > crate::tiles::MAX_TILE_SIZE
+                    || size.1 > crate::tiles::MAX_TILE_SIZE
+                {
+                    return Err(corrupt("a tileset has a bad tile size"));
+                }
+                let bytes = count
+                    .checked_mul(size.0 as usize * size.1 as usize * bpp)
+                    .filter(|&b| b <= r.remaining())
+                    .ok_or_else(|| corrupt("a tileset is truncated"))?;
+                sets.push(RawTileset {
+                    id,
+                    name,
+                    size,
+                    base_index,
+                    match_flips,
+                    count,
+                    pixels: r.take(bytes)?.to_vec(),
+                });
+            }
+            once(&mut parts.tilesets, sets, "TSET")?;
+        }
+        b"TMAP" => {
+            let n = r.count(8)?;
+            let mut layers = Vec::with_capacity(n);
+            for _ in 0..n {
+                layers.push((LayerId(r.u32()?), TilesetId(r.u32()?)));
+            }
+            let n = r.count(20)?;
+            let mut grids = Vec::with_capacity(n);
+            for _ in 0..n {
+                let image = ImageId(r.u32()?);
+                let origin = Point::new(r.i32()?, r.i32()?);
+                let (cols, rows) = (r.u32()?, r.u32()?);
+                let cells = (cols as usize)
+                    .checked_mul(rows as usize)
+                    .filter(|&c| c > 0 && c <= r.remaining() / 4)
+                    .ok_or_else(|| corrupt("a tile grid has a bad size"))?;
+                let refs = (0..cells)
+                    .map(|_| r.u32().map(TileRef))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let grid = TileGrid::from_cells(origin, cols, rows, &refs)
+                    .ok_or_else(|| corrupt("a tile grid has a bad size"))?;
+                grids.push((image, grid));
+            }
+            once(&mut parts.tilemaps, (layers, grids), "TMAP")?;
+        }
         _ => unreachable!("only known tags reach the payload reader"),
     }
     if !r.is_empty() {
@@ -1158,9 +1322,9 @@ fn read_chunk_payload(tag: &[u8; 4], r: &mut Reader, parts: &mut Parts) -> Resul
     Ok(())
 }
 
-const KNOWN: [&[u8; 4]; 13] = [
+const KNOWN: [&[u8; 4]; 15] = [
     b"HEAD", b"PLTE", b"FRMS", b"TILE", b"IMAG", b"LAYR", b"CELS", b"MASK", b"TAGS", b"SLCE",
-    b"RIGS", b"REFS", b"END ",
+    b"RIGS", b"REFS", b"TSET", b"TMAP", b"END ",
 ];
 
 /// Decodes a `.pixl` file. A truncated or corrupt file is an error, never a
@@ -1386,7 +1550,80 @@ fn assemble(parts: Parts) -> Result<Document, Error> {
     }
     doc.s.tags = tags;
     doc.s.slices = parts.slices.unwrap_or_default();
+    assemble_tilemaps(&mut doc, parts.tilesets, parts.tilemaps)?;
     Ok(doc)
+}
+
+/// Puts the tilesets and the tilemap layers' grids into a document read
+/// from a file, and draws the tilemap cels from their grids.
+fn assemble_tilemaps(
+    doc: &mut Document,
+    sets: Option<Vec<RawTileset>>,
+    maps: Option<RawTilemaps>,
+) -> Result<(), Error> {
+    let Some(sets) = sets else {
+        return Ok(());
+    };
+    let empty = doc.empty_raw();
+    for raw in sets {
+        let area = raw.size.0 as usize * raw.size.1 as usize;
+        let tiles: Vec<Vec<u32>> = match doc.s.mode {
+            ColorMode::Rgba => raw
+                .pixels
+                .chunks_exact(area * 4)
+                .map(|t| {
+                    t.chunks_exact(4)
+                        .map(|c| Rgba::new(c[0], c[1], c[2], c[3]).to_u32())
+                        .collect()
+                })
+                .collect(),
+            ColorMode::Indexed => raw
+                .pixels
+                .chunks_exact(area)
+                .map(|t| t.iter().map(|&v| v as u32).collect())
+                .collect(),
+        };
+        debug_assert_eq!(tiles.len(), raw.count);
+        let mut ts = Tileset::from_parts(raw.id, raw.name, raw.size, empty, tiles)
+            .map_err(|_| corrupt("a tileset is damaged"))?;
+        ts.base_index = raw.base_index;
+        ts.match_flips = raw.match_flips;
+        doc.insert_tileset(ts)
+            .map_err(|_| corrupt("a tileset appears twice"))?;
+    }
+    let (layers, grids) = maps.unwrap_or_default();
+    for (layer, ts) in layers {
+        let set = doc
+            .tileset(ts)
+            .ok_or_else(|| corrupt("a tilemap layer names a missing tileset"))?;
+        let len = set.len() as u32;
+        let cels = match &mut doc
+            .layer_mut(layer)
+            .ok_or(Error::LayerNotFound(layer))?
+            .kind
+        {
+            LayerKind::Raster { cels, tileset, .. } => {
+                *tileset = Some(ts);
+                cels.iter().flatten().map(|c| c.image).collect::<Vec<_>>()
+            }
+            _ => return Err(Error::NotRaster(layer)),
+        };
+        for (img, grid) in &grids {
+            if !cels.contains(img) {
+                continue;
+            }
+            let mut bad = false;
+            grid.to_cells().iter().for_each(|t| bad |= t.index() >= len);
+            if bad {
+                return Err(corrupt("a tile grid shows a tile its tileset lacks"));
+            }
+            doc.s.tilemaps.insert(*img, grid.clone());
+        }
+    }
+    doc.collect_garbage();
+    doc.retile_missing();
+    doc.redraw_tilemaps();
+    Ok(())
 }
 
 /// A pool image from its stored kind, size, fill and tile slots.
@@ -1965,21 +2202,163 @@ mod tests {
         assert_eq!(d.layer(photo).unwrap().props.opacity, 128);
         let sketch = d.walk()[3].1.id;
         assert_eq!(d.reference(sketch).unwrap().0.get(63, 31), Rgba::BLACK);
-        // Saved again it is a 1.2 file that holds the same document.
+        // Saved again it is a file of the current format that holds the
+        // same document.
         let again = save(&d, SaveOptions::default());
-        assert_eq!(&again[8..12], &[1, 0, 2, 0]);
+        assert_eq!(&again[8..12], &[1, 0, 3, 0]);
         assert_eq!(load(&again).unwrap().document, d);
+    }
+
+    /// Two tilemap layers sharing a tileset, one cel linked across frames,
+    /// flipped cells and a grid off the canvas's corner.
+    fn tiled(mode: ColorMode) -> Document {
+        let mut d = Document::new(40, 24, mode).unwrap();
+        d.insert_frame(1, 80).unwrap();
+        let ts = d.add_tileset("ground", 8, 8).unwrap();
+        d.update_tileset(ts, |name, base, flips| {
+            name.push_str(" tiles");
+            *base = 0;
+            flips.x = true;
+        })
+        .unwrap();
+        let red = d.palette().get(4).to_u32();
+        let black = d.palette().get(1).to_u32();
+        let (red, black) = match mode {
+            ColorMode::Rgba => (red, black),
+            ColorMode::Indexed => (4, 1),
+        };
+        let mut a = vec![black; 64];
+        a[7] = red;
+        let a = d.add_tile(ts, a).unwrap();
+        let b = d.add_tile(ts, vec![red; 64]).unwrap();
+        let one = d
+            .add_layer(
+                NewLayer::Tilemap { tileset: ts },
+                "map",
+                Placement::default(),
+            )
+            .unwrap();
+        let two = d
+            .add_layer(
+                NewLayer::Tilemap { tileset: ts },
+                "top",
+                Placement::default(),
+            )
+            .unwrap();
+        let flip = TileFlags {
+            x: true,
+            y: false,
+            d: true,
+        };
+        d.place_tiles(
+            one,
+            0,
+            &[Point::new(0, 0), Point::new(4, 2)],
+            TileRef::new(a, flip),
+        )
+        .unwrap();
+        d.fill_tile_rect(
+            one,
+            0,
+            Rect::new(1, 1, 2, 1),
+            TileRef::new(b, TileFlags::NONE),
+        )
+        .unwrap();
+        d.link_cel(one, 0, 1).unwrap();
+        d.place_tiles(
+            two,
+            1,
+            &[Point::new(2, 0)],
+            TileRef::new(a, TileFlags::NONE),
+        )
+        .unwrap();
+        crate::transform::crop(&mut d, Rect::new(3, 2, 36, 21)).unwrap();
+        d
+    }
+
+    #[test]
+    fn tilemaps_round_trip() {
+        for mode in [ColorMode::Rgba, ColorMode::Indexed] {
+            let d = tiled(mode);
+            let bytes = save(&d, SaveOptions::default());
+            let loaded = load(&bytes).unwrap();
+            assert!(loaded.warnings.is_empty());
+            assert_eq!(loaded.document, d, "{mode:?}");
+            let one = d.walk()[1].1.id;
+            assert_eq!(loaded.document.linked_frames(one, 0).unwrap(), vec![0, 1]);
+            assert_eq!(
+                loaded.document.tile_grid(one, 0).unwrap().unwrap().origin,
+                Point::new(-3, -2)
+            );
+            let set = &loaded.document.tilesets()[0];
+            assert_eq!((set.name.as_str(), set.base_index), ("ground tiles", 0));
+            assert!(set.match_flips.x);
+        }
+    }
+
+    #[test]
+    fn older_readers_open_tilemaps_as_raster_layers() {
+        // A reader that does not know TSET and TMAP (as pixl 1.2) skips both
+        // and opens each tilemap layer as a raster layer of the same pixels.
+        let d = tiled(ColorMode::Rgba);
+        let mut bytes = save(&d, SaveOptions::default());
+        for (tag, flags, range) in chunks(&bytes) {
+            if &tag == b"TSET" || &tag == b"TMAP" {
+                assert_eq!(flags & CRITICAL, 0, "tilemaps are optional");
+                bytes[range.start - 11] = b'Z';
+                fix_crc(&mut bytes, range);
+            }
+        }
+        let loaded = load(&bytes).unwrap();
+        assert_eq!(
+            loaded.warnings,
+            vec![
+                LoadWarning::UnknownChunk { tag: "TZET".into() },
+                LoadWarning::UnknownChunk { tag: "TZAP".into() }
+            ]
+        );
+        let old = loaded.document;
+        assert!(old.tilesets().is_empty());
+        assert!(old.walk().iter().all(|(_, l)| !l.is_tilemap()));
+        for frame in 0..2 {
+            let a = crate::composite::composite_frame(&d, frame, &Default::default());
+            let b = crate::composite::composite_frame(&old, frame, &Default::default());
+            assert_eq!(a, b, "frame {frame} shows the same pixels");
+        }
+        // A document without tilesets writes neither chunk.
+        let plain = save(&old, SaveOptions::default());
+        assert!(
+            chunks(&plain)
+                .iter()
+                .all(|(t, ..)| t != b"TSET" && t != b"TMAP")
+        );
+    }
+
+    #[test]
+    fn damaged_tilemaps_are_refused() {
+        let d = tiled(ColorMode::Indexed);
+        let bytes = save(&d, SaveOptions { compression: 0 });
+        let (_, _, range) = chunks(&bytes)
+            .into_iter()
+            .find(|(t, ..)| t == b"TMAP")
+            .unwrap();
+        // The first cell of the first grid points past the tileset.
+        let first_cell = range.start + 4 + 16 + 4 + 20;
+        let mut bad = bytes.clone();
+        bad[first_cell..first_cell + 4].copy_from_slice(&9u32.to_le_bytes());
+        fix_crc(&mut bad, range);
+        assert!(load(&bad).is_err());
     }
 
     #[test]
     fn versions() {
         let d = rich(ColorMode::Rgba);
         let mut bytes = save(&d, SaveOptions::default());
-        bytes[10] = 3;
+        bytes[10] = 4;
         let loaded = load(&bytes).unwrap();
         assert_eq!(
             loaded.warnings,
-            vec![LoadWarning::NewerVersion { minor: 3 }]
+            vec![LoadWarning::NewerVersion { minor: 4 }]
         );
         bytes[8] = 2;
         assert!(load(&bytes).is_err());
@@ -2022,8 +2401,13 @@ mod tests {
     fn corrupt_payloads_with_valid_checksums_never_panic() {
         // Stored chunks with re-computed checksums, so the damage reaches
         // the chunk parsers instead of stopping at the checksum.
-        for compression in [0, 6] {
-            let bytes = save(&rich(ColorMode::Rgba), SaveOptions { compression });
+        for (compression, doc) in [
+            (0, rich(ColorMode::Rgba)),
+            (6, rich(ColorMode::Rgba)),
+            (0, tiled(ColorMode::Rgba)),
+            (0, tiled(ColorMode::Indexed)),
+        ] {
+            let bytes = save(&doc, SaveOptions { compression });
             let list = chunks(&bytes);
             let mut next = rng(0x2545_f491_4f6c_dd1d);
             for _ in 0..4000 {

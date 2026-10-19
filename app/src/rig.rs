@@ -399,7 +399,7 @@ fn apply_pose(editor: &mut Editor, ui: &mut RigUi, skeleton: LayerId, pose: Pose
         show_pose(editor, skeleton, &parts, &pose, &mut None);
     }
     keep_pose(editor, skeleton, &pose);
-    editor.history.commit(&editor.doc, tx);
+    editor.history.commit(&mut editor.doc, tx);
     editor.touch();
     ui.pose = pose;
     ui.pose_for = None;
@@ -1087,7 +1087,7 @@ fn end_drag(editor: &mut Editor, ui: &mut RigUi, skeleton: LayerId) {
         }
         Drag::Joint { tx, .. } | Drag::Pivot { tx, .. } => {
             if let Some(tx) = tx {
-                editor.history.commit(&editor.doc, tx);
+                editor.history.commit(&mut editor.doc, tx);
                 editor.touch();
             }
         }
@@ -1095,7 +1095,7 @@ fn end_drag(editor: &mut Editor, ui: &mut RigUi, skeleton: LayerId) {
             let pose = ui.pose.clone();
             keep_pose(editor, skeleton, &pose);
             if let Some(tx) = tx {
-                editor.history.commit(&editor.doc, tx);
+                editor.history.commit(&mut editor.doc, tx);
             }
             editor.touch();
             ui.pose_for = None;

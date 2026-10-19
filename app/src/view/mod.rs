@@ -872,7 +872,7 @@ fn layer_images(
     frame: usize,
 ) -> (Option<Raster>, Option<Raster>) {
     match &layer.kind {
-        LayerKind::Raster { cels, mask } => {
+        LayerKind::Raster { cels, mask, .. } => {
             let cel = cels
                 .get(frame)
                 .copied()
@@ -935,7 +935,7 @@ fn shown_ghosts(doc: &Document, frame: usize, onion: &OnionSkin) -> Shown {
         l.props.clip.hash(&mut h);
         l.props.opacity.hash(&mut h);
         l.props.blend.code().hash(&mut h);
-        if let LayerKind::Raster { cels, mask } = &l.kind {
+        if let LayerKind::Raster { cels, mask, .. } = &l.kind {
             mask.map(|m| m.enabled).hash(&mut h);
             for &f in &frames {
                 cels.get(f)
@@ -1007,7 +1007,7 @@ fn shown_for(
                 l.props.opacity.hash(&mut h);
                 l.props.blend.code().hash(&mut h);
             }
-            if let LayerKind::Raster { cels, mask } = &l.kind {
+            if let LayerKind::Raster { cels, mask, .. } = &l.kind {
                 mask.map(|m| m.enabled).hash(&mut h);
                 cels.get(frame)
                     .copied()

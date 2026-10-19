@@ -623,7 +623,7 @@ fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point
                 }
             }
             if let Some(tx) = tx.take() {
-                editor.history.commit(&editor.doc, tx);
+                editor.history.commit(&mut editor.doc, tx);
                 editor.touch_pixels();
             }
         }
@@ -668,7 +668,7 @@ fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point
         }
         Session::Move { mut tx, .. } => {
             if let Some(tx) = tx.take() {
-                editor.history.commit(&editor.doc, tx);
+                editor.history.commit(&mut editor.doc, tx);
                 editor.touch_pixels();
             }
         }

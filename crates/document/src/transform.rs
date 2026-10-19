@@ -762,6 +762,18 @@ pub fn transform_canvas(doc: &mut Document, op: CanvasTransform) -> Result<Rect,
     });
     doc.s.width = nw;
     doc.s.height = nh;
+    match op {
+        CanvasTransform::Scale(..) => doc.rescale_tilemaps(),
+        _ => doc.turn_tilemaps(
+            |px| match op {
+                CanvasTransform::FlipH => px.flip_h(),
+                CanvasTransform::FlipV => px.flip_v(),
+                CanvasTransform::Rotate90(q) => px.rotate_quarters(q),
+                CanvasTransform::Scale(..) => unreachable!("scaled above"),
+            },
+            map_rect,
+        ),
+    }
     Ok(doc.bounds())
 }
 
@@ -821,6 +833,7 @@ pub fn resize_canvas(
     }
     doc.s.width = width;
     doc.s.height = height;
+    doc.move_tilemaps(offset);
     Ok(doc.bounds())
 }
 

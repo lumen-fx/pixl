@@ -13,6 +13,7 @@ use crate::geom::{Point, Rect};
 use crate::image::{Raster, TiledImage};
 use crate::reference::ReferencePlace;
 use crate::rig::Rig;
+use crate::tiles::{TileGrid, Tileset, TilesetId};
 
 /// Identifies a layer for the life of a document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -195,10 +196,14 @@ pub struct LayerMask {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LayerKind {
-    /// Paintable pixels, one optional cel per frame.
+    /// Paintable pixels, one optional cel per frame. A layer with a
+    /// tileset is a tilemap layer: each cel has a grid of tiles from that
+    /// tileset, and its image shows the grid drawn out (see
+    /// [`crate::tiles`]).
     Raster {
         cels: Vec<Option<Cel>>,
         mask: Option<LayerMask>,
+        tileset: Option<TilesetId>,
     },
     /// Children composited in isolation, bottom first, then blended as one.
     Group { children: Vec<Layer> },
@@ -226,6 +231,18 @@ impl Layer {
         matches!(self.kind, LayerKind::Raster { .. })
     }
 
+    /// The tileset of a tilemap layer.
+    pub fn tileset(&self) -> Option<TilesetId> {
+        match self.kind {
+            LayerKind::Raster { tileset, .. } => tileset,
+            _ => None,
+        }
+    }
+
+    pub fn is_tilemap(&self) -> bool {
+        self.tileset().is_some()
+    }
+
     pub fn children(&self) -> &[Layer] {
         match &self.kind {
             LayerKind::Group { children } => children,
@@ -238,6 +255,10 @@ impl Layer {
 #[derive(Clone, Debug)]
 pub enum NewLayer {
     Raster,
+    /// A tilemap layer drawing from a tileset of the document.
+    Tilemap {
+        tileset: TilesetId,
+    },
     Group,
     Reference {
         image: TiledImage<Rgba>,
@@ -308,8 +329,12 @@ pub(crate) struct Structure {
     pub frames: Vec<Frame>,
     pub tags: Vec<Tag>,
     pub slices: Vec<Slice>,
+    pub tilesets: Vec<Tileset>,
+    /// The grid of each tilemap cel, by the cel's image.
+    pub tilemaps: BTreeMap<ImageId, TileGrid>,
     pub next_layer: u32,
     pub next_image: u32,
+    pub next_tileset: u32,
 }
 
 /// A paintable view of one image, with the context tools need.
@@ -372,8 +397,11 @@ impl Document {
                 frames: vec![Frame { duration_ms: 100 }],
                 tags: Vec::new(),
                 slices: Vec::new(),
+                tilesets: Vec::new(),
+                tilemaps: BTreeMap::new(),
                 next_layer: 1,
                 next_image: 1,
+                next_tileset: 1,
             },
             images: BTreeMap::new(),
         };
@@ -488,6 +516,17 @@ impl Document {
         self.s.next_image += 1;
         self.images.insert(id, raster);
         id
+    }
+
+    /// A copy of a pool image under a new id, with its tile grid when it is
+    /// a tilemap cel's.
+    pub(crate) fn copy_image(&mut self, image: ImageId) -> ImageId {
+        let raster = self.images[&image].clone();
+        let fresh = self.alloc_image(raster);
+        if let Some(g) = self.s.tilemaps.get(&image).cloned() {
+            self.s.tilemaps.insert(fresh, g);
+        }
+        fresh
     }
 
     fn empty_raster(&self) -> Raster {
@@ -611,7 +650,17 @@ impl Document {
             NewLayer::Raster => LayerKind::Raster {
                 cels: vec![None; self.s.frames.len()],
                 mask: None,
+                tileset: None,
             },
+            NewLayer::Tilemap { tileset } => {
+                self.tileset(tileset)
+                    .ok_or(Error::TilesetNotFound(tileset))?;
+                LayerKind::Raster {
+                    cels: vec![None; self.s.frames.len()],
+                    mask: None,
+                    tileset: Some(tileset),
+                }
+            }
             NewLayer::Group => LayerKind::Group {
                 children: Vec::new(),
             },
@@ -705,11 +754,20 @@ impl Document {
     }
 
     /// Drops pool images no cel, mask or reference layer points at.
+    /// Drops the grids of cels that are no tilemap layer's any more.
     pub fn collect_garbage(&mut self) {
         let mut used = std::collections::BTreeSet::new();
+        let mut tilemaps = std::collections::BTreeSet::new();
         for (_, l) in self.walk() {
             match &l.kind {
-                LayerKind::Raster { cels, mask } => {
+                LayerKind::Raster {
+                    cels,
+                    mask,
+                    tileset,
+                } => {
+                    if tileset.is_some() {
+                        tilemaps.extend(cels.iter().flatten().map(|c| c.image));
+                    }
                     used.extend(cels.iter().flatten().map(|c| c.image));
                     used.extend(mask.map(|m| m.image));
                 }
@@ -720,6 +778,7 @@ impl Document {
             }
         }
         self.images.retain(|id, _| used.contains(id));
+        self.s.tilemaps.retain(|id, _| tilemaps.contains(id));
     }
 
     // ---- references ----
@@ -886,12 +945,9 @@ impl Document {
         self.for_each_raster(|cels| copies.push(cels[at]));
         let mut fresh = Vec::new();
         for c in copies {
-            fresh.push(c.map(|c| {
-                let raster = self.images[&c.image].clone();
-                Cel {
-                    image: self.alloc_image(raster),
-                    opacity: c.opacity,
-                }
+            fresh.push(c.map(|c| Cel {
+                image: self.copy_image(c.image),
+                opacity: c.opacity,
             }));
         }
         let mut it = fresh.into_iter();
@@ -1035,8 +1091,7 @@ impl Document {
         if self.linked_frames(layer, frame)?.len() < 2 {
             return Ok(());
         }
-        let raster = self.images[&cel.image].clone();
-        let image = self.alloc_image(raster);
+        let image = self.copy_image(cel.image);
         self.cels_mut(layer)?[frame] = Some(Cel { image, ..cel });
         Ok(())
     }
@@ -1074,7 +1129,14 @@ impl Document {
             image: self.alloc_image(raster),
             opacity: 255,
         };
+        let grid = self
+            .layer(layer)
+            .and_then(Layer::tileset)
+            .map(|ts| self.new_grid(layer, ts));
         self.cels_mut(layer)?[frame] = Some(cel);
+        if let Some(g) = grid {
+            self.s.tilemaps.insert(cel.image, g);
+        }
         Ok(cel)
     }
 
@@ -1190,6 +1252,7 @@ impl Document {
         if mode == self.s.mode {
             return Rect::EMPTY;
         }
+        self.convert_tiles(mode);
         let palette = self.s.palette.clone();
         let ti = self.s.transparent_index;
         // Reference layers stay RGBA: they never take part in indexed editing.
@@ -1218,6 +1281,7 @@ impl Document {
             }
         }
         self.s.mode = mode;
+        self.redraw_tilemaps();
         self.bounds()
     }
 

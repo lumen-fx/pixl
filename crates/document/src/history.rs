@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, VecDeque};
 use crate::document::{Document, ImageId, Structure};
 use crate::geom::Rect;
 use crate::image::{Raster, TileSnap};
+use crate::tiles::TileMode;
 
 /// Which images a transaction watches for pixel edits.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,6 +90,8 @@ pub struct History {
     undo: VecDeque<Entry>,
     redo: Vec<Entry>,
     budget: usize,
+    /// How pixel edits to tilemap cels land in their tilesets on commit.
+    tile_mode: TileMode,
 }
 
 impl Default for History {
@@ -105,7 +108,17 @@ impl History {
             undo: VecDeque::new(),
             redo: Vec::new(),
             budget: budget_bytes,
+            tile_mode: TileMode::default(),
         }
+    }
+
+    /// How a commit takes pixel edits to tilemap cels into their tilesets.
+    pub fn tile_mode(&self) -> TileMode {
+        self.tile_mode
+    }
+
+    pub fn set_tile_mode(&mut self, mode: TileMode) {
+        self.tile_mode = mode;
     }
 
     pub fn budget(&self) -> usize {
@@ -162,9 +175,16 @@ impl History {
         }
     }
 
-    /// Closes an edit. Returns false (and records nothing) if nothing changed.
-    /// A recorded edit clears the redo stack.
-    pub fn commit(&mut self, doc: &Document, tx: Transaction) -> bool {
+    /// Closes an edit. Pixel edits to tilemap cels first land in their
+    /// tilesets (see [`History::tile_mode`]), which may redraw other cels;
+    /// the step records those too. Returns false (and records nothing) if
+    /// nothing changed. A recorded edit clears the redo stack.
+    pub fn commit(&mut self, doc: &mut Document, mut tx: Transaction) -> bool {
+        let redrawn = doc.sync_tilemaps(&tx.watched, &tx.image_ids, self.tile_mode);
+        for (id, before) in redrawn {
+            tx.watched.entry(id).or_insert(before);
+        }
+        let doc = &*doc;
         let mut images = Vec::new();
         for (id, before) in &tx.watched {
             let Some(after) = doc.images.get(id) else {

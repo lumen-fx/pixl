@@ -7,16 +7,19 @@
 //! hangs past the canvas); export crops each cel to its painted bounds.
 //!
 //! Import reads RGBA, indexed and grayscale sprites (grayscale opens as
-//! RGBA), normal, group and reference layers, linked cels, the palette, tags
-//! and slices, and the colors of layers, tags and slices. A reference
-//! layer's first cel opens as a reference image at the cel's own size and
-//! position, scaled to the cel's precise bounds when Aseprite stored them.
-//! The text and properties of user data are skipped. What pixl cannot
-//! represent (tilemap layers, the divide blend mode, cel z-index, per-frame
-//! slice keys, scaled cels on other layers) is listed in
-//! [`AsepriteImport::warnings`].
+//! RGBA), normal, group, reference and tilemap layers, tilesets, linked
+//! cels, the palette, tags and slices, and the colors of layers, tags and
+//! slices. A reference layer's first cel opens as a reference image at the
+//! cel's own size and position, scaled to the cel's precise bounds when
+//! Aseprite stored them. Tilesets keep their tiles, name, base index and the
+//! flips Auto mode matches; tilemap cels keep their tiles and flips at the
+//! cel's position. The text and properties of user data are skipped. What
+//! pixl cannot represent (the divide blend mode, cel z-index, per-frame
+//! slice keys, scaled cels on other layers, tilesets kept in another file)
+//! is listed in [`AsepriteImport::warnings`].
 //!
-//! Export writes everything Aseprite can hold; [`AsepriteExport::warnings`]
+//! Export writes everything Aseprite can hold, tilesets and tilemap layers
+//! included; [`AsepriteExport::warnings`]
 //! lists what it cannot: layer masks, clipping, alpha locks and the document
 //! background color. Reference layers are not exported, like everything a
 //! pixl export writes; each one left out is listed.
@@ -34,6 +37,7 @@ use pixl_document::error::Error;
 use pixl_document::geom::{Point, Rect};
 use pixl_document::image::{Raster, TiledImage};
 use pixl_document::reference::ReferencePlace;
+use pixl_document::tiles::{TileFlags, TileGrid, TileRef, TilesetId};
 
 const MAGIC: u16 = 0xA5E0;
 const FRAME_MAGIC: u16 = 0xF1FA;
@@ -69,6 +73,16 @@ const LAYER_TILEMAP: u16 = 2;
 const CEL_RAW: u16 = 0;
 const CEL_LINKED: u16 = 1;
 const CEL_COMPRESSED: u16 = 2;
+const CEL_TILEMAP: u16 = 3;
+
+const TILESET_EXTERNAL: u32 = 1;
+const TILESET_EMBEDDED: u32 = 2;
+const TILESET_ZERO_IS_EMPTY: u32 = 4;
+const TILESET_MATCH_X: u32 = 8;
+const TILESET_MATCH_Y: u32 = 16;
+const TILESET_MATCH_D: u32 = 32;
+/// The empty cell of files from before tile 0 was the empty tile.
+const OLD_NO_TILE: u32 = 0xffff_ffff;
 
 const BLEND_DIVIDE: u16 = 18;
 
@@ -78,8 +92,12 @@ const BLEND_DIVIDE: u16 = 18;
 pub enum ImportWarning {
     /// A grayscale sprite opened as an RGBA document.
     GrayscaleConverted,
-    /// A tilemap layer was left out; pixl has no tilemap layers yet.
+    /// A tilemap layer named a tileset the file does not hold, and was
+    /// left out.
     TilemapSkipped { layer: String },
+    /// A tileset's tiles live in another file, which is not read; its tiles
+    /// opened empty.
+    ExternalTileset { tileset: String },
     /// A layer used a blend mode pixl lacks and opened as normal.
     BlendModeReplaced { layer: String },
     /// Cels with a z-index opened in their layer's order.
@@ -105,8 +123,15 @@ impl fmt::Display for ImportWarning {
                 f.write_str("the grayscale sprite opened in RGBA color")
             }
             ImportWarning::TilemapSkipped { layer } => {
-                write!(f, "tilemap layer \"{layer}\" was left out")
+                write!(
+                    f,
+                    "tilemap layer \"{layer}\" names a missing tileset and was left out"
+                )
             }
+            ImportWarning::ExternalTileset { tileset } => write!(
+                f,
+                "the tiles of tileset \"{tileset}\" are in another file; they opened empty"
+            ),
             ImportWarning::BlendModeReplaced { layer } => write!(
                 f,
                 "layer \"{layer}\" uses the divide blend mode, which pixl lacks; it opened as normal"
@@ -225,12 +250,36 @@ struct AseLayer {
     opacity: u8,
     name: String,
     color: Option<Rgba>,
+    /// A tilemap layer's tileset, by its id in the file.
+    tileset: u32,
 }
 
 enum CelData {
-    Image { w: u16, h: u16, pixels: Vec<u8> },
+    Image {
+        w: u16,
+        h: u16,
+        pixels: Vec<u8>,
+    },
     Linked(usize),
-    Tilemap,
+    /// Cells row by row, already in pixl's packing.
+    Tilemap {
+        w: u16,
+        h: u16,
+        tiles: Vec<TileRef>,
+    },
+    Unknown,
+}
+
+/// A tileset chunk.
+struct AseTileset {
+    id: u32,
+    flags: u32,
+    count: usize,
+    size: (u32, u32),
+    base: i16,
+    name: String,
+    /// Tile 0 first, each `size` pixels of the sprite's depth.
+    pixels: Option<Vec<u8>>,
 }
 
 struct AseCel {
@@ -353,6 +402,7 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
     let mut old_palette: Vec<Rgba> = Vec::new();
     let mut tags: Vec<(Tag, bool)> = Vec::new();
     let mut slices: Vec<Slice> = Vec::new();
+    let mut tilesets: Vec<AseTileset> = Vec::new();
     let mut target = UserDataTarget::None;
 
     for frame in 0..frame_count {
@@ -395,9 +445,7 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
                     let opacity = c.u8()?;
                     c.skip(3)?;
                     let name = read_string(&mut c)?;
-                    if kind == LAYER_TILEMAP {
-                        c.u32()?;
-                    }
+                    let tileset = if kind == LAYER_TILEMAP { c.u32()? } else { 0 };
                     if header_flags & HEADER_LAYER_UUID != 0 {
                         c.skip(16)?;
                     }
@@ -410,6 +458,7 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
                         opacity,
                         name,
                         color: None,
+                        tileset,
                     });
                 }
                 CHUNK_CEL => {
@@ -436,7 +485,50 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
                             CelData::Image { w, h, pixels }
                         }
                         CEL_LINKED => CelData::Linked(c.u16()? as usize),
-                        _ => CelData::Tilemap,
+                        CEL_TILEMAP => {
+                            let w = c.u16()?;
+                            let h = c.u16()?;
+                            let bits = c.u16()?;
+                            let [id_mask, x_mask, y_mask, d_mask] =
+                                [c.u32()?, c.u32()?, c.u32()?, c.u32()?];
+                            c.skip(10)?;
+                            let bytes = match bits {
+                                8 => 1,
+                                16 => 2,
+                                32 => 4,
+                                b => return Err(corrupt(format!("{b} bits per tile"))),
+                            };
+                            let n = w as usize * h as usize;
+                            let raw = zlib_decompress(c.take(c.remaining())?, n * bytes)?;
+                            if raw.len() != n * bytes {
+                                return Err(corrupt("a tilemap cel is truncated"));
+                            }
+                            let shift = id_mask.trailing_zeros().min(31);
+                            let has = |v: u32, m: u32| m != 0 && v & m == m;
+                            let tiles = raw
+                                .chunks_exact(bytes)
+                                .map(|b| {
+                                    let mut v = [0u8; 4];
+                                    v[..bytes].copy_from_slice(b);
+                                    let v = u32::from_le_bytes(v);
+                                    let flags = TileFlags {
+                                        x: has(v, x_mask),
+                                        y: has(v, y_mask),
+                                        d: has(v, d_mask),
+                                    };
+                                    // Kept as read; old empty cells are
+                                    // fixed up once the tileset is known.
+                                    let index = (v & id_mask) >> shift;
+                                    if index == id_mask >> shift {
+                                        TileRef(OLD_NO_TILE)
+                                    } else {
+                                        TileRef::new(index, flags)
+                                    }
+                                })
+                                .collect();
+                            CelData::Tilemap { w, h, tiles }
+                        }
+                        _ => CelData::Unknown,
                     };
                     target = UserDataTarget::None;
                     cels.push(AseCel {
@@ -595,8 +687,47 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
                         color: Rgba::opaque(0, 0, 255),
                     });
                 }
-                CHUNK_COLOR_PROFILE | CHUNK_EXTERNAL_FILES | CHUNK_MASK | CHUNK_PATH
-                | CHUNK_TILESET => {}
+                CHUNK_TILESET => {
+                    let id = c.u32()?;
+                    let flags = c.u32()?;
+                    let count = c.u32()? as usize;
+                    let size = (c.u16()? as u32, c.u16()? as u32);
+                    let base = c.i16()?;
+                    c.skip(14)?;
+                    let name = read_string(&mut c)?;
+                    if size.0 == 0 || size.1 == 0 {
+                        return Err(corrupt("a tileset has no tile size"));
+                    }
+                    if flags & TILESET_EXTERNAL != 0 {
+                        c.skip(8)?;
+                    }
+                    let pixels = if flags & TILESET_EMBEDDED != 0 && count > 0 {
+                        let len = c.u32()? as usize;
+                        let want = (size.0 as usize * size.1 as usize * depth.bytes())
+                            .checked_mul(count)
+                            .filter(|&n| n <= 1 << 30)
+                            .ok_or_else(|| corrupt("a tileset is too large"))?;
+                        let px = zlib_decompress(c.take(len.min(c.remaining()))?, want)?;
+                        if px.len() != want {
+                            return Err(corrupt("a tileset is truncated"));
+                        }
+                        Some(px)
+                    } else {
+                        None
+                    };
+                    tilesets.push(AseTileset {
+                        id,
+                        flags,
+                        count,
+                        size,
+                        base,
+                        name,
+                        pixels,
+                    });
+                    // Tile user data follows; it is skipped.
+                    target = UserDataTarget::None;
+                }
+                CHUNK_COLOR_PROFILE | CHUNK_EXTERNAL_FILES | CHUNK_MASK | CHUNK_PATH => {}
                 kind => warn(&mut warnings, ImportWarning::UnknownChunk { kind }),
             }
         }
@@ -643,6 +774,49 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
     doc.set_frame_duration(0, durations[0])?;
     for (i, d) in durations.iter().enumerate().skip(1) {
         doc.insert_frame(i, *d)?;
+    }
+
+    // Tilesets, by their id in the file. Files from before tile 0 was the
+    // empty tile get one in front, and their cells move up one.
+    let mut tileset_ids: HashMap<u32, (TilesetId, bool)> = HashMap::new();
+    for t in &tilesets {
+        let old = t.flags & TILESET_ZERO_IS_EMPTY == 0;
+        let id = doc.add_tileset(t.name.clone(), t.size.0, t.size.1)?;
+        doc.update_tileset(id, |_, base, flips| {
+            *base = i32::from(t.base);
+            flips.x = t.flags & TILESET_MATCH_X != 0;
+            flips.y = t.flags & TILESET_MATCH_Y != 0;
+            flips.d = t.flags & TILESET_MATCH_D != 0;
+        })?;
+        let area = t.size.0 as usize * t.size.1 as usize;
+        let bpp = depth.bytes();
+        let empty = match mode {
+            ColorMode::Rgba => 0,
+            ColorMode::Indexed => u32::from(transparent_index),
+        };
+        let first = usize::from(!old);
+        for i in first..t.count {
+            let tile: Vec<u32> = match &t.pixels {
+                Some(px) => px[i * area * bpp..(i + 1) * area * bpp]
+                    .chunks_exact(bpp)
+                    .map(|p| match depth {
+                        Depth::Indexed => u32::from(p[0]),
+                        d => d.rgba(p).to_u32(),
+                    })
+                    .collect(),
+                None => vec![empty; area],
+            };
+            doc.add_tile(id, tile)?;
+        }
+        if t.pixels.is_none() && t.count > 0 {
+            warn(
+                &mut warnings,
+                ImportWarning::ExternalTileset {
+                    tileset: t.name.clone(),
+                },
+            );
+        }
+        tileset_ids.insert(t.id, (id, old));
     }
 
     // Pixel value conversion for this sprite's depth.
@@ -748,6 +922,9 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
                 NewLayer::Reference { image, place }
             }
             LAYER_IMAGE => NewLayer::Raster,
+            LAYER_TILEMAP if tileset_ids.contains_key(&l.tileset) => NewLayer::Tilemap {
+                tileset: tileset_ids[&l.tileset].0,
+            },
             _ => {
                 warn(
                     &mut warnings,
@@ -805,12 +982,57 @@ pub fn import_aseprite(bytes: &[u8]) -> Result<AsepriteImport, Error> {
         doc.layer(id)?.is_raster().then_some(id)
     };
     for cel in &cels {
+        let CelData::Tilemap { w, h, tiles } = &cel.data else {
+            continue;
+        };
+        let Some(id) = raster_layer(&doc, cel.layer) else {
+            continue;
+        };
+        if cel.frame >= frame_count || *w == 0 || *h == 0 {
+            continue;
+        }
+        let Ok(ts) = doc.layer_tileset(id) else {
+            continue;
+        };
+        let old = layers
+            .get(cel.layer)
+            .and_then(|l| tileset_ids.get(&l.tileset))
+            .is_some_and(|t| t.1);
+        let len = doc.tileset(ts).map_or(1, |t| t.len()) as u32;
+        let refs: Vec<TileRef> = tiles
+            .iter()
+            .map(|&t| {
+                if t.0 == OLD_NO_TILE {
+                    return TileRef::EMPTY;
+                }
+                let t = if old { t.with_index(t.index() + 1) } else { t };
+                // A tile the tileset lacks shows as an empty cell.
+                if t.index() >= len { TileRef::EMPTY } else { t }
+            })
+            .collect();
+        let grid = TileGrid::from_cells(
+            Point::new(cel.x.into(), cel.y.into()),
+            (*w).into(),
+            (*h).into(),
+            &refs,
+        )
+        .ok_or_else(|| corrupt("a tilemap cel has a bad size"))?;
+        doc.set_tile_grid(id, cel.frame, grid)?;
+        if cel.opacity != 255 {
+            doc.set_cel_opacity(id, cel.frame, cel.opacity)?;
+        }
+    }
+    for cel in &cels {
         if cel.frame >= frame_count || !matches!(cel.data, CelData::Image { .. }) {
             continue;
         }
         let Some(id) = raster_layer(&doc, cel.layer) else {
             continue;
         };
+        // A tilemap layer's pixels come from its tiles alone.
+        if doc.layer_tileset(id).is_ok() {
+            continue;
+        }
         if cel.precise.is_some() {
             warn(&mut warnings, ImportWarning::CelScaleIgnored);
         }
@@ -940,6 +1162,21 @@ fn cel_chunk(out: &mut Vec<Vec<u8>>, layer: usize, pos: Point, opacity: u8, data
             w.u16(bounds.h as u16);
             w.bytes(&zlib_compress(&pixels, 6));
         }
+        CelBody::Tilemap(cols, rows, cells) => {
+            w.u16(CEL_TILEMAP);
+            w.i16(0);
+            w.zeros(5);
+            w.u16(cols as u16);
+            w.u16(rows as u16);
+            w.u16(32);
+            w.u32(TileRef::INDEX_MASK);
+            w.u32(TileRef::FLIP_X);
+            w.u32(TileRef::FLIP_Y);
+            w.u32(TileRef::FLIP_D);
+            w.zeros(10);
+            let raw: Vec<u8> = cells.iter().flat_map(|t| t.0.to_le_bytes()).collect();
+            w.bytes(&zlib_compress(&raw, 6));
+        }
     }
     chunk(out, CHUNK_CEL, w);
 }
@@ -947,6 +1184,27 @@ fn cel_chunk(out: &mut Vec<Vec<u8>>, layer: usize, pos: Point, opacity: u8, data
 enum CelBody {
     Linked(usize),
     Image(Rect, Vec<u8>),
+    /// Columns, rows and the cells row by row.
+    Tilemap(u32, u32, Vec<TileRef>),
+}
+
+/// The part of a grid that holds tiles: where its top-left cell sits on the
+/// canvas, and its cells. `None` when every cell is empty.
+fn trimmed_grid(grid: &TileGrid, size: (u32, u32)) -> Option<(Point, u32, u32, Vec<TileRef>)> {
+    let mut used = Rect::EMPTY;
+    for y in 0..grid.rows() as i32 {
+        for x in 0..grid.cols() as i32 {
+            if !grid.get(x, y).is_empty() {
+                used.include(x, y);
+            }
+        }
+    }
+    if used.is_empty() {
+        return None;
+    }
+    let cells = used.points().map(|p| grid.get(p.x, p.y)).collect();
+    let at = grid.cell_rect(size, Point::new(used.x, used.y));
+    Some((Point::new(at.x, at.y), used.w as u32, used.h as u32, cells))
 }
 
 /// Encodes a document as an Aseprite file. Reference layers are left out,
@@ -999,6 +1257,44 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
             }
             chunk(first, CHUNK_PALETTE, w);
         }
+        // Tilesets go before the layers that name them, as Aseprite reads
+        // them; a tileset's id in the file is its place in the list.
+        for (i, ts) in doc.tilesets().iter().enumerate() {
+            let (tw, th) = ts.tile_size();
+            let mut flags = TILESET_EMBEDDED | TILESET_ZERO_IS_EMPTY;
+            for (on, bit) in [
+                (ts.match_flips.x, TILESET_MATCH_X),
+                (ts.match_flips.y, TILESET_MATCH_Y),
+                (ts.match_flips.d, TILESET_MATCH_D),
+            ] {
+                if on {
+                    flags |= bit;
+                }
+            }
+            let mut w = Writer::new();
+            w.u32(i as u32);
+            w.u32(flags);
+            w.u32(ts.len() as u32);
+            w.u16(tw as u16);
+            w.u16(th as u16);
+            w.i16(ts.base_index.clamp(i16::MIN as i32, i16::MAX as i32) as i16);
+            w.zeros(14);
+            ase_string(&mut w, &ts.name);
+            let mut px = Vec::new();
+            for tile in ts.tiles() {
+                for &v in tile {
+                    if indexed {
+                        px.push(v as u8);
+                    } else {
+                        px.extend_from_slice(&v.to_le_bytes());
+                    }
+                }
+            }
+            let packed = zlib_compress(&px, 6);
+            w.u32(packed.len() as u32);
+            w.bytes(&packed);
+            chunk(first, CHUNK_TILESET, w);
+        }
         for (depth, l) in &layers {
             let p = &l.props;
             let mut flags = 0;
@@ -1015,13 +1311,17 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
                 LayerKind::Group { .. } => LAYER_GROUP,
                 // Filtered out above.
                 LayerKind::Skeleton { .. } | LayerKind::Reference { .. } => continue,
-                LayerKind::Raster { mask, .. } => {
+                LayerKind::Raster { mask, tileset, .. } => {
                     if mask.is_some() {
                         warnings.push(ExportWarning::MaskDropped {
                             layer: p.name.clone(),
                         });
                     }
-                    LAYER_IMAGE
+                    if tileset.is_some() {
+                        LAYER_TILEMAP
+                    } else {
+                        LAYER_IMAGE
+                    }
                 }
             };
             if p.clip {
@@ -1044,6 +1344,10 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
             w.u8(p.opacity);
             w.zeros(3);
             ase_string(&mut w, &p.name);
+            if let Some(ts) = l.tileset() {
+                let index = doc.tilesets().iter().position(|t| t.id == ts);
+                w.u32(index.unwrap_or(0) as u32);
+            }
             chunk(first, CHUNK_LAYER, w);
             if p.color_tag.is_some() {
                 color_user_data(first, p.color_tag);
@@ -1099,6 +1403,43 @@ pub fn export_aseprite(doc: &Document) -> Result<AsepriteExport, Error> {
 
     for (index, (_, l)) in layers.iter().enumerate() {
         match &l.kind {
+            LayerKind::Raster {
+                cels,
+                tileset: Some(ts),
+                ..
+            } => {
+                let size = doc.tileset(*ts).map_or((16, 16), |t| t.tile_size());
+                let mut written: HashMap<_, Option<(usize, Point)>> = HashMap::new();
+                for (frame, cel) in cels.iter().enumerate() {
+                    let Some(cel) = cel else { continue };
+                    let out = &mut per_frame[frame];
+                    match written.get(&cel.image) {
+                        Some(Some((first, at))) => {
+                            cel_chunk(out, index, *at, cel.opacity, CelBody::Linked(*first))
+                        }
+                        Some(None) => {}
+                        None => {
+                            let trimmed = doc
+                                .tile_grid(l.id, frame)
+                                .ok()
+                                .flatten()
+                                .and_then(|g| trimmed_grid(g, size));
+                            let Some((at, cols, rows, cells)) = trimmed else {
+                                written.insert(cel.image, None);
+                                continue;
+                            };
+                            cel_chunk(
+                                out,
+                                index,
+                                at,
+                                cel.opacity,
+                                CelBody::Tilemap(cols, rows, cells),
+                            );
+                            written.insert(cel.image, Some((frame, at)));
+                        }
+                    }
+                }
+            }
             LayerKind::Raster { cels, .. } => {
                 // The frame each image was first written at, or None when it
                 // is empty and was not written.
