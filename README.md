@@ -571,7 +571,8 @@ after the script; documents it creates or opens appear in tabs of their own.
 A run that raises an error changes no document and names the error, with
 the script's line when the error is in the script itself. A run that takes
 a while shows a Stop button, which stops the script at its next call into
-the API.
+the API; a script that makes no call within a second is let go, to run on
+in the background and change nothing.
 
 An extension is a folder in pixl's `extensions` folder with an
 `extension.json` naming the commands it adds, each a script with the

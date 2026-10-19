@@ -251,3 +251,39 @@ fn an_extension_installs_after_asking_and_brings_its_palette() {
     assert!(!dir.join("extensions/inks").exists());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn stop_lets_go_of_a_script_that_never_calls_into_pixl() {
+    let dir = folder("stop");
+    // A loop with no call into pixl cannot see Stop; it ends by itself well
+    // after the test.
+    std::fs::write(
+        dir.join("scripts/spin.cdl"),
+        "import \"pixl\" as app;\nfn main() {\n    app::document().layers()[0].cel(0).set(0, 0, app::rgb(9, 9, 9));\n    let i = 0;\n    while i < 2000000000 { i = i + 1; }\n}\n",
+    )
+    .unwrap();
+    let app = editor_over(blank()).insert_resource(Scripts::at(&dir));
+    let out = drive(
+        app,
+        vec![
+            Step::Menu("file-scripts"),
+            Step::Wait,
+            Step::Click("sc-run"),
+            Step::Wait,
+            Step::Wait,
+            Step::Click("sc-stop"),
+            Step::Until(|e| {
+                e.message
+                    .as_deref()
+                    .is_some_and(|m| m.contains("did not stop"))
+            }),
+            Step::Wait,
+        ],
+    );
+    assert_eq!(
+        out.message.as_deref(),
+        Some("spin did not stop; it runs on in the background and changes nothing")
+    );
+    assert_eq!(pixel(&out.doc, 0, 0), Rgba::TRANSPARENT);
+    let _ = std::fs::remove_dir_all(dir);
+}

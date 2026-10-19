@@ -71,8 +71,14 @@ pub struct Entry {
 struct Running {
     run: Ran,
     cancel: Cancel,
+    /// When Stop was pressed.
+    stopped: Option<Instant>,
     handle: JoinHandle<Outcome>,
 }
+
+/// How long a stopped script has to reach its next call into pixl before
+/// the editor lets go of it.
+const STOP_GRACE: Duration = Duration::from_secs(1);
 
 /// What a run started with.
 struct Ran {
@@ -265,6 +271,7 @@ impl Scripts {
                 revisions,
             },
             cancel,
+            stopped: None,
             handle,
         });
         format!("Running {}...", entry.label)
@@ -561,8 +568,9 @@ pub fn script_input(
                 run_entry(&mut scripts, &mut editor, i);
             }
             "sc-stop" => {
-                if let Some(r) = &scripts.running {
+                if let Some(r) = &mut scripts.running {
                     r.cancel.cancel();
+                    r.stopped.get_or_insert_with(Instant::now);
                 }
             }
             "sc-folder" => {
@@ -682,6 +690,23 @@ pub fn show_scripts(
 ) {
     if let Some((running, outcome)) = scripts.finished() {
         commands.queue(move |world: &mut World| apply(world, running, outcome));
+    }
+    // A script busy in a loop that never calls into pixl does not see Stop.
+    // candela cannot interrupt it, so the editor lets it run on by itself
+    // and drops whatever it ends with.
+    if scripts
+        .running
+        .as_ref()
+        .and_then(|r| r.stopped)
+        .is_some_and(|t| t.elapsed() >= STOP_GRACE)
+        && let Some(r) = scripts.running.take()
+    {
+        let label = r.run.label;
+        commands.queue(move |world: &mut World| {
+            world.resource_mut::<Editor>().message = Some(format!(
+                "{label} did not stop; it runs on in the background and changes nothing"
+            ));
+        });
     }
     let busy = scripts.running.as_ref().map(|r| r.run.label.clone());
     if signals.get::<bool>("sc_busy") != Some(busy.is_some()) {
