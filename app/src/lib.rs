@@ -2,6 +2,7 @@
 //! view, over the document model in `pixl-document`, the tools in
 //! `pixl-paint` and the file formats in `pixl-io`.
 
+pub mod clipboard;
 pub mod documents;
 pub mod editor;
 pub mod files;
@@ -47,6 +48,7 @@ pub fn app(file: Option<PathBuf>) -> App {
         .insert_resource(Workspace::user())
         .insert_resource(Themes::user())
         .insert_resource(files::exports::Exports::user())
+        .insert_resource(clipboard::Pasteboard::system())
         .insert_resource(tools::presets::Presets::user())
         .insert_resource(tools::toolbar::Toolbar::user())
 }
@@ -80,10 +82,10 @@ pub fn ui() -> Source {
 }
 
 /// The editor over another copy of the UI sources, open on a blank
-/// document in one tab with no start screen, default settings and a recent list kept
-/// in memory. A
-/// directory source reads `lumen.toml` beside its `src/`, which is how a
-/// test runs the editor with its own settings.
+/// document in one tab with no start screen, default settings, and a recent
+/// list and a clipboard kept in memory. A directory source reads `lumen.toml`
+/// beside its `src/`, which is how a test runs the editor with its own
+/// settings.
 pub fn editor(source: Source) -> App {
     let side = u64::from(MAX_VIEW_SIDE);
     let app = App::new()
@@ -153,6 +155,7 @@ pub fn editor(source: Source) -> App {
         .insert_resource(tools::Gesture::default())
         .insert_resource(tools::toolbox::Toolbox::default())
         .insert_resource(menus::Chosen::default())
+        .insert_resource(clipboard::Pasteboard::in_memory())
         .insert_resource(menus::select::Selections::default())
         .insert_resource(menus::image::ImageMenu::default())
         .insert_resource(menus::adjust::Adjust::default())
@@ -226,6 +229,7 @@ pub fn editor(source: Source) -> App {
                     // The Select, Image, Filter and View menus.
                     timed!(
                         menus::collect,
+                        menus::edit::edit_commands,
                         menus::select::select_commands,
                         menus::image::image_commands,
                         menus::adjust::filter_commands,

@@ -241,6 +241,22 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("tab-prev", "Previous document", "File", Kind::Press),
     ("undo", "Undo", "Edit", Kind::Press),
     ("redo", "Redo", "Edit", Kind::Press),
+    ("edit-cut", "Cut", "Edit", Kind::Press),
+    ("edit-copy", "Copy", "Edit", Kind::Press),
+    ("edit-copy-merged", "Copy merged", "Edit", Kind::Press),
+    ("edit-paste", "Paste", "Edit", Kind::Press),
+    (
+        "edit-paste-layer",
+        "Paste as new layer",
+        "Edit",
+        Kind::Press,
+    ),
+    (
+        "edit-paste-document",
+        "Paste as new document",
+        "Edit",
+        Kind::Press,
+    ),
     ("swap-colors", "Swap colors", "Edit", Kind::Press),
     ("settings", "Settings", "Edit", Kind::Press),
     ("zoom-in", "Zoom in", "View", Kind::Press),
@@ -517,6 +533,12 @@ fn pixl_default(id: &str) -> &'static [&'static str] {
         "tab-prev" => &["Ctrl+Shift+Tab"],
         "undo" => &["Ctrl+Z"],
         "redo" => &["Ctrl+Shift+Z", "Ctrl+Y"],
+        "edit-cut" => &["Ctrl+X"],
+        "edit-copy" => &["Ctrl+C"],
+        "edit-copy-merged" => &["Ctrl+Shift+C"],
+        "edit-paste" => &["Ctrl+V"],
+        "edit-paste-layer" => &["Ctrl+Shift+V"],
+        "edit-paste-document" => &["Ctrl+Alt+V"],
         "swap-colors" => &["X"],
         "command-palette" => &["Ctrl+Shift+P"],
         "settings" => &["Ctrl+,"],
@@ -573,6 +595,9 @@ fn aseprite(id: &str) -> Option<&'static [&'static str]> {
         "file-export-sheet" => &["Ctrl+E"],
         "file-import-sheet" => &["Ctrl+I"],
         "redo" => &["Ctrl+Y", "Ctrl+Shift+Z"],
+        // Aseprite's Paste Special > Paste as New Layer; its New Sprite
+        // from the clipboard has no key, so pixl's stays.
+        "edit-paste-layer" => &["Ctrl+Shift+V"],
         "settings" => &["Ctrl+K"],
         "zoom-fit" => &["Ctrl+0"],
         "play" => &["Enter"],
@@ -591,6 +616,10 @@ fn photoshop(id: &str) -> Option<&'static [&'static str]> {
         "file-export-sheet" => &[],
         "file-import-sheet" => &[],
         "redo" => &["Ctrl+Shift+Z"],
+        // Photoshop's Paste in Place, which pastes onto a new layer where
+        // the pixels came from; its Paste Into (Ctrl+Alt+Shift+V) keeps
+        // Ctrl+Alt+V free for a new document.
+        "edit-paste-layer" => &["Ctrl+Shift+V"],
         "settings" => &["Ctrl+K"],
         "zoom-in" => &["Ctrl+=", "Ctrl++"],
         "zoom-out" => &["Ctrl+-"],

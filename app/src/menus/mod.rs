@@ -1,10 +1,11 @@
 //! The Select, Image, Filter, View and Help menus: their buttons in the menu
 //! row, and the commands their items, their keys and the command palette
 //! run.
-//! Each tick's chosen commands land in [`Chosen`], where the selection,
-//! image, filter and view modules pick up their own.
+//! Each tick's chosen commands land in [`Chosen`], where the clipboard,
+//! selection, image, filter and view modules pick up their own.
 
 pub mod adjust;
+pub mod edit;
 pub mod image;
 pub mod palette;
 pub mod select;

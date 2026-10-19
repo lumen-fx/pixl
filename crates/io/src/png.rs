@@ -279,8 +279,7 @@ pub fn import_png_layer(
             let c = pixels[(y as u32 * w + x as u32) as usize];
             let raw = match target.raster {
                 Raster::Rgba(_) => c.to_u32(),
-                Raster::Indexed(_) if c.a == 0 => ti as u32,
-                Raster::Indexed(_) => palette.nearest(c, Some(ti)) as u32,
+                Raster::Indexed(_) => palette.import_index(c, ti) as u32,
                 Raster::Mask(_) => c.luma() as u32,
             };
             target.raster.set_raw(x, y, raw);

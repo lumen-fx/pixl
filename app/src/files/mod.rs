@@ -122,7 +122,8 @@ pub struct Opening {
 }
 
 impl Opening {
-    fn new(editor: Editor) -> Self {
+    /// A new document with no recovery copy on offer.
+    pub fn new(editor: Editor) -> Self {
         Self {
             editor,
             file: FileDocument::default(),

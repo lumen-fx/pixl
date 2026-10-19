@@ -441,6 +441,21 @@ impl Editor {
     /// Adds a raster layer above the active one, or at the top of the
     /// active group, and makes it active.
     pub fn add_layer(&mut self) {
+        let (at, name) = self.next_layer();
+        let id = self
+            .history
+            .transact(&mut self.doc, "New layer", Scope::All, |doc| {
+                doc.add_layer(NewLayer::Raster, name, at)
+            });
+        if let Ok(id) = id {
+            self.layer = id;
+            self.touch();
+        }
+    }
+
+    /// Where a new layer goes and its name: above the active layer, or at
+    /// the top of the active group.
+    pub fn next_layer(&self) -> (Placement, String) {
         let into_group = self
             .doc
             .layer(self.layer)
@@ -453,16 +468,7 @@ impl Editor {
         } else {
             self.placement_above(self.layer)
         };
-        let name = format!("Layer {}", self.doc.walk().len() + 1);
-        let id = self
-            .history
-            .transact(&mut self.doc, "New layer", Scope::All, |doc| {
-                doc.add_layer(NewLayer::Raster, name, at)
-            });
-        if let Ok(id) = id {
-            self.layer = id;
-            self.touch();
-        }
+        (at, format!("Layer {}", self.doc.walk().len() + 1))
     }
 
     /// Deletes the active layer, unless it is the last one.

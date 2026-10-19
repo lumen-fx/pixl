@@ -812,6 +812,12 @@ const MENU_COMMANDS: &[(&str, &str)] = &[
     ("Close", "file-close"),
     ("Undo", "undo"),
     ("Redo", "redo"),
+    ("Cut", "edit-cut"),
+    ("Copy", "edit-copy"),
+    ("Copy merged", "edit-copy-merged"),
+    ("Paste", "edit-paste"),
+    ("Paste as new layer", "edit-paste-layer"),
+    ("Paste as new document", "edit-paste-document"),
     ("Settings...", "settings"),
 ];
 

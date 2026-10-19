@@ -139,6 +139,8 @@ pub struct Outcome {
     pub behind_bytes: u64,
     /// Tiles written into layer buffers since the editor started.
     pub tiles_written: u64,
+    /// The image the in-memory clipboard holds.
+    pub clipboard: Option<RgbaImage>,
 }
 
 /// The tutorial on one tick.
@@ -183,6 +185,7 @@ struct Snapshot {
     asking: Option<String>,
     behind_bytes: u64,
     tiles_written: u64,
+    clipboard: Option<RgbaImage>,
 }
 
 fn key(name: &str) -> Key {
@@ -531,7 +534,11 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 Res<pixl::view::Preview>,
                 Res<pixl::tutorial::Tutorial>,
             ),
-                   (docs, layers): (Res<Documents>, Res<pixl::view::Layers>),
+                   (docs, layers, board): (
+                Res<Documents>,
+                Res<pixl::view::Layers>,
+                Res<pixl::clipboard::Pasteboard>,
+            ),
                    mut closing: MessageReader<CloseRequest>,
                    signals: Signals,
                    mut tick: Local<usize>| {
@@ -602,6 +609,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     asking,
                     behind_bytes: docs.behind_bytes(),
                     tiles_written: layers.tiles_written,
+                    clipboard: board.memory_image().cloned(),
                 });
             })
             .after(pixl::view::draw_stage)
@@ -644,6 +652,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         asking: end.asking,
         behind_bytes: end.behind_bytes,
         tiles_written: end.tiles_written,
+        clipboard: end.clipboard,
     }
 }
 

@@ -24,6 +24,13 @@
       <menuitem id="undo" label="Undo"/>
       <menuitem id="redo" label="Redo"/>
       <separator/>
+      <menuitem id="edit-cut" label="Cut"/>
+      <menuitem id="edit-copy" label="Copy"/>
+      <menuitem id="edit-copy-merged" label="Copy merged"/>
+      <menuitem id="edit-paste" label="Paste"/>
+      <menuitem id="edit-paste-layer" label="Paste as new layer"/>
+      <menuitem id="edit-paste-document" label="Paste as new document"/>
+      <separator/>
       <menuitem id="edit-settings" label="Settings..."/>
     </menu>
     <button id="menu-select" class="menu-title" text="Select"/>

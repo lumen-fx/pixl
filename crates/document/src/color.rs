@@ -274,6 +274,16 @@ impl Palette {
         Ok((self.colors.len() - 1) as u8)
     }
 
+    /// The entry an imported color lands on: the transparent index `ti`
+    /// for a clear color, otherwise the nearest other entry.
+    pub fn import_index(&self, color: Rgba, ti: u8) -> u8 {
+        if color.a == 0 {
+            ti
+        } else {
+            self.nearest(color, Some(ti))
+        }
+    }
+
     /// The index of the entry closest to `color` (squared RGBA distance),
     /// skipping `skip` (the transparent index, when matching an opaque color).
     /// Returns 0 for an empty palette.
@@ -327,6 +337,13 @@ mod tests {
         assert_eq!(p.nearest(Rgba::opaque(200, 10, 0), None), 2);
         assert_eq!(p.nearest(Rgba::new(0, 0, 0, 10), Some(0)), 1);
         assert_eq!(p.nearest(Rgba::new(0, 0, 0, 10), None), 0);
+    }
+
+    #[test]
+    fn an_imported_color_is_clear_or_off_the_transparent_index() {
+        let p = Palette::new(vec![Rgba::TRANSPARENT, Rgba::BLACK]).unwrap();
+        assert_eq!(p.import_index(Rgba::new(9, 9, 9, 0), 0), 0);
+        assert_eq!(p.import_index(Rgba::new(0, 0, 0, 10), 0), 1);
     }
 
     #[test]

@@ -675,7 +675,7 @@ pub fn tab_input(
     editor: Res<Editor>,
     mut home: ResMut<Home>,
     mut input: TabInput,
-    clipboard: Clipboard,
+    mut clipboard: crate::clipboard::ClipboardAccess,
     mut commands: Commands,
     mut signals: Signals,
 ) {

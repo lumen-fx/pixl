@@ -6,6 +6,10 @@
 //! keeps the result as one undo step; Escape or Cancel puts the pixels back.
 //! The pixels are resampled by nearest neighbor, RotSprite or clean edge,
 //! so no new colors appear.
+//!
+//! A paste floats in the same box: the pasted pixels over the cel, which
+//! Enter keeps as one undo step and Escape drops, cel and all when the
+//! paste made it.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -88,6 +92,9 @@ struct Session {
     job: Option<TileJob>,
     /// Apply was chosen: keep the result once the preview is all in.
     applying: bool,
+    /// The pixels were pasted, not lifted: cancelling drops the whole edit,
+    /// with any cel the paste made.
+    pasted: bool,
 }
 
 impl Session {
@@ -149,16 +156,33 @@ pub struct XfInput<'w> {
     wake: Option<Res<'w, WakeDeadline>>,
 }
 
+/// Pixels to float in the box: a paste, waiting for the tool's next run.
+pub struct Floating {
+    /// Raw values in the document's color mode.
+    pub pixels: Pixels,
+    /// Where their top-left goes on the canvas.
+    pub at: Point,
+    /// The tool to go back to if the paste cannot start.
+    pub back: Tool,
+}
+
 /// The free transform in progress, if any, and its resampling.
 #[derive(Resource, Default)]
 pub struct FreeTransform {
     session: Option<Session>,
+    floating: Option<Floating>,
     pub resample: Resample,
 }
 
 impl FreeTransform {
     pub fn active(&self) -> bool {
-        self.session.is_some()
+        self.session.is_some() || self.floating.is_some()
+    }
+
+    /// Floats pixels in the box on the active cel at the tool's next run,
+    /// which makes the free transform the tool.
+    pub fn float(&mut self, floating: Floating) {
+        self.floating = Some(floating);
     }
 }
 
@@ -240,6 +264,51 @@ fn start(editor: &mut Editor) -> Option<Session> {
         clear,
         job: None,
         applying: false,
+        pasted: false,
+    })
+}
+
+/// Floats pasted pixels over the active cel in a new session, making the
+/// cel if the frame has none. The edit, cel and all, is one undo step.
+fn start_paste(editor: &mut Editor, f: Floating) -> Option<Session> {
+    let (layer, frame) = (editor.layer, editor.frame);
+    let mut tx = editor
+        .history
+        .begin(&editor.doc, "Paste", Scope::Images(Vec::new()));
+    let image = match editor.doc.target_image(layer, frame) {
+        Ok(i) => i,
+        Err(e) => {
+            editor.history.rollback(&mut editor.doc, tx);
+            refuse(editor, e);
+            return None;
+        }
+    };
+    tx.watch(&editor.doc, image);
+    let Some(original) = editor.doc.image(image).cloned() else {
+        editor.history.rollback(&mut editor.doc, tx);
+        return None;
+    };
+    let rect = Rect::new(
+        f.at.x,
+        f.at.y,
+        f.pixels.width as i32,
+        f.pixels.height as i32,
+    );
+    editor.selection = None;
+    Some(Session {
+        layer,
+        frame,
+        tx: Some(tx),
+        clear: clear_of(editor),
+        base: Arc::new(original.clone()),
+        original,
+        lifted: Arc::new(f.pixels),
+        rect,
+        shape: Shape::default(),
+        grab: None,
+        job: None,
+        applying: false,
+        pasted: true,
     })
 }
 
@@ -325,6 +394,14 @@ fn finish(editor: &mut Editor, mut s: Session, keep: bool) {
         if let Some(tx) = s.tx.take() {
             editor.history.commit(&mut editor.doc, tx);
         }
+    } else if s.pasted {
+        s.job = None;
+        if let Some(tx) = s.tx.take() {
+            editor.history.rollback(&mut editor.doc, tx);
+        }
+        // The cel the paste made, if it made one, is gone.
+        editor.touch();
+        return;
     } else {
         s.job = None;
         if let Ok(t) = editor.doc.target(s.layer, s.frame) {
@@ -389,7 +466,7 @@ pub fn use_transform(
         dirty = true;
     }
     // Leaving the tool keeps what was done.
-    if editor.tool != Tool::Transform {
+    if editor.tool != Tool::Transform && ft.floating.is_none() {
         pointer.events();
         if let Some(s) = ft.session.take() {
             finish(editor, s, true);
@@ -397,6 +474,25 @@ pub fn use_transform(
             aids.revision += 1;
         }
         return;
+    }
+    // A paste floats in a box of its own, keeping any box before it.
+    if let Some(f) = ft.floating.take() {
+        if let Some(s) = ft.session.take() {
+            finish(editor, s, true);
+        }
+        let back = f.back;
+        ft.session = start_paste(editor, f);
+        if ft.session.is_some() {
+            editor.tool = Tool::Transform;
+            dirty = true;
+            signals.set("opt_angle", "0".to_string());
+        } else {
+            editor.tool = back;
+            aids.transform_box = None;
+            aids.revision += 1;
+            pointer.events();
+            return;
+        }
     }
     // A reference layer has its own box (see crate::tools::reference).
     if ft.session.is_none()

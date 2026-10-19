@@ -153,6 +153,23 @@ selection by a number of pixels, and saves selections to load again later
 while the document is open, replacing, adding to, subtracting from or intersecting the
 current one.
 
+The Edit menu copies and pastes through the system clipboard, as Aseprite
+does. Copy (Ctrl+C) puts the selection of the active cel, or the cel's
+content with nothing selected, on the clipboard as an image, so other
+programs can paste it; Cut (Ctrl+X) also clears it, as one undo step; Copy
+merged (Ctrl+Shift+C) copies what all the visible layers show there. Paste
+(Ctrl+V) floats the clipboard's image in the free transform box, where it
+was copied from when that place is in view and in the middle of the view
+otherwise; move, scale and turn it with the box's handles, then Enter keeps
+it as one undo step and Escape drops it. Paste as new layer (Ctrl+Shift+V)
+puts it on a new layer above the active one, and Paste as new document
+(Ctrl+Alt+V) opens it in a tab of its own. An image copied in another
+program, such as a screenshot, pastes the same way. Between pixl documents a
+copy keeps its exact pixels and its place; an indexed copy keeps its palette
+indices when pasted on the same palette, and anything else pasted on an
+indexed document lands on the nearest palette color, as an imported image
+does.
+
 The Image menu crops to the selection, sets the canvas size around an anchor,
 resizes the image (nearest, RotSprite or clean-edge sampling, so no new
 colors appear), flips and turns the canvas, converts to indexed color (on the
@@ -259,8 +276,9 @@ tiles under the stroke, so every place they show changes with them, and
 drops what was painted on empty cells; Auto reuses a tile that already
 looks like the edited cell, changes a tile in place when that cell is its
 only use, adds a tile otherwise, and removes the tiles the edit left
-unused; Stack reuses or adds tiles and never changes or removes one. The
-draw mode is the window's, kept as you switch documents.
+unused; Stack reuses or adds tiles and never changes or removes one. A
+paste in Pixels mode lands in the tileset the same way when Enter keeps it.
+The draw mode is the window's, kept as you switch documents.
 
 The Tileset panel shows the active tilemap layer's tiles, the empty one
 first. A click picks the tile the tools place and switches to Tiles mode;
