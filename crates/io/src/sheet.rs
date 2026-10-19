@@ -14,6 +14,7 @@ use pixl_document::document::{BlendMode, Document, Layer, LayerId, LayerKind, Lo
 use pixl_document::error::Error;
 use pixl_document::geom::Rect;
 use pixl_document::image::{Raster, TiledImage};
+use pixl_document::tiles::TilesetId;
 
 /// How frames are arranged on a sprite sheet.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -526,6 +527,89 @@ pub fn sprite_sheet(doc: &Document, opts: &SheetOptions) -> Result<SpriteSheet, 
     })
 }
 
+/// The most tiles a row of a tileset sheet holds.
+pub const TILESET_COLUMNS: u32 = 16;
+
+/// A tileset laid out on one image: tile `i` in cell `i`, rows of up to
+/// [`TILESET_COLUMNS`] tiles with no gaps, the empty tile 0 first so a
+/// tile's number in a tilemap is its place on the sheet. The JSON names each
+/// tile's rectangle the way a sprite sheet's JSON names its frames, with the
+/// tileset's name, tile size, count, columns and base index in `meta`.
+pub fn tileset_sheet(
+    doc: &Document,
+    id: TilesetId,
+    image_name: &str,
+) -> Result<SpriteSheet, Error> {
+    let ts = doc.tileset(id).ok_or(Error::TilesetNotFound(id))?;
+    let (tw, th) = ts.tile_size();
+    let n = ts.len() as u32;
+    let cols = n.clamp(1, TILESET_COLUMNS);
+    let rows = n.div_ceil(cols);
+    let (width, height) = (cols * tw, rows * th);
+    let mut pixels = vec![Rgba::TRANSPARENT; width as usize * height as usize];
+    let color = |v: u32| match doc.mode() {
+        ColorMode::Rgba => Rgba::from_u32(v),
+        ColorMode::Indexed if v as u8 == doc.transparent_index() => Rgba::TRANSPARENT,
+        ColorMode::Indexed => doc.palette().get(v as u8),
+    };
+    let mut cells = Vec::with_capacity(n as usize);
+    let mut frames = Vec::with_capacity(n as usize);
+    for (i, tile) in ts.tiles().enumerate() {
+        let i = i as u32;
+        let (x0, y0) = ((i % cols) * tw, (i / cols) * th);
+        if i > 0 {
+            for (k, &v) in tile.iter().enumerate() {
+                let (x, y) = (x0 + k as u32 % tw, y0 + k as u32 / tw);
+                pixels[(y * width + x) as usize] = color(v);
+            }
+        }
+        let name = format!("{} {i}", ts.name);
+        let rect = Rect::new(x0 as i32, y0 as i32, tw as i32, th as i32);
+        frames.push(json!({
+            "filename": name,
+            "frame": rect_json(rect, 1),
+            "rotated": false,
+            "trimmed": false,
+            "spriteSourceSize": {"x": 0, "y": 0, "w": tw, "h": th},
+            "sourceSize": {"w": tw, "h": th},
+        }));
+        cells.push(SheetCell {
+            name,
+            frame: i as usize,
+            layer: None,
+            rect,
+            source: Rect::new(0, 0, tw as i32, th as i32),
+        });
+    }
+    let doc_json = json!({
+        "frames": frames,
+        "meta": {
+            "app": "pixl",
+            "version": env!("CARGO_PKG_VERSION"),
+            "image": image_name,
+            "format": "RGBA8888",
+            "size": {"w": width, "h": height},
+            "scale": "1",
+            "tileset": {
+                "name": ts.name,
+                "tileWidth": tw,
+                "tileHeight": th,
+                "tileCount": n,
+                "columns": cols,
+                "baseIndex": ts.base_index,
+            },
+        }
+    });
+    let json = serde_json::to_string_pretty(&doc_json).map_err(|e| Error::Image(e.to_string()))?;
+    Ok(SpriteSheet {
+        width,
+        height,
+        pixels,
+        cells,
+        json,
+    })
+}
+
 /// How a sheet image splits into frames.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SheetGrid {
@@ -998,5 +1082,33 @@ mod tests {
         assert_eq!(split_sheet(8, 4, &px, &grid).len(), 1);
         assert_eq!(split_sheet(8, 4, &px, &SheetGrid::cells(4, 4)).len(), 2);
         assert!(sheet_document((4, 4), &[], 100).is_err());
+    }
+
+    #[test]
+    fn a_tileset_sheet_puts_each_tile_at_its_number() {
+        let mut d = Document::new(32, 32, ColorMode::Rgba).unwrap();
+        let ts = d.add_tileset("ground", 4, 2).unwrap();
+        for i in 0..20u8 {
+            d.add_tile(ts, vec![Rgba::opaque(i, 2, 3).to_u32(); 8])
+                .unwrap();
+        }
+        let sheet = tileset_sheet(&d, ts, "ground.png").unwrap();
+        // 21 tiles with the empty one: two rows of up to 16.
+        assert_eq!((sheet.width, sheet.height), (64, 4));
+        let at = |x: u32, y: u32| sheet.pixels[(y * sheet.width + x) as usize];
+        assert_eq!(at(0, 0), Rgba::TRANSPARENT, "tile 0 is empty");
+        assert_eq!(at(4, 0), Rgba::opaque(0, 2, 3), "tile 1 next");
+        assert_eq!(
+            at(0, 2),
+            Rgba::opaque(15, 2, 3),
+            "tile 16 starts the second row"
+        );
+        let v: Value = serde_json::from_str(&sheet.json).unwrap();
+        assert_eq!(v["frames"][17]["frame"]["x"], 4);
+        assert_eq!(v["frames"][17]["frame"]["y"], 2);
+        assert_eq!(v["frames"][17]["filename"], "ground 17");
+        assert_eq!(v["meta"]["tileset"]["tileCount"], 21);
+        assert_eq!(v["meta"]["tileset"]["columns"], 16);
+        assert_eq!(v["meta"]["tileset"]["baseIndex"], 1);
     }
 }

@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use lumenui::prelude::*;
 use pixl_document::{
     ColorMode, Document, History, LayerId, LayerKind, NewLayer, Placement, Rect, Rgba, Scope,
-    Selection,
+    Selection, TileFlags, TileRef, TilesetId,
 };
 use pixl_paint::{Brush, Symmetry};
 
@@ -219,6 +219,11 @@ pub struct Editor {
     pub layer: LayerId,
     /// Tools paint the active layer's mask instead of its pixels.
     pub mask_edit: bool,
+    /// On a tilemap layer, tools place tiles instead of painting pixels
+    /// (Aseprite's Tiles mode; Tab switches).
+    pub tiles_mode: bool,
+    /// The tile the tile tools place, with its flips.
+    pub tile: TileRef,
     pub fg: Rgba,
     pub bg: Rgba,
     pub tool: Tool,
@@ -267,6 +272,8 @@ impl Editor {
             frame: 0,
             layer,
             mask_edit: false,
+            tiles_mode: false,
+            tile: TileRef::new(1, TileFlags::NONE),
             fg: Rgba::BLACK,
             bg: Rgba::WHITE,
             tool: Tool::default(),
@@ -301,13 +308,14 @@ impl Editor {
     }
 
     /// Takes what belongs to the window from `window`: the colors, the tool,
-    /// its options and the brush shape.
+    /// its options, the brush shape and how pixel edits change tilesets.
     pub fn take_window_state(&mut self, window: &Editor) {
         self.fg = window.fg;
         self.bg = window.bg;
         self.tool = window.tool;
         self.options = window.options;
         self.brush_shape = window.brush_shape.clone();
+        self.history.set_tile_mode(window.history.tile_mode());
     }
 
     /// Replaces the document in place (a recovered copy of it), keeping
@@ -412,6 +420,17 @@ impl Editor {
     }
 
     /// Keeps the active layer pointing at a layer that exists.
+    /// The tileset of the active layer, when it is a tilemap layer.
+    pub fn active_tileset(&self) -> Option<TilesetId> {
+        self.doc.layer(self.layer).and_then(|l| l.tileset())
+    }
+
+    /// Whether the tools place tiles: Tiles mode on a tilemap layer, its
+    /// pixels rather than its mask.
+    pub fn placing_tiles(&self) -> bool {
+        self.tiles_mode && !self.mask_edit && self.active_tileset().is_some()
+    }
+
     fn after_structure_change(&mut self) {
         if self.doc.layer(self.layer).is_none() {
             self.layer = top_raster(&self.doc).unwrap_or(LayerId(0));

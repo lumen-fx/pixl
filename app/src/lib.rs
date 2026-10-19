@@ -310,6 +310,7 @@ pub fn editor(source: Source) -> App {
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
         );
     let app = rig::install(app);
+    let app = panels::tileset::install(app);
     let app = tutorial::install(app);
     let app = tools::presets::install(app, tools::presets::Presets::in_memory());
     let app = tools::dynamics::install(app);

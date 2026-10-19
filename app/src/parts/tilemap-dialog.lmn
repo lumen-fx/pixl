@@ -1,0 +1,29 @@
+<dialog open="tm_open">
+  <column class="dialog-card tm-card">
+    <label class="dialog-title" bind-text="tm_title" text="New tilemap layer"/>
+    <row class="dialog-row">
+      <label class="field-label" text="Tileset"/>
+      <row id="tm-sets" class="tm-sets"/>
+    </row>
+    <if signal="tm_new_set" mode="hide">
+      <column class="tm-new">
+      <row class="dialog-row">
+        <label class="field-label" text="Tile size"/>
+        <input id="tm-width" class="size-field" bind-text="tm_width" text="16"/>
+        <label class="option-label" text="x"/>
+        <input id="tm-height" class="size-field" bind-text="tm_height" text="16"/>
+        <label class="option-label" text="px"/>
+      </row>
+      <row class="dialog-row">
+        <label class="field-label" text="Name"/>
+        <input id="tm-name" class="name-field" bind-text="tm_name" text="Tileset 1"/>
+      </row>
+      </column>
+    </if>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="tm-cancel" text="Cancel"/>
+      <button id="tm-ok" class="primary" default="true" text="OK"/>
+    </row>
+  </column>
+</dialog>

@@ -4,8 +4,10 @@
 //! the bottom layer (a buffer of its own, or inside the CPU-flattened buffer
 //! when the layers do not fit the buffer budget), the frame after a pan and
 //! after a zoom step, the same with a 4000x3000 photo as a reference layer
-//! in the middle of the stack, and exporting the frame as a PNG and as a
-//! packed, trimmed sprite sheet.
+//! in the middle of the stack, the same again with a 256x256-cell tilemap
+//! layer of 16x16 tiles on top as the active layer, its grid drawn over the
+//! canvas, and exporting the frame as a PNG and as a packed, trimmed sprite
+//! sheet.
 //!
 //! `cargo bench -p pixl --bench view -- cpu` or `-- gpu` picks the renderer;
 //! `side=N` and `layers=N` change the document from 4096 and 32, and
@@ -37,7 +39,8 @@ use pixl::Editor;
 use pixl::perf::SystemTimes;
 use pixl::view::{Layers, View};
 use pixl_document::{
-    BlendMode, ColorMode, Document, NewLayer, Placement, Rect, ReferencePlace, Rgba, TiledImage,
+    BlendMode, ColorMode, Document, NewLayer, Placement, Point, Rect, ReferencePlace, Rgba,
+    TileFlags, TileGrid, TileRef, TiledImage,
 };
 
 const STROKES: usize = 40;
@@ -115,6 +118,38 @@ fn photo() -> TiledImage<Rgba> {
     TiledImage::from_pixels(w, h, Rgba::TRANSPARENT, &px)
 }
 
+/// Tiles of a tilemap: 64 tiles of 16x16, each a gradient of its own.
+const MAP_TILES: u32 = 64;
+const MAP_TILE: u32 = 16;
+
+fn map_tiles() -> Vec<Vec<u32>> {
+    (0..MAP_TILES)
+        .map(|t| {
+            (0..MAP_TILE * MAP_TILE)
+                .map(|k| {
+                    let (x, y) = (k % MAP_TILE, k / MAP_TILE);
+                    Rgba::opaque((t * 4) as u8, (x * 16) as u8, (y * 16) as u8).to_u32()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// A grid of `side` cells a side, every cell a tile, some flipped.
+fn map_cells(side: u32) -> Vec<TileRef> {
+    (0..side * side)
+        .map(|k| {
+            let (x, y) = (k % side, k / side);
+            let flags = TileFlags {
+                x: (x + y) % 3 == 0,
+                y: x % 5 == 0,
+                d: y % 7 == 0,
+            };
+            TileRef::new(1 + (x * 7 + y * 13) % MAP_TILES, flags)
+        })
+        .collect()
+}
+
 fn app_dir(backend: &str) -> PathBuf {
     let app = Path::new(env!("CARGO_MANIFEST_DIR"));
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("bench-{backend}"));
@@ -163,6 +198,14 @@ enum Phase {
     RefZoom {
         n: usize,
     },
+    /// A tilemap layer was added on top; waiting for its buffer.
+    Tilemap,
+    MapPan {
+        n: usize,
+    },
+    MapZoom {
+        n: usize,
+    },
     Export,
     Done,
 }
@@ -182,6 +225,9 @@ impl Phase {
             Phase::Reference => "add a reference",
             Phase::RefPan { .. } => "pan, with a reference",
             Phase::RefZoom { .. } => "zoom step, with a reference",
+            Phase::Tilemap => "add a tilemap",
+            Phase::MapPan { .. } => "pan, with a tilemap",
+            Phase::MapZoom { .. } => "zoom step, with a tilemap",
             Phase::Export | Phase::Done => "export",
         }
     }
@@ -212,6 +258,13 @@ struct Results {
     reference_started: Option<Instant>,
     ref_pan: Vec<Duration>,
     ref_zoom: Vec<Duration>,
+    /// Adding the tilemap: until its buffer is in.
+    tilemap: Option<Duration>,
+    tilemap_started: Option<Instant>,
+    /// The canvas's art revision when the tilemap was added.
+    tilemap_art: u64,
+    map_pan: Vec<Duration>,
+    map_zoom: Vec<Duration>,
     export: Option<(Duration, usize)>,
     sheet: Option<(Duration, usize)>,
     hide_started: Option<Instant>,
@@ -292,6 +345,7 @@ fn main() {
     let t = Instant::now();
     let mut reference = Some(photo());
     let reference_index = layers / 2;
+    let mut tilemap = Some((map_tiles(), map_cells(side / MAP_TILE)));
     eprintln!("built the reference in {:?}", t.elapsed());
 
     let capture = SurfaceCapture::default();
@@ -530,7 +584,33 @@ fn main() {
                         results.ref_zoom.push(lap);
                     }
                     if n == STROKES {
-                        *p = Phase::Export;
+                        // A tilemap over everything, the layer being edited
+                        // in Tiles mode, so its grid shows over the canvas.
+                        let (tiles, cells) = tilemap.take().expect("added once");
+                        let doc = &mut editor.doc;
+                        let ts = doc
+                            .add_tileset("ground", MAP_TILE, MAP_TILE)
+                            .expect("a tileset");
+                        for t in tiles {
+                            doc.add_tile(ts, t).expect("a tile");
+                        }
+                        let map = doc
+                            .add_layer(
+                                NewLayer::Tilemap { tileset: ts },
+                                "map",
+                                Placement::default(),
+                            )
+                            .expect("a tilemap layer");
+                        let cols = side / MAP_TILE;
+                        let grid = TileGrid::from_cells(Point::new(0, 0), cols, cols, &cells)
+                            .expect("cells for the grid");
+                        doc.set_tile_grid(map, 0, grid).expect("the grid");
+                        editor.layer = map;
+                        editor.tiles_mode = true;
+                        editor.touch();
+                        results.tilemap_started = Some(Instant::now());
+                        results.tilemap_art = layers.art_revision;
+                        *p = Phase::Tilemap;
                         return;
                     }
                     let inward = n % 4 < 2;
@@ -540,6 +620,48 @@ fn main() {
                     *watch.started.lock().unwrap() = Some(Instant::now());
                     cap.request();
                     *p = Phase::RefZoom { n: n + 1 };
+                }
+                Phase::Tilemap => {
+                    if layers.pending() == 0 && layers.art_revision != results.tilemap_art {
+                        let since = results.tilemap_started.expect("set when added");
+                        results.tilemap = Some(since.elapsed());
+                        *p = Phase::MapPan { n: 0 };
+                    }
+                }
+                Phase::MapPan { n } => {
+                    if watch.started.lock().unwrap().is_some() {
+                        return;
+                    }
+                    if let Some(lap) = watch.lap.lock().unwrap().take() {
+                        results.map_pan.push(lap);
+                    }
+                    if n == STROKES {
+                        *p = Phase::MapZoom { n: 0 };
+                        return;
+                    }
+                    view.pan(7.0, -3.0);
+                    *watch.started.lock().unwrap() = Some(Instant::now());
+                    cap.request();
+                    *p = Phase::MapPan { n: n + 1 };
+                }
+                Phase::MapZoom { n } => {
+                    if watch.started.lock().unwrap().is_some() {
+                        return;
+                    }
+                    if let Some(lap) = watch.lap.lock().unwrap().take() {
+                        results.map_zoom.push(lap);
+                    }
+                    if n == STROKES {
+                        *p = Phase::Export;
+                        return;
+                    }
+                    let inward = n % 4 < 2;
+                    let z = view.step(inward);
+                    let mid = view.middle();
+                    view.zoom_at(z, mid);
+                    *watch.started.lock().unwrap() = Some(Instant::now());
+                    cap.request();
+                    *p = Phase::MapZoom { n: n + 1 };
                 }
                 Phase::Export => {
                     let t = Instant::now();
@@ -603,6 +725,8 @@ fn main() {
         ("zoom step", &r.zoom),
         ("pan, with a reference", &r.ref_pan),
         ("zoom step, with a reference", &r.ref_zoom),
+        ("pan, with a tilemap", &r.map_pan),
+        ("zoom step, with a tilemap", &r.map_zoom),
     ] {
         if !v.is_empty() {
             println!(
@@ -619,6 +743,13 @@ fn main() {
             "add a 4000x3000 reference: shows after {}, longest tick meanwhile {}",
             ms(until),
             ms(longest)
+        );
+    }
+    if let Some(until) = r.tilemap {
+        println!(
+            "add a tilemap of {0}x{0} cells: shows after {1}",
+            side / MAP_TILE,
+            ms(until)
         );
     }
     if let Some(frame) = r.hide_frame {
@@ -678,7 +809,7 @@ fn main() {
 }
 
 /// The phase each gated number is measured in, for naming its systems.
-const GATED: [(&str, &str); 7] = [
+const GATED: [(&str, &str); 9] = [
     ("idle_systems_ms", "idle"),
     ("idle_tick_ms", "idle"),
     ("stroke_top_ms", "stroke, top layer"),
@@ -686,6 +817,8 @@ const GATED: [(&str, &str); 7] = [
     ("pan_ms", "pan"),
     ("pan_reference_ms", "pan, with a reference"),
     ("zoom_reference_ms", "zoom step, with a reference"),
+    ("pan_tilemap_ms", "pan, with a tilemap"),
+    ("zoom_tilemap_ms", "zoom step, with a tilemap"),
 ];
 
 /// Checks the medians of the run against `benches/gate.json` for the
@@ -714,6 +847,8 @@ fn gate(r: &Results, backend: &str, side: u32, layers: usize, enforce: bool) -> 
         "pan_ms" => median(&r.pan),
         "pan_reference_ms" => median(&r.ref_pan),
         "zoom_reference_ms" => median(&r.ref_zoom),
+        "pan_tilemap_ms" => median(&r.map_pan),
+        "zoom_tilemap_ms" => median(&r.map_zoom),
         _ => None,
     };
     let mut passed = true;

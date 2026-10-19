@@ -1,0 +1,9 @@
+/* The Tileset panel: its tiles on one canvas, the picked one outlined. */
+
+.tileset-stage { height: 160; min-height: 48; overflow: hidden; bg: var(--surface-0); }
+.tileset-stage canvas { position: absolute; inset: 0; }
+.ts-name { font-size: var(--font-size-small); text-color: var(--text-faint); }
+.ts-info { font-size: var(--font-size-small); text-color: var(--text-faint); }
+.ts-actions { align: center; gap: var(--space-1); flex-wrap: wrap; }
+.tm-sets { flex-wrap: wrap; gap: var(--space-1); }
+.tm-new { gap: var(--space-3); }

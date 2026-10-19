@@ -6,6 +6,7 @@
   <menuitem id="window-layout-paint" label="Paint layout"/>
   <menuitem id="window-layout-animate" label="Animate layout"/>
   <menuitem id="window-layout-rig" label="Rig layout"/>
+  <menuitem id="window-layout-tiles" label="Tiles layout"/>
   <separator/>
   <menuitem id="window-layout-reset" label="Reset layout"/>
   <menuitem id="window-show-all" label="Show all panels"/>

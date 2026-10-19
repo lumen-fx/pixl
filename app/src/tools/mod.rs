@@ -6,6 +6,7 @@ pub mod dynamics;
 pub mod presets;
 pub mod reference;
 pub mod slices;
+pub mod tiles;
 pub mod toolbar;
 pub mod toolbox;
 pub mod transform;
@@ -86,6 +87,8 @@ enum Session {
         selection: Option<Selection>,
         tx: Option<Transaction>,
     },
+    /// A tile tool in Tiles mode.
+    Tiles(tiles::TileSession),
 }
 
 impl Session {
@@ -96,6 +99,7 @@ impl Session {
             | Session::Pick { button }
             | Session::Select { button, .. }
             | Session::Move { button, .. } => *button,
+            Session::Tiles(t) => t.button(),
         }
     }
 }
@@ -395,6 +399,20 @@ fn begin(editor: &mut Editor, preview: &mut Preview, press: Press) -> Option<Ses
         editor.tool
     };
     let layer = editor.layer;
+    // On a tilemap layer in Tiles mode the painting tools place tiles.
+    if editor.placing_tiles() {
+        if tiles::places_tiles(tool) {
+            return tiles::begin(editor, preview, tool, p, button).map(Session::Tiles);
+        }
+        if crate::tools::toolbox::paints(tool) {
+            editor.message = Some(
+                "In Tiles mode the pencil, brush, eraser, bucket, rectangle and eyedropper \
+                 place tiles; Tab goes back to pixels"
+                    .to_string(),
+            );
+            return None;
+        }
+    }
     match tool {
         Tool::Pencil | Tool::Eraser => {
             let ink = ink_for(editor, tool, button, eraser_end);
@@ -567,6 +585,7 @@ fn extend(
     shift: bool,
 ) {
     match session {
+        Session::Tiles(t) => tiles::extend(editor, preview, t, p),
         Session::Stroke { .. } => stroke_to(editor, session, p, event),
         Session::Shape { to, .. } => {
             if *to != p {
@@ -609,6 +628,7 @@ fn extend(
 
 fn finish(editor: &mut Editor, preview: &mut Preview, session: Session, p: Point, shift: bool) {
     match session {
+        Session::Tiles(t) => tiles::finish(editor, preview, t, p),
         Session::Stroke {
             mut tx,
             stroke,

@@ -756,7 +756,8 @@ pub fn draw_rulers(
 }
 
 /// Draws the aids over the document on the overlay canvas: the custom grid,
-/// the guides, the slices and the symmetry axes. The overlay already has
+/// the active tilemap layer's cells, the guides, the slices and the
+/// symmetry axes. The overlay already has
 /// the view's turn on.
 pub fn draw(ctx: &Context2d, view: &View, aids: &Aids, editor: &Editor) {
     let z = view.zoom;
@@ -819,6 +820,24 @@ pub fn draw(ctx: &Context2d, view: &View, aids: &Aids, editor: &Editor) {
                     y += ch as i32;
                 }
             }
+        }
+    }
+    // The cells of the active tilemap layer, while one is active.
+    if let Some((origin, (tw, th))) = editor.doc.tile_grid_shape(editor.layer, editor.frame)
+        && let Some(g) = aids.colors.grid
+        && f64::from(tw.min(th)) * z >= 4.0
+    {
+        ctx.set_fill_color(color(g));
+        let vis = view.visible_pixels(w, h);
+        let mut x = vis.x - (vis.x - origin.x).rem_euclid(tw as i32);
+        while x <= vis.right() {
+            ctx.fill_rect(ox + f64::from(x) * z, oy, 1.0, dh);
+            x += tw as i32;
+        }
+        let mut y = vis.y - (vis.y - origin.y).rem_euclid(th as i32);
+        while y <= vis.bottom() {
+            ctx.fill_rect(ox, oy + f64::from(y) * z, dw, 1.0);
+            y += th as i32;
         }
     }
     if let Some(g) = aids.colors.guide {

@@ -1,0 +1,20 @@
+<column id="panel-tileset" class="panel">
+  <row class="panel-header">
+    <label class="panel-title" text="Tileset"/>
+    <spacer/>
+    <label class="ts-name" bind-text="ts_name" text=""/>
+  </row>
+  <column id="tileset-body" class="panel-body">
+    <column id="tileset-stage" class="tileset-stage">
+      <canvas id="tileset-canvas"/>
+    </column>
+    <label class="ts-info" bind-text="ts_info" text=""/>
+    <row class="ts-actions">
+      <tooltip text="Move the picked tile one place earlier"><button id="ts-earlier" class="flat small" text="Earlier"/></tooltip>
+      <tooltip text="Move the picked tile one place later"><button id="ts-later" class="flat small" text="Later"/></tooltip>
+      <tooltip text="Duplicate the picked tile"><button id="ts-copy" class="flat small" text="Copy"/></tooltip>
+      <tooltip text="Delete the picked tile; cells showing it empty"><button id="ts-delete" class="flat small" text="Delete"/></tooltip>
+      <tooltip text="Delete every tile no cell shows"><button id="ts-unused" class="flat small" text="Unused"/></tooltip>
+    </row>
+  </column>
+</column>

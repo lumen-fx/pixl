@@ -2,6 +2,9 @@
   <menuitem id="lm-new" label="New layer"/>
   <menuitem id="lm-group" label="New group"/>
   <menuitem id="lm-reference" label="Reference image..."/>
+  <menuitem id="lm-tilemap-new" label="New tilemap layer..."/>
+  <menuitem id="lm-tilemap-convert" label="Convert to tilemap..."/>
+  <menuitem id="lm-tilemap-raster" label="Convert to normal layer"/>
   <menuitem id="lm-duplicate" label="Duplicate"/>
   <menuitem id="lm-delete" label="Delete"/>
   <separator/>

@@ -1789,6 +1789,8 @@ pub struct Drawn {
     selection: Option<Selection>,
     /// The view aids' revision the overlay last drew.
     aids: u64,
+    /// The active tilemap layer's cells the overlay last drew.
+    tile_grid: Option<(Point, (u32, u32))>,
     checker: Option<(PixelBuffer, u32, u32)>,
     checker_colors: u64,
     doc_size: (u32, u32),
@@ -1911,6 +1913,7 @@ pub fn draw_stage(
     let cell = f64::from(canvas.checker_size.max(1));
     // The pixel grid is off until View > Pixel grid turns it on.
     let grid_from = canvas.pixel_grid.then_some(canvas.grid_from_zoom / 100.0);
+    let tile_grid = doc.tile_grid_shape(editor.layer, editor.frame);
 
     if view_changed || drawn.colors != colors.revision || drawn.background != Some(doc.background())
     {
@@ -1928,6 +1931,7 @@ pub fn draw_stage(
         || drawn.preview != preview.revision
         || drawn.selection != editor.selection
         || drawn.aids != aids.revision
+        || drawn.tile_grid != tile_grid
     {
         draw_overlay(
             &overlay,
@@ -1942,6 +1946,7 @@ pub fn draw_stage(
         drawn.preview = preview.revision;
         drawn.selection = editor.selection.clone();
         drawn.aids = aids.revision;
+        drawn.tile_grid = tile_grid;
     }
     drawn.view = view.revision;
     drawn.colors = colors.revision;

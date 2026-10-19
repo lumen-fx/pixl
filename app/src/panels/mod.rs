@@ -5,6 +5,7 @@
 pub mod color;
 pub mod layers;
 pub mod preview;
+pub mod tileset;
 pub mod timeline;
 
 use lumenui::lumen_core::input::{PointerButton, PointerPressed, PointerReleased};

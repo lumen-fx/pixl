@@ -1349,9 +1349,11 @@ pub fn use_toolbox(
     }
     // The Rig panel's modes take the stage's pointer too, and so does an
     // active reference layer.
+    // In Tiles mode the painting tools place tiles (see `tools::tiles`).
     if !mine(editor.tool)
         || place.rig.captures_pointer()
         || crate::tools::reference::takes_pointer(editor)
+        || (editor.placing_tiles() && paints(editor.tool))
     {
         pointer.events();
         return;

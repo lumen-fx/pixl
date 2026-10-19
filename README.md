@@ -24,9 +24,9 @@ source (see Quick start).
 
 Early. The editor is the `pixl` program in `app/`, built with the Lumen Rust
 SDK: a menu row, the tool bar, tool options, a tab for each open
-document, the canvas, and the color, palette, layers, history, timeline and
-preview panels. Under it, crates with no UI hold the document, the tools and the
-file formats (see Layout).
+document, the canvas, and the color, palette, layers, tileset, history,
+timeline and preview panels. Under it, crates with no UI hold the document,
+the tools and the file formats (see Layout).
 
 Started without a file, pixl opens on its start screen: the documents opened
 or saved most recently, each with a thumbnail of its first frame, its folder,
@@ -236,6 +236,39 @@ duplicates, merges down, flattens, clips, locks pixels, alpha or position,
 and opens the layer's properties: name, opacity, blend mode, color tag,
 clipping, locks and the mask.
 
+A tilemap layer builds a map from a tileset, as in Aseprite: a list of
+tiles of one size, numbered from 1, with tile 0 the empty tile. Each cell
+of the layer's grid shows one tile, plain or flipped across, down or along
+the diagonal, so a level or a pattern is drawn once and placed many times.
+Layer > New tilemap layer makes one, with a new tileset of a tile size you
+choose or one the document already has; tilesets are shared, so several
+layers can draw from one. Layer > Convert to tilemap cuts a layer's pixels
+into tiles, one tile for every distinct cell, and Convert to normal layer
+turns a tilemap back into plain pixels. While a tilemap layer is active, its
+grid of cells shows over the canvas.
+
+On a tilemap layer, Tab switches the tools between Pixels and Tiles (the
+button at the left of the tool options does too). In Tiles mode the pencil
+and the brush place the picked tile in each cell they cross, the eraser and
+the secondary button empty cells, the bucket fills the joined cells that
+hold the same tile, the rectangle fills a block of cells, and the
+eyedropper picks the tile under the pointer, flips included. In Pixels mode
+every tool paints as on any layer, and when the stroke ends the draw mode
+beside the Tiles button says what happens to the tileset: Manual changes the
+tiles under the stroke, so every place they show changes with them, and
+drops what was painted on empty cells; Auto reuses a tile that already
+looks like the edited cell, changes a tile in place when that cell is its
+only use, adds a tile otherwise, and removes the tiles the edit left
+unused; Stack reuses or adds tiles and never changes or removes one. The
+draw mode is the window's, kept as you switch documents.
+
+The Tileset panel shows the active tilemap layer's tiles, the empty one
+first. A click picks the tile the tools place and switches to Tiles mode;
+the wheel scrolls a long tileset. Earlier and Later move the picked tile,
+Copy duplicates it, Delete removes it and empties the cells that showed it,
+and Unused removes every tile no cell shows. Each is one undo step, and
+moving tiles never changes what the map shows.
+
 Click an eye to show or hide its layer; a hidden group hides everything in
 it. Alt+click an eye to see only that layer, with the groups holding it, and
 Alt+click it again to bring back what was showing before. Drag down the
@@ -252,7 +285,8 @@ a dock to resize it. Each panel's header collapses it to its title or hides
 it, and a right-click on the header moves it to another dock or up and down
 its dock. Window > Panels and layouts lists every panel with its dock, its
 order and whether it shows, and switches between layouts: the built-in Paint,
-Animate and Rig, and any the user saves under a name of their own. Window >
+Animate, Rig and Tiles (the Tileset panel beside the colors), and any the
+user saves under a name of their own. Window >
 Reset layout puts the current layout back as it was saved. The arrangement in
 use and the saved layouts are kept in `workspace.json` in pixl's data folder,
 so the window reopens as it was left; an arrangement saved while the Layers
@@ -475,6 +509,14 @@ a PNG into the frames of a new document, by cell size or by a count of
 columns and rows, with an offset and padding, leaving out empty cells if
 asked, and previews the cells over the image.
 
+Tilemap layers export as the pixels they show, in PNG frames, GIFs and
+sprite sheets like any layer. File > Export tileset writes the active
+tilemap layer's tileset (or the document's first) as one PNG, rows of up to
+16 tiles with the empty tile 0 first, so a tile's number in a map is its
+place on the sheet, and a JSON file beside it naming each tile's rectangle
+the way sprite sheet JSON names frames, with the tileset's name, tile size,
+count, columns and base index.
+
 ## Command line
 
 `pixl-cli` exports documents without the editor, for game build pipelines
@@ -605,8 +647,10 @@ The view bench opens a 4096x4096 document of 32 layers with no window and
 measures what a user waits for: the progressive redraw after opening it,
 the time from a stroke to the frame that shows it on the top layer and on
 the bottom one, the frame after a pan and after a zoom step, the same with
-a 4000x3000 photo as a reference layer in the middle of the stack, hiding a
-layer, and exporting the frame as a PNG; and what a tick costs when nothing
+a 4000x3000 photo as a reference layer in the middle of the stack, the same
+again with a tilemap layer of 256x256 cells of 16x16 tiles on top, being
+edited with its grid showing, hiding a layer, and exporting the frame as a
+PNG; and what a tick costs when nothing
 changes, the editor's systems alone and the whole tick. `side=N` and
 `layers=N` change the document, `budget=MiB` the layer buffer memory,
 `overlay` shows the performance overlay while it runs, `log=FILE` writes the
@@ -617,8 +661,8 @@ the load on the machine, so compare runs taken under the same load.
 `cargo bench -p pixl --bench view -- cpu gate` (or `gpu gate`) also checks
 the run against `app/benches/gate.json`: the editor's work on an idle tick,
 the whole idle tick, a stroke on the top and on the bottom layer, a pan, and
-a pan and a zoom step with the reference, each a median against a limit for
-the renderer. A number past its limit
+a pan and a zoom step with the reference and with the tilemap, each a
+median against a limit for the renderer. A number past its limit
 fails the run and names the editor's systems that cost the most where it was
 measured. The limits leave room above what a desktop measures, to catch
 regressions rather than to grade the machine. Run the gate locally before

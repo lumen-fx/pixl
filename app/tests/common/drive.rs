@@ -31,6 +31,9 @@ pub enum At {
     /// A point of the element with this id, as shares of its width and
     /// height from its top left.
     Within(&'static str, f32, f32),
+    /// A point this many window units right of and below the top left of
+    /// the element with this id.
+    Offset(&'static str, f32, f32),
 }
 
 /// One scripted input.
@@ -278,6 +281,12 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             .and_then(|n| n.rect())
                             .unwrap_or_else(|| panic!("no element {id} laid out"));
                         Vec2::new(r.client_x + r.width * fx, r.client_y + r.height * fy)
+                    }
+                    At::Offset(id, dx, dy) => {
+                        let r = dom::get_by_id(id)
+                            .and_then(|n| n.rect())
+                            .unwrap_or_else(|| panic!("no element {id} laid out"));
+                        Vec2::new(r.client_x + dx, r.client_y + dy)
                     }
                 };
                 let pen = |buttons: u32, pressure: f32| PointerData {

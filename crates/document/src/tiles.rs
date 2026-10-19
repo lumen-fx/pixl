@@ -823,6 +823,19 @@ impl Document {
         })
     }
 
+    /// Where the cells of a tilemap layer's cel on `frame` lie: the canvas
+    /// position of cell (0, 0) and the tile size. An empty cel shows the
+    /// grid a new cel would get. `None` for a layer that is no tilemap.
+    pub fn tile_grid_shape(&self, layer: LayerId, frame: usize) -> Option<(Point, (u32, u32))> {
+        let ts = self.layer_tileset(layer).ok()?;
+        let size = self.tileset(ts)?.size;
+        let origin = match self.tile_grid(layer, frame).ok()? {
+            Some(g) => g.origin,
+            None => self.new_grid(layer, ts).origin,
+        };
+        Some((origin, size))
+    }
+
     /// The grid of a tilemap cel to edit, its cel made if empty. Refused
     /// when the layer's pixels are locked or `tile` is not in the tileset.
     fn edit_grid(

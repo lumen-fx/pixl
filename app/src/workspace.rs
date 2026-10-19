@@ -23,7 +23,7 @@ use crate::settings::store::Store;
 pub const FILE: &str = "workspace.json";
 
 /// The built-in layouts, in the order the Window menu lists them.
-pub const BUILT_IN: [&str; 3] = ["Paint", "Animate", "Rig"];
+pub const BUILT_IN: [&str; 4] = ["Paint", "Animate", "Rig", "Tiles"];
 
 /// The docks around the canvas.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -157,6 +157,7 @@ impl Layout {
                 rig_folded,
                 place("panel-history", Dock::Right, true),
                 place("panel-brushes", Dock::Right, true),
+                place("panel-tileset", Dock::Right, false),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, false),
             ],
@@ -169,6 +170,7 @@ impl Layout {
                 rig_folded,
                 place("panel-history", Dock::Right, false),
                 place("panel-brushes", Dock::Right, false),
+                place("panel-tileset", Dock::Right, false),
                 place("panel-timeline", Dock::Bottom, true),
                 place("panel-preview", Dock::Bottom, true),
             ],
@@ -179,6 +181,20 @@ impl Layout {
                 place("panel-palette", Dock::Left, true),
                 place("panel-layers", Dock::Right, false),
                 place("panel-rig", Dock::Right, true),
+                place("panel-history", Dock::Right, true),
+                place("panel-brushes", Dock::Right, false),
+                place("panel-tileset", Dock::Right, false),
+                place("panel-timeline", Dock::Bottom, true),
+                place("panel-preview", Dock::Bottom, false),
+            ],
+            // Tile work: the tileset beside the colors, the map's layers
+            // and frames below.
+            "Tiles" => vec![
+                place("panel-color", Dock::Right, true),
+                place("panel-palette", Dock::Right, true),
+                place("panel-tileset", Dock::Right, true),
+                place("panel-layers", Dock::Right, false),
+                rig_folded,
                 place("panel-history", Dock::Right, true),
                 place("panel-brushes", Dock::Right, false),
                 place("panel-timeline", Dock::Bottom, true),
@@ -934,6 +950,7 @@ mod tests {
             "panel-rig",
             "panel-history",
             "panel-brushes",
+            "panel-tileset",
         ]
         .iter()
         .map(|p| (p.to_string(), Dock::Right))
@@ -987,7 +1004,8 @@ mod tests {
                 "panel-layers",
                 "panel-rig",
                 "panel-history",
-                "panel-brushes"
+                "panel-brushes",
+                "panel-tileset"
             ]
         );
         l.shift("panel-history", true);
@@ -998,12 +1016,13 @@ mod tests {
                 "panel-layers",
                 "panel-history",
                 "panel-rig",
-                "panel-brushes"
+                "panel-brushes",
+                "panel-tileset"
             ]
         );
         // At the ends a shift does nothing.
         l.shift("panel-color", true);
-        l.shift("panel-brushes", false);
+        l.shift("panel-tileset", false);
         assert_eq!(
             order(&l, Dock::Right),
             [
@@ -1011,7 +1030,8 @@ mod tests {
                 "panel-layers",
                 "panel-history",
                 "panel-rig",
-                "panel-brushes"
+                "panel-brushes",
+                "panel-tileset"
             ]
         );
     }
@@ -1052,7 +1072,7 @@ mod tests {
         let mine = again.layout("Mine").unwrap();
         assert_eq!(mine.place("panel-color").unwrap().dock, Dock::Bottom);
         assert_eq!(mine.sizes.right, Some(300.0));
-        assert_eq!(again.names(), ["Paint", "Animate", "Rig", "Mine"]);
+        assert_eq!(again.names(), ["Paint", "Animate", "Rig", "Tiles", "Mine"]);
         // Reset puts the live layout back to what its layout says.
         ws.edit(|l| l.set_shown("panel-history", false));
         ws.reset();

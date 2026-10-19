@@ -14,6 +14,7 @@
       <menuitem id="file-export-presets" label="Export presets..."/>
       <menuitem id="file-export-all" label="Export all (Ctrl+Alt+E)"/>
       <menuitem id="file-export-sheet" label="Export sprite sheet..."/>
+      <menuitem id="file-export-tileset" label="Export tileset..."/>
       <menuitem id="file-import-sheet" label="Import sprite sheet..."/>
       <separator/>
       <menuitem id="file-close" label="Close (Ctrl+W)"/>
@@ -70,6 +71,17 @@
         <label class="option-value" bind-text="opt_tolerance_text" text="0"/>
       </row>
       <checkbox id="opt-contiguous" label="Contiguous" checked="true" bind-checked="opt_contiguous"/>
+    </if>
+    <if signal="show_tiles" mode="hide">
+      <row class="option">
+        <tooltip text="Paint pixels or place tiles (Tab)"><button id="opt-tiles-mode" class="flat small" bind-text="tiles_mode_label" text="Pixels"/></tooltip>
+        <tooltip text="How painting changes the tileset: Manual edits the tiles, Auto adds and removes tiles as needed, Stack only adds"><label class="option-label" text="Draw"/></tooltip>
+        <dropdown id="opt-tile-draw" class="option-choice" bind-value="opt_tile_draw">
+          <option value="Manual"/>
+          <option value="Auto"/>
+          <option value="Stack"/>
+        </dropdown>
+      </row>
     </if>
     <include src="parts/tool-options.lmn"/>
     <label id="tool-hint" class="option-label" bind-text="tool_hint" text=""/>
@@ -161,6 +173,7 @@
       </column>
       <include src="parts/rig.lmn"/>
       <include src="parts/brushes.lmn"/>
+      <include src="parts/tileset.lmn"/>
       <column id="panel-history" class="panel">
         <row class="panel-header">
           <label class="panel-title" text="History"/>
@@ -194,6 +207,7 @@
   <include src="parts/timeline-menus.lmn"/>
   <include src="parts/exports.lmn"/>
   <include src="parts/layer-menus.lmn"/>
+  <include src="parts/tilemap-dialog.lmn"/>
   <include src="parts/presets.lmn"/>
   <include src="parts/toolbar-custom.lmn"/>
   <include src="parts/dynamics.lmn"/>

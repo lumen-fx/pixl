@@ -92,7 +92,8 @@ fn paint_is_the_default_layout_with_the_panels_right_and_the_timeline_below() {
             "panel-layers",
             "panel-rig",
             "panel-history",
-            "panel-brushes"
+            "panel-brushes",
+            "panel-tileset"
         ]
     );
     assert!(d.shows(Dock::Right));
@@ -100,8 +101,8 @@ fn paint_is_the_default_layout_with_the_panels_right_and_the_timeline_below() {
     assert!(d.shows(Dock::Bottom));
     assert_eq!(
         d.closed,
-        ["panel-layers", "panel-preview"],
-        "the timeline lists the layers, and Paint leaves the preview out"
+        ["panel-layers", "panel-tileset", "panel-preview"],
+        "the timeline lists the layers, and Paint leaves the tileset and the preview out"
     );
     assert!(!d.shows(Dock::Left));
 }
@@ -116,7 +117,10 @@ fn a_saved_arrangement_keeps_its_layers_panel_and_the_dialog_shows_it() {
     let app = editor().insert_resource(Workspace::load(Store::at(&dir)));
     let (app, docks) = watch(app);
     drive(app, vec![Step::Wait, Step::Wait]);
-    assert_eq!(docks.lock().unwrap().closed, ["panel-preview"]);
+    assert_eq!(
+        docks.lock().unwrap().closed,
+        ["panel-tileset", "panel-preview"]
+    );
     let _ = std::fs::remove_dir_all(dir);
 
     // Window > Panels and layouts brings it back into a new one.
@@ -134,7 +138,10 @@ fn a_saved_arrangement_keeps_its_layers_panel_and_the_dialog_shows_it() {
         ],
     );
     common::save(&out.frame, "workspace-layers-panel");
-    assert_eq!(docks.lock().unwrap().closed, ["panel-preview"]);
+    assert_eq!(
+        docks.lock().unwrap().closed,
+        ["panel-tileset", "panel-preview"]
+    );
 }
 
 #[test]
@@ -153,10 +160,19 @@ fn the_rig_layout_puts_the_colors_on_the_left() {
             "panel-layers",
             "panel-rig",
             "panel-history",
-            "panel-brushes"
+            "panel-brushes",
+            "panel-tileset"
         ]
     );
-    assert_eq!(d.closed, ["panel-layers", "panel-brushes", "panel-preview"]);
+    assert_eq!(
+        d.closed,
+        [
+            "panel-layers",
+            "panel-brushes",
+            "panel-tileset",
+            "panel-preview"
+        ]
+    );
     assert!(d.shows(Dock::Left));
     assert!(d.widths.0 > 100.0, "the left dock has room: {:?}", d.widths);
 }
@@ -178,7 +194,15 @@ fn header_buttons_collapse_and_hide_and_the_window_menu_shows_all() {
     let d = docks.lock().unwrap().clone();
     // The Rig panel starts folded outside the Rig layout.
     assert_eq!(d.collapsed, ["panel-color", "panel-rig"]);
-    assert_eq!(d.closed, ["panel-layers", "panel-history", "panel-preview"]);
+    assert_eq!(
+        d.closed,
+        [
+            "panel-layers",
+            "panel-history",
+            "panel-tileset",
+            "panel-preview"
+        ]
+    );
 
     let (app, docks) = watch(editor());
     drive(
@@ -282,7 +306,8 @@ fn the_panel_menu_moves_a_panel_to_the_bottom_dock_and_back_up() {
             "panel-layers",
             "panel-history",
             "panel-rig",
-            "panel-brushes"
+            "panel-brushes",
+            "panel-tileset"
         ]
     );
 }
