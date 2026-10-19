@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use lumenui::prelude::*;
 use pixl::view::{ItemSource, View, canvas_blend, plan};
-use pixl::{Editor, Settings, editor};
+use pixl::{Editor, Settings};
 use pixl_document::{
     BlendMode, ColorMode, CompositeOptions, Document, LayerId, NewLayer, Placement, Rect,
     ReferencePlace, Rgba, TiledImage, composite,
@@ -36,26 +36,26 @@ fn render_with(
     let _turn = common::turn();
     let seen: Arc<Mutex<Option<View>>> = Arc::default();
     let out = Arc::clone(&seen);
-    let frame = editor(Source::Disk {
-        dir: common::app_dir(backend),
-    })
-    .insert_resource(Editor::new(doc))
-    .insert_resource(settings)
-    .add_systems(
-        TickStage::Systems,
-        move |mut view: ResMut<View>, mut n: Local<u32>| {
-            *n += 1;
-            if *n == 3 {
-                setup(&mut view);
-            }
-            *out.lock().unwrap() = Some(view.clone());
-        },
-    )
-    .screenshot(HeadlessOptions {
-        dpr: 1.0,
-        ticks: Some(ticks),
-    })
-    .expect("the editor renders");
+    let frame = pixl::editor(pixl::ui())
+        .app_dir(common::app_dir(backend))
+        .insert_resource(Editor::new(doc))
+        .insert_resource(settings)
+        .add_systems(
+            TickStage::Systems,
+            move |mut view: ResMut<View>, mut n: Local<u32>| {
+                *n += 1;
+                if *n == 3 {
+                    setup(&mut view);
+                }
+                *out.lock().unwrap() = Some(view.clone());
+            },
+        )
+        .screenshot(HeadlessOptions {
+            dpr: 1.0,
+            ticks: Some(ticks),
+            ..Default::default()
+        })
+        .expect("the editor renders");
     let view = seen.lock().unwrap().clone().expect("the view ran");
     (frame, view)
 }

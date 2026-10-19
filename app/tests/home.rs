@@ -268,11 +268,10 @@ fn saving_lists_the_document_and_draws_its_thumbnail() {
     save(art(8, 8, Rgba::opaque(1, 2, 3)), &path);
     let mut editor = Editor::new(art(8, 8, Rgba::opaque(1, 2, 3)));
     editor.path = Some(path.clone());
-    let app = pixl::editor(lumenui::prelude::Source::Disk {
-        dir: common::app_dir("cpu"),
-    })
-    .insert_resource(editor)
-    .insert_resource(Recents::load(root.join("data")));
+    let app = pixl::editor(pixl::ui())
+        .app_dir(common::app_dir("cpu"))
+        .insert_resource(editor)
+        .insert_resource(Recents::load(root.join("data")));
     let out = drive(
         app,
         vec![

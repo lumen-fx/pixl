@@ -19,8 +19,8 @@
 
 use std::collections::BTreeSet;
 
-use lumenui::ecs::system::SystemParam;
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::system::SystemParam;
+use lumenui::bevy_ecs::world::World;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
     ContextMenuEvent, DoubleClickEvent, MenuClicked, ModifiersState, PointerButton, PointerMoved,
@@ -984,7 +984,7 @@ fn mark_tag_choice(picked: Option<Rgba>) {
             continue;
         };
         let this = if i == 0 { None } else { tag_choice(i) };
-        crate::set_class(node, "chosen", this == picked);
+        node.set_class_on("chosen", this == picked);
     }
 }
 
@@ -1095,16 +1095,34 @@ fn reference_from_fields(
     }
 }
 
+/// The properties dialog's OK: applies its fields and closes it.
+pub fn properties_ok(ui: &mut Ui, _: &Event) {
+    ui.set("lp_open", false);
+    ui.resource_scope(|ui, mut editor: Mut<Editor>| {
+        let text = |n: &str| ui.get::<String>(n);
+        let flag = |n: &str| ui.get::<bool>(n);
+        apply_properties(&mut editor, ui.resource::<LayerPanel>(), text, flag);
+    });
+}
+
+/// The properties dialog's Cancel: closes it, changing nothing.
+pub fn properties_cancel(ui: &mut Ui, _: &Event) {
+    ui.set("lp_open", false);
+}
+
 /// The properties dialog's fields, applied as one undo step.
-fn apply_properties(editor: &mut Editor, panel: &LayerPanel, signals: &Signals) {
+fn apply_properties(
+    editor: &mut Editor,
+    panel: &LayerPanel,
+    text: impl Fn(&str) -> String,
+    flag: impl Fn(&str) -> bool,
+) {
     let Some(id) = panel.about else {
         return;
     };
     let Some(before) = editor.doc.layer(id).map(|l| l.props.clone()) else {
         return;
     };
-    let text = |n: &str| signals.get::<String>(n).unwrap_or_default();
-    let flag = |n: &str| signals.get::<bool>(n).unwrap_or(false);
     let name = text("lp_name").trim().to_string();
     let opacity = text("lp_opacity")
         .trim()
@@ -1240,11 +1258,6 @@ pub fn layer_command(
         "lm-properties" | "layer-properties" | "tl-edit-layer" => {
             open_properties(editor, panel, editor.layer, signals)
         }
-        "lp-ok" => {
-            signals.set("lp_open", false);
-            apply_properties(editor, panel, signals);
-        }
-        "lp-cancel" => signals.set("lp_open", false),
         "menu-layer" => {
             panel.about = None;
             let at = dom::get_by_id("menu-layer").and_then(|n| n.rect());

@@ -9,7 +9,7 @@
 //! and Unused removes every tile no cell shows. Every change is one undo
 //! step.
 
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::world::World;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{MenuClicked, MouseWheel, PointerButton, PointerPressed};
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -624,17 +624,17 @@ pub fn install(app: App) -> App {
     use lumenui::lumen_core::signals;
     use lumenui_canvas::CanvasSet;
     app.insert_resource(TilesetPanel::default())
-        .insert_signal("show_tiles", false)
-        .insert_signal("tiles_mode_label", "Pixels")
-        .insert_signal("opt_tile_draw", "Auto")
-        .insert_signal("ts_name", "")
-        .insert_signal("ts_info", "")
-        .insert_signal("tm_open", false)
-        .insert_signal("tm_title", "New tilemap layer")
-        .insert_signal("tm_new_set", true)
-        .insert_signal("tm_width", "16")
-        .insert_signal("tm_height", "16")
-        .insert_signal("tm_name", "Tileset 1")
+        .signal("show_tiles", false)
+        .signal("tiles_mode_label", "Pixels")
+        .signal("opt_tile_draw", "Auto")
+        .signal("ts_name", "")
+        .signal("ts_info", "")
+        .signal("tm_open", false)
+        .signal("tm_title", "New tilemap layer")
+        .signal("tm_new_set", true)
+        .signal("tm_width", "16")
+        .signal("tm_height", "16")
+        .signal("tm_name", "Tileset 1")
         .add_systems(
             TickStage::Systems,
             crate::perf::timed("tileset::tileset_input", tileset_input)

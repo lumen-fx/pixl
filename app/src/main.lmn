@@ -190,7 +190,11 @@
           <button id="history-redo" class="flat small" text="Redo"/>
         </row>
         <column id="history-body" class="panel-body">
-          <scroll id="history-list" class="history-list" bind-scroll="history_scroll"/>
+          <scroll id="history-list" class="history-list" bind-scroll="history_scroll">
+            <for id="history-rows" each="$history" key="k">
+              <row id="history-{row.k}" class="{row.class}"><label class="history-label" text="{row.label}"/></row>
+            </for>
+          </scroll>
         </column>
       </column>
     </column>

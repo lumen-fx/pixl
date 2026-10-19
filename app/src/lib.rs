@@ -21,10 +21,8 @@ pub mod workspace;
 
 use std::path::PathBuf;
 
-use lumenui::lumen_core::signals;
-use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
-use lumenui_canvas::{CanvasPlugin, CanvasSet};
+use lumenui_canvas::CanvasPlugin;
 
 pub use documents::{DocId, Documents};
 pub use editor::{Editor, Tool};
@@ -67,31 +65,19 @@ pub fn starting(app: App, recents: Recents, file: Option<PathBuf>) -> App {
         .insert_resource(Documents::empty())
 }
 
-/// pixl's markup and stylesheets. A debug build reads them from `src/` with
-/// hot reload. A release build embeds them with every `<include>` and
-/// `@import` spliced in by the build script, so a shipped `pixl.exe` reads
-/// nothing from `src/`.
-pub fn ui() -> Source {
-    #[cfg(debug_assertions)]
-    let source = lumen_source!("src/main.lmn", "src/main.css");
-    #[cfg(not(debug_assertions))]
-    let source = Source::embedded_from(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.lmn"),
-        include_str!(concat!(env!("OUT_DIR"), "/main.lmn")),
-        Some(include_str!(concat!(env!("OUT_DIR"), "/main.css"))),
-    );
-    source
+/// pixl's UI, compiled by the build script from what `lumen.toml` names. A
+/// debug build also reloads it from `src/` on an edit.
+pub fn ui() -> CompiledUi {
+    lumenui::ui!()
 }
 
-/// The editor over another copy of the UI sources, open on a blank
-/// document in one tab with no start screen, default settings, and a recent
-/// list and a clipboard kept in memory. A directory source reads `lumen.toml`
-/// beside its `src/`, which is how a test runs the editor with its own
-/// settings.
-pub fn editor(source: Source) -> App {
+/// The editor over `ui`, open on a blank document in one tab with no start
+/// screen, default settings, and a recent list and a clipboard kept in
+/// memory. A test runs it with `App::app_dir` set to a directory holding its
+/// own `lumen.toml`.
+pub fn editor(ui: CompiledUi) -> App {
     let side = u64::from(MAX_VIEW_SIDE);
-    let app = App::new()
-        .add_plugins(LumenDefaultPlugins.with_source(source))
+    let app = App::new(ui)
         // A buffer per layer: room for many, each up to the largest side.
         .add_plugin(CanvasPlugin::with_caps(1 << 20, side * side, 4096))
         .insert_resource(Look::default())
@@ -103,40 +89,40 @@ pub fn editor(source: Source) -> App {
         .insert_resource(perf::Perf::default())
         .insert_resource(perf::SystemTimes::default())
         .insert_resource(files::sheets::Sheets::default())
-        .insert_signal("sheet_export_open", false)
-        .insert_signal("sheet_import_open", false)
-        .insert_signal("sx_layout", "Horizontal strip")
-        .insert_signal("sx_frames", "All frames")
-        .insert_signal("sx_json", "Hash")
-        .insert_signal("sx_columns", "8")
-        .insert_signal("sx_rows", "8")
-        .insert_signal("sx_from", "1")
-        .insert_signal("sx_to", "")
-        .insert_signal("sx_padding", "0")
-        .insert_signal("sx_border", "0")
-        .insert_signal("sx_scale", "1")
-        .insert_signal("sx_trim", false)
-        .insert_signal("sx_by_layer", false)
-        .insert_signal("si_mode", "Cell size")
-        .insert_signal("si_w", "32")
-        .insert_signal("si_h", "32")
-        .insert_signal("si_cols", "4")
-        .insert_signal("si_rows", "1")
-        .insert_signal("si_ox", "0")
-        .insert_signal("si_oy", "0")
-        .insert_signal("si_px", "0")
-        .insert_signal("si_py", "0")
-        .insert_signal("si_ms", "100")
-        .insert_signal("si_skip", false)
-        .insert_signal("perf_open", false)
-        .insert_signal("img_busy", false)
-        .insert_signal("img_progress", "")
-        .insert_signal("settings_open", false)
+        .signal("sheet_export_open", false)
+        .signal("sheet_import_open", false)
+        .signal("sx_layout", "Horizontal strip")
+        .signal("sx_frames", "All frames")
+        .signal("sx_json", "Hash")
+        .signal("sx_columns", "8")
+        .signal("sx_rows", "8")
+        .signal("sx_from", "1")
+        .signal("sx_to", "")
+        .signal("sx_padding", "0")
+        .signal("sx_border", "0")
+        .signal("sx_scale", "1")
+        .signal("sx_trim", false)
+        .signal("sx_by_layer", false)
+        .signal("si_mode", "Cell size")
+        .signal("si_w", "32")
+        .signal("si_h", "32")
+        .signal("si_cols", "4")
+        .signal("si_rows", "1")
+        .signal("si_ox", "0")
+        .signal("si_oy", "0")
+        .signal("si_px", "0")
+        .signal("si_py", "0")
+        .signal("si_ms", "100")
+        .signal("si_skip", false)
+        .signal("perf_open", false)
+        .signal("img_busy", false)
+        .signal("img_progress", "")
+        .signal("settings_open", false)
         .insert_resource(Editor::blank())
         .insert_resource(Documents::default())
-        .insert_signal("discard_title", "Close without saving?")
-        .insert_signal("discard_text", "")
-        .insert_signal("discard_yes", "Close without saving")
+        .signal("discard_title", "Close without saving?")
+        .signal("discard_text", "")
+        .signal("discard_yes", "Close without saving")
         .insert_resource(view::View::default())
         .insert_resource(view::ViewColors::default())
         .insert_resource(view::Preview::default())
@@ -145,15 +131,15 @@ pub fn editor(source: Source) -> App {
         .insert_resource(view::input::Navigation::default())
         .insert_resource(Home::default())
         .insert_resource(Recents::in_memory())
-        .insert_signal("new_name", "untitled")
-        .insert_signal("new_width", "64")
-        .insert_signal("new_height", "64")
-        .insert_signal("new_mode", "RGBA")
-        .insert_signal("new_background", "Transparent")
-        .insert_signal("new_bg_hex", "#ffffff")
-        .insert_signal("new_bg_color", false)
-        .insert_signal("home_filter", "")
-        .insert_signal("home_can_return", false)
+        .signal("new_name", "untitled")
+        .signal("new_width", "64")
+        .signal("new_height", "64")
+        .signal("new_mode", "RGBA")
+        .signal("new_background", "Transparent")
+        .signal("new_bg_hex", "#ffffff")
+        .signal("new_bg_color", false)
+        .signal("home_filter", "")
+        .signal("home_can_return", false)
         .insert_resource(tools::Gesture::default())
         .insert_resource(tools::toolbox::Toolbox::default())
         .insert_resource(menus::Chosen::default())
@@ -167,47 +153,47 @@ pub fn editor(source: Source) -> App {
         .insert_resource(panels::color::ColorPanel::default())
         .insert_resource(files::Files::default())
         .insert_resource(Workspace::in_memory())
-        .insert_signal("ws_open", false)
-        .insert_signal("ws_name", "")
-        .insert_signal("ws_message", "")
+        .signal("ws_open", false)
+        .signal("ws_name", "")
+        .signal("ws_message", "")
         .insert_resource(Themes::in_memory())
-        .insert_signal("themes_open", false)
-        .insert_signal("th_name", "")
-        .insert_signal("th_message", "")
+        .signal("themes_open", false)
+        .signal("th_name", "")
+        .signal("th_message", "")
         .insert_resource(menus::palette::Palette::default())
         .insert_resource(files::exports::Exports::in_memory())
-        .insert_signal("ex_open", false)
-        .insert_signal("ex_is_sheet", false)
-        .insert_signal("ex_is_tag", false)
-        .insert_signal("ex_hint", files::exports::PATH_HINT)
+        .signal("ex_open", false)
+        .signal("ex_is_sheet", false)
+        .signal("ex_is_tag", false)
+        .signal("ex_hint", files::exports::PATH_HINT)
         .insert_resource(scripts::Scripts::in_memory())
-        .insert_signal("sc_open", false)
-        .insert_signal("sc_busy", false)
-        .insert_signal("sc_busy_text", "")
-        .insert_signal("sc_folder", "")
-        .insert_signal("sc_confirm_open", false)
-        .insert_signal("sc_confirm_text", "")
-        .insert_signal("so_open", false)
-        .insert_signal("so_text", "")
-        .insert_signal("cp_open", false)
-        .insert_signal("cp_query", "")
+        .signal("sc_open", false)
+        .signal("sc_busy", false)
+        .signal("sc_busy_text", "")
+        .signal("sc_folder", "")
+        .signal("sc_confirm_open", false)
+        .signal("sc_confirm_text", "")
+        .signal("so_open", false)
+        .signal("so_text", "")
+        .signal("cp_open", false)
+        .signal("cp_query", "")
         .insert_resource(panels::timeline::Timeline::default())
         .insert_resource(panels::timeline::LayerTree::default())
         .insert_resource(panels::preview::PreviewPane::default())
         .insert_resource(panels::layers::LayerPanel::default())
         .insert_resource(tools::reference::ReferenceBox::default())
-        .insert_signal("lp_open", false)
-        .insert_signal("lp_has_mask", false)
-        .insert_signal("lp_is_reference", false)
-        .insert_signal("lp_name", "")
-        .insert_signal("lp_opacity", "100")
-        .insert_signal("lp_blend", "Normal")
-        .insert_signal("tag_open", false)
-        .insert_signal("tag_name", "")
-        .insert_signal("tag_from", "1")
-        .insert_signal("tag_to", "1")
-        .insert_signal("tag_direction", "Forward")
-        .insert_signal("tag_repeat", "0")
+        .signal("lp_open", false)
+        .signal("lp_has_mask", false)
+        .signal("lp_is_reference", false)
+        .signal("lp_name", "")
+        .signal("lp_opacity", "100")
+        .signal("lp_blend", "Normal")
+        .signal("tag_open", false)
+        .signal("tag_name", "")
+        .signal("tag_from", "1")
+        .signal("tag_to", "1")
+        .signal("tag_direction", "Forward")
+        .signal("tag_repeat", "0")
         .add_systems(
             TickStage::Systems,
             (
@@ -312,16 +298,15 @@ pub fn editor(source: Source) -> App {
                 )
                     .chain(),
             )
-                .chain()
-                .after(ClickSet::Producers)
-                .after(signals::push_slider_to_signal)
-                .after(signals::push_toggle_to_signal)
-                .after(signals::push_textinput_to_signal)
-                .before(signals::apply_text_bindings)
-                .before(signals::apply_checked_bindings)
-                .before(signals::apply_value_bindings)
-                .before(CanvasSet::Encode),
+                .chain(),
         )
+        // A click on a tool's button.
+        .on_any_click(tools::pick_tool_on_click)
+        // The layer properties dialog's buttons.
+        .on_click("lp-ok", panels::layers::properties_ok)
+        .on_click("lp-cancel", panels::layers::properties_cancel)
+        // A row of the history list.
+        .on_click("history-rows", panels::history_row_click)
         .add_systems(
             TickStage::A11ySync,
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
@@ -332,19 +317,6 @@ pub fn editor(source: Source) -> App {
     let app = tools::presets::install(app, tools::presets::Presets::in_memory());
     let app = tools::dynamics::install(app);
     tools::toolbar::install(app, tools::toolbar::Toolbar::in_memory())
-}
-
-/// Puts `class` on `node` or takes it off. A class edit restyles the node
-/// and everything under it, so the node is touched only when the class
-/// changes.
-pub fn set_class(node: dom::Node, class: &str, on: bool) {
-    if node.has_class(class) != on {
-        if on {
-            node.add_class(class);
-        } else {
-            node.remove_class(class);
-        }
-    }
 }
 
 /// Asks for another tick soon. A system that edits the DOM or a signal after

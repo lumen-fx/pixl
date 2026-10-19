@@ -16,7 +16,7 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::system::{
+use lumenui::bevy_ecs::system::{
     CombinatorSystem, Combine, In, IntoSystem, RunSystemError, System, SystemIn,
 };
 use lumenui::lumen_core::components::Transform;

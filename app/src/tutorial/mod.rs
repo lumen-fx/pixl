@@ -358,7 +358,7 @@ pub fn run_tutorial(
     }
     if target != t.target {
         if let Some(node) = t.target.as_deref().and_then(dom::get_by_id) {
-            crate::set_class(node, TARGET, false);
+            node.set_class_on(TARGET, false);
         }
         if let Some((_, scroll)) = BELOW_FOLD
             .iter()
@@ -370,7 +370,7 @@ pub fn run_tutorial(
         changed = true;
     }
     if let Some(node) = t.target.as_deref().and_then(dom::get_by_id) {
-        crate::set_class(node, TARGET, true);
+        node.set_class_on(TARGET, true);
     }
     let Some(lesson) = running.filter(|_| open) else {
         t.shown = None;
@@ -406,10 +406,10 @@ pub fn install(app: App) -> App {
     use lumenui::lumen_core::input::ClickSet;
     use lumenui::lumen_core::signals;
     app.insert_resource(Tutorial::default())
-        .insert_signal("tutor_open", false)
-        .insert_signal("tutor_title", "")
-        .insert_signal("tutor_text", "")
-        .insert_signal("tutor_count", "")
+        .signal("tutor_open", false)
+        .signal("tutor_title", "")
+        .signal("tutor_text", "")
+        .signal("tutor_count", "")
         .add_systems(
             TickStage::Systems,
             crate::perf::timed("tutorial::run_tutorial", run_tutorial)

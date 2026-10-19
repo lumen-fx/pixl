@@ -427,7 +427,7 @@ folder, beside the recent list. UI scale grows the text and the sizes the
 theme keeps as tokens; a few fixed sizes (list rows, swatches) stay as they
 are.
 
-The editor builds against Lumen 0.0.10 from crates.io.
+The editor builds against Lumen 0.0.11.
 
 A skeleton layer rigs a character so it can be posed instead of redrawn:
 bones in a tree, with raster layers (or selected regions of them) bound to
@@ -708,10 +708,11 @@ cargo run -p pixl-cli -- --help   # the command line exporter
 cargo test
 ```
 
-A release build (`cargo build --release -p pixl`) compiles all of the markup
-and stylesheets in: `app/build.rs` splices every `<include>` and `@import`
-into one markup file and one stylesheet, which the executable embeds. A debug
-build reads `src/` from disk instead, for hot reload. The icons and font in
+Every build compiles the UI in: `app/build.rs` compiles what `lumen.toml`
+names, the markup and stylesheets under `src/` with every `<include>` and
+`@import`, and the executable carries the result, so a markup or style
+mistake fails `cargo build`. A debug build also reloads the UI from `src/` on
+an edit while the window stays open. The icons and font in
 `assets/` stay files, read from the folder beside the executable when that
 folder holds a `lumen.toml`, and from `app/` in the source tree otherwise. The
 Windows zip is that folder: `pixl.exe`, `pixl-cli.exe`, `lumen.toml`,

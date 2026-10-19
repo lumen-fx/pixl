@@ -16,9 +16,9 @@
 
 use std::path::{Path, PathBuf};
 
-use lumenui::ecs::message::Messages;
-use lumenui::ecs::system::SystemParam;
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::message::Messages;
+use lumenui::bevy_ecs::system::SystemParam;
+use lumenui::bevy_ecs::world::World;
 use lumenui::lumen_core::input::{
     CloseRequest, ContextMenuEvent, MenuClicked, PointerButton, PointerMoved, PointerPressed,
     PointerReleased,
@@ -681,13 +681,21 @@ pub fn tab_input(
 ) {
     let docs = &mut *docs;
     // The window's close button: with unsaved edits, ask once, naming them.
-    let close_asked = input.closing.read().any(|c| !c.vetoed);
-    if close_asked {
+    let close_asked = input
+        .closing
+        .read()
+        .find(|c| !c.vetoed)
+        .map(|c| (c.window, c.reason));
+    if let Some((window, reason)) = close_asked {
         let unsaved = docs.unsaved(&editor, &docs.ids());
         if !unsaved.is_empty() {
             commands.queue(move |world: &mut World| {
                 if let Some(mut close) = world.get_resource_mut::<Messages<CloseRequest>>() {
-                    close.write(CloseRequest { vetoed: true });
+                    close.write(CloseRequest {
+                        window,
+                        reason,
+                        vetoed: true,
+                    });
                 }
                 world.resource_mut::<Documents>().asking = Some(Ask::Quit);
                 ask(world, &unsaved, true);
@@ -879,7 +887,7 @@ pub fn show_tabs(
     let (Some(bar), Some(list)) = (dom::get_by_id("tabs"), dom::get_by_id("tab-list")) else {
         return;
     };
-    crate::set_class(bar, "empty", docs.tabs.is_empty());
+    bar.set_class_on("empty", docs.tabs.is_empty());
     list.set_inner_markup(&markup);
     docs.shown = Some(Shown::of(&docs, &home, &editor));
     crate::repaint_soon(&wake);

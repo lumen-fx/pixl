@@ -358,342 +358,344 @@ fn main() {
 
     let mut editor = Editor::new(doc);
     editor.layer = top;
-    pixl::editor(Source::Disk {
-        dir: app_dir(&backend),
-    })
-    .insert_resource(editor)
-    .insert_resource(settings)
-    .insert_resource(log.unwrap_or_default())
-    .add_systems(
-        TickStage::Systems,
-        (move |mut phase: Local<Option<Phase>>,
-               mut last: Local<Option<(Phase, Instant)>>,
-               mut editor: ResMut<Editor>,
-               mut view: ResMut<View>,
-               layers: Res<Layers>,
-               times: Res<SystemTimes>,
-               elements: Query<(), With<LumenTag>>,
-               mut down: MessageWriter<PointerPressed>,
-               mut moved: MessageWriter<PointerMoved>| {
-            let p = phase.get_or_insert(Phase::Opening);
-            let mut results = out.lock().unwrap();
-            // The last tick's systems count toward the phase it ran in.
-            let now = Instant::now();
-            let last_tick = last.map_or(now, |(_, at)| at);
-            if let Some((was, at)) = *last {
-                let bucket = results.systems.entry(was.name()).or_default();
-                for (name, t) in &times.last {
-                    let e = bucket.entry(name).or_default();
-                    e.0 += *t;
-                    e.1 += 1;
-                }
-                *results.ticks.entry(was.name()).or_default() += 1;
-                if matches!(was, Phase::Idle { n } if n >= 10) {
-                    results.idle_systems.push(times.last_total());
-                    results.idle_ticks.push(now - at);
-                }
-            }
-            *last = Some((*p, now));
-            let stage_mid = view.stage.0 + view.stage.1 / 2.0;
-            match *p {
-                Phase::Opening => {
-                    if view.stage.1.x > 0.0 && !layers.rewrites.is_empty() && layers.pending() == 0
-                    {
-                        results.open = timeline(&layers);
-                        let flat = layers
-                            .current_plan()
-                            .iter()
-                            .any(|i| matches!(i.source, pixl::view::ItemSource::Flat(_)));
-                        results.buffers = Some((layers.buffer_stats().0, flat));
-                        results.elements = elements.iter().count();
-                        *p = Phase::Idle { n: 0 };
+    pixl::editor(pixl::ui())
+        .app_dir(app_dir(&backend))
+        .insert_resource(editor)
+        .insert_resource(settings)
+        .insert_resource(log.unwrap_or_default())
+        .add_systems(
+            TickStage::Systems,
+            (move |mut phase: Local<Option<Phase>>,
+                   mut last: Local<Option<(Phase, Instant)>>,
+                   mut editor: ResMut<Editor>,
+                   mut view: ResMut<View>,
+                   layers: Res<Layers>,
+                   times: Res<SystemTimes>,
+                   elements: Query<(), With<LumenTag>>,
+                   mut down: MessageWriter<PointerPressed>,
+                   mut moved: MessageWriter<PointerMoved>| {
+                let p = phase.get_or_insert(Phase::Opening);
+                let mut results = out.lock().unwrap();
+                // The last tick's systems count toward the phase it ran in.
+                let now = Instant::now();
+                let last_tick = last.map_or(now, |(_, at)| at);
+                if let Some((was, at)) = *last {
+                    let bucket = results.systems.entry(was.name()).or_default();
+                    for (name, t) in &times.last {
+                        let e = bucket.entry(name).or_default();
+                        e.0 += *t;
+                        e.1 += 1;
+                    }
+                    *results.ticks.entry(was.name()).or_default() += 1;
+                    if matches!(was, Phase::Idle { n } if n >= 10) {
+                        results.idle_systems.push(times.last_total());
+                        results.idle_ticks.push(now - at);
                     }
                 }
-                Phase::Idle { n } => {
-                    // The first few ticks still settle what opening left.
-                    *p = if n == IDLE_TICKS {
-                        Phase::Stroke {
-                            layer_top: true,
-                            n: 0,
+                *last = Some((*p, now));
+                let stage_mid = view.stage.0 + view.stage.1 / 2.0;
+                match *p {
+                    Phase::Opening => {
+                        if view.stage.1.x > 0.0
+                            && !layers.rewrites.is_empty()
+                            && layers.pending() == 0
+                        {
+                            results.open = timeline(&layers);
+                            let flat = layers
+                                .current_plan()
+                                .iter()
+                                .any(|i| matches!(i.source, pixl::view::ItemSource::Flat(_)));
+                            results.buffers = Some((layers.buffer_stats().0, flat));
+                            results.elements = elements.iter().count();
+                            *p = Phase::Idle { n: 0 };
                         }
-                    } else {
-                        Phase::Idle { n: n + 1 }
-                    };
-                }
-                Phase::Stroke { layer_top, n } => {
-                    if watch.started.lock().unwrap().is_some() {
-                        return;
                     }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        let list = if layer_top {
-                            &mut results.top
-                        } else {
-                            &mut results.bottom
-                        };
-                        list.push(lap);
-                    }
-                    if n == STROKES {
-                        *p = if layer_top {
-                            editor.layer = bottom;
+                    Phase::Idle { n } => {
+                        // The first few ticks still settle what opening left.
+                        *p = if n == IDLE_TICKS {
                             Phase::Stroke {
-                                layer_top: false,
+                                layer_top: true,
                                 n: 0,
                             }
                         } else {
-                            let _ = editor.doc.update_layer(middle, |l| l.visible = false);
-                            editor.touch();
-                            results.hide_started = Some(Instant::now());
-                            *watch.started.lock().unwrap() = Some(Instant::now());
-                            cap.request();
-                            Phase::Hiding
+                            Phase::Idle { n: n + 1 }
                         };
-                        return;
                     }
-                    let y = if layer_top { -100.0 } else { 100.0 };
-                    let at = stage_mid + Vec2::new(-200.0 + n as f32 * 10.0, y);
-                    if n == 0 {
-                        down.write(PointerPressed {
-                            position: at,
-                            button: PointerButton::Primary,
-                            local: None,
-                            pointer: PointerData::mouse(1),
-                        });
-                    } else {
-                        moved.write(PointerMoved {
-                            position: at,
-                            local: None,
-                            pointer: PointerData::mouse(1),
-                        });
+                    Phase::Stroke { layer_top, n } => {
+                        if watch.started.lock().unwrap().is_some() {
+                            return;
+                        }
+                        if let Some(lap) = watch.lap.lock().unwrap().take() {
+                            let list = if layer_top {
+                                &mut results.top
+                            } else {
+                                &mut results.bottom
+                            };
+                            list.push(lap);
+                        }
+                        if n == STROKES {
+                            *p = if layer_top {
+                                editor.layer = bottom;
+                                Phase::Stroke {
+                                    layer_top: false,
+                                    n: 0,
+                                }
+                            } else {
+                                let _ = editor.doc.update_layer(middle, |l| l.visible = false);
+                                editor.touch();
+                                results.hide_started = Some(Instant::now());
+                                *watch.started.lock().unwrap() = Some(Instant::now());
+                                cap.request();
+                                Phase::Hiding
+                            };
+                            return;
+                        }
+                        let y = if layer_top { -100.0 } else { 100.0 };
+                        let at = stage_mid + Vec2::new(-200.0 + n as f32 * 10.0, y);
+                        if n == 0 {
+                            down.write(PointerPressed {
+                                position: at,
+                                button: PointerButton::Primary,
+                                local: None,
+                                pointer: PointerData::mouse(1),
+                            });
+                        } else {
+                            moved.write(PointerMoved {
+                                position: at,
+                                local: None,
+                                pointer: PointerData::mouse(1),
+                            });
+                        }
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::Stroke {
+                            layer_top,
+                            n: n + 1,
+                        };
                     }
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::Stroke {
-                        layer_top,
-                        n: n + 1,
-                    };
-                }
-                Phase::Hiding => {
-                    if watch.started.lock().unwrap().is_some() || layers.pending() > 0 {
-                        return;
+                    Phase::Hiding => {
+                        if watch.started.lock().unwrap().is_some() || layers.pending() > 0 {
+                            return;
+                        }
+                        results.hide_frame = watch.lap.lock().unwrap().take();
+                        // A layer of its own hides by drawing one buffer fewer;
+                        // one inside the flattened buffer redraws it.
+                        let since = results.hide_started.expect("set when hiding");
+                        results.hide = layers
+                            .rewrites
+                            .iter()
+                            .any(|r| r.started >= since)
+                            .then(|| timeline(&layers))
+                            .flatten();
+                        *p = Phase::Pan { n: 0 };
                     }
-                    results.hide_frame = watch.lap.lock().unwrap().take();
-                    // A layer of its own hides by drawing one buffer fewer;
-                    // one inside the flattened buffer redraws it.
-                    let since = results.hide_started.expect("set when hiding");
-                    results.hide = layers
-                        .rewrites
-                        .iter()
-                        .any(|r| r.started >= since)
-                        .then(|| timeline(&layers))
-                        .flatten();
-                    *p = Phase::Pan { n: 0 };
-                }
-                Phase::Pan { n } => {
-                    if watch.started.lock().unwrap().is_some() {
-                        return;
+                    Phase::Pan { n } => {
+                        if watch.started.lock().unwrap().is_some() {
+                            return;
+                        }
+                        if let Some(lap) = watch.lap.lock().unwrap().take() {
+                            results.pan.push(lap);
+                        }
+                        if n == STROKES {
+                            *p = Phase::Zoom { n: 0 };
+                            return;
+                        }
+                        view.pan(7.0, 3.0);
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::Pan { n: n + 1 };
                     }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        results.pan.push(lap);
-                    }
-                    if n == STROKES {
-                        *p = Phase::Zoom { n: 0 };
-                        return;
-                    }
-                    view.pan(7.0, 3.0);
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::Pan { n: n + 1 };
-                }
-                Phase::Zoom { n } => {
-                    if watch.started.lock().unwrap().is_some() {
-                        return;
-                    }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        results.zoom.push(lap);
-                    }
-                    if n == STROKES {
-                        // A photo over the middle of the stack, turned a
-                        // little and half transparent, covering the canvas.
-                        let image = reference.take().expect("added once");
-                        let k = f64::from(side) / 4000.0;
-                        let _ = editor.doc.add_layer(
-                            NewLayer::Reference {
-                                image,
-                                place: ReferencePlace {
-                                    center: (f64::from(side) / 2.0, f64::from(side) / 2.0),
-                                    scale: (k, k),
-                                    rotation: 7.0,
+                    Phase::Zoom { n } => {
+                        if watch.started.lock().unwrap().is_some() {
+                            return;
+                        }
+                        if let Some(lap) = watch.lap.lock().unwrap().take() {
+                            results.zoom.push(lap);
+                        }
+                        if n == STROKES {
+                            // A photo over the middle of the stack, turned a
+                            // little and half transparent, covering the canvas.
+                            let image = reference.take().expect("added once");
+                            let k = f64::from(side) / 4000.0;
+                            let _ = editor.doc.add_layer(
+                                NewLayer::Reference {
+                                    image,
+                                    place: ReferencePlace {
+                                        center: (f64::from(side) / 2.0, f64::from(side) / 2.0),
+                                        scale: (k, k),
+                                        rotation: 7.0,
+                                    },
                                 },
-                            },
-                            "photo",
-                            Placement {
-                                parent: None,
-                                index: Some(reference_index),
-                            },
-                        );
-                        editor.touch();
-                        results.reference_started = Some(Instant::now());
-                        *p = Phase::Reference;
-                        return;
-                    }
-                    // In two steps and out two, around the middle.
-                    let inward = n % 4 < 2;
-                    let z = view.step(inward);
-                    let mid = view.middle();
-                    view.zoom_at(z, mid);
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::Zoom { n: n + 1 };
-                }
-                Phase::Reference => {
-                    let since = results.reference_started.expect("set when added");
-                    if let Some((_, longest)) = &mut results.reference {
-                        *longest = (*longest).max(now - last_tick);
-                    } else {
-                        results.reference = Some((Duration::ZERO, Duration::ZERO));
-                    }
-                    let (shown, _) = layers.reference_images.buffer_stats();
-                    if shown > 0 && layers.pending() == 0 {
-                        if let Some((until, _)) = &mut results.reference {
-                            *until = since.elapsed();
+                                "photo",
+                                Placement {
+                                    parent: None,
+                                    index: Some(reference_index),
+                                },
+                            );
+                            editor.touch();
+                            results.reference_started = Some(Instant::now());
+                            *p = Phase::Reference;
+                            return;
                         }
-                        *p = Phase::RefPan { n: 0 };
+                        // In two steps and out two, around the middle.
+                        let inward = n % 4 < 2;
+                        let z = view.step(inward);
+                        let mid = view.middle();
+                        view.zoom_at(z, mid);
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::Zoom { n: n + 1 };
                     }
-                }
-                Phase::RefPan { n } => {
-                    if watch.started.lock().unwrap().is_some() {
-                        return;
-                    }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        results.ref_pan.push(lap);
-                    }
-                    if n == STROKES {
-                        *p = Phase::RefZoom { n: 0 };
-                        return;
-                    }
-                    view.pan(-7.0, 3.0);
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::RefPan { n: n + 1 };
-                }
-                Phase::RefZoom { n } => {
-                    if watch.started.lock().unwrap().is_some() {
-                        return;
-                    }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        results.ref_zoom.push(lap);
-                    }
-                    if n == STROKES {
-                        // A tilemap over everything, the layer being edited
-                        // in Tiles mode, so its grid shows over the canvas.
-                        let (tiles, cells) = tilemap.take().expect("added once");
-                        let doc = &mut editor.doc;
-                        let ts = doc
-                            .add_tileset("ground", MAP_TILE, MAP_TILE)
-                            .expect("a tileset");
-                        for t in tiles {
-                            doc.add_tile(ts, t).expect("a tile");
+                    Phase::Reference => {
+                        let since = results.reference_started.expect("set when added");
+                        if let Some((_, longest)) = &mut results.reference {
+                            *longest = (*longest).max(now - last_tick);
+                        } else {
+                            results.reference = Some((Duration::ZERO, Duration::ZERO));
                         }
-                        let map = doc
-                            .add_layer(
-                                NewLayer::Tilemap { tileset: ts },
-                                "map",
-                                Placement::default(),
-                            )
-                            .expect("a tilemap layer");
-                        let cols = side / MAP_TILE;
-                        let grid = TileGrid::from_cells(Point::new(0, 0), cols, cols, &cells)
-                            .expect("cells for the grid");
-                        doc.set_tile_grid(map, 0, grid).expect("the grid");
-                        editor.layer = map;
-                        editor.tiles_mode = true;
-                        editor.touch();
-                        results.tilemap_started = Some(Instant::now());
-                        results.tilemap_art = layers.art_revision;
-                        *p = Phase::Tilemap;
-                        return;
+                        let (shown, _) = layers.reference_images.buffer_stats();
+                        if shown > 0 && layers.pending() == 0 {
+                            if let Some((until, _)) = &mut results.reference {
+                                *until = since.elapsed();
+                            }
+                            *p = Phase::RefPan { n: 0 };
+                        }
                     }
-                    let inward = n % 4 < 2;
-                    let z = view.step(inward);
-                    let mid = view.middle();
-                    view.zoom_at(z, mid);
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::RefZoom { n: n + 1 };
+                    Phase::RefPan { n } => {
+                        if watch.started.lock().unwrap().is_some() {
+                            return;
+                        }
+                        if let Some(lap) = watch.lap.lock().unwrap().take() {
+                            results.ref_pan.push(lap);
+                        }
+                        if n == STROKES {
+                            *p = Phase::RefZoom { n: 0 };
+                            return;
+                        }
+                        view.pan(-7.0, 3.0);
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::RefPan { n: n + 1 };
+                    }
+                    Phase::RefZoom { n } => {
+                        if watch.started.lock().unwrap().is_some() {
+                            return;
+                        }
+                        if let Some(lap) = watch.lap.lock().unwrap().take() {
+                            results.ref_zoom.push(lap);
+                        }
+                        if n == STROKES {
+                            // A tilemap over everything, the layer being edited
+                            // in Tiles mode, so its grid shows over the canvas.
+                            let (tiles, cells) = tilemap.take().expect("added once");
+                            let doc = &mut editor.doc;
+                            let ts = doc
+                                .add_tileset("ground", MAP_TILE, MAP_TILE)
+                                .expect("a tileset");
+                            for t in tiles {
+                                doc.add_tile(ts, t).expect("a tile");
+                            }
+                            let map = doc
+                                .add_layer(
+                                    NewLayer::Tilemap { tileset: ts },
+                                    "map",
+                                    Placement::default(),
+                                )
+                                .expect("a tilemap layer");
+                            let cols = side / MAP_TILE;
+                            let grid = TileGrid::from_cells(Point::new(0, 0), cols, cols, &cells)
+                                .expect("cells for the grid");
+                            doc.set_tile_grid(map, 0, grid).expect("the grid");
+                            editor.layer = map;
+                            editor.tiles_mode = true;
+                            editor.touch();
+                            results.tilemap_started = Some(Instant::now());
+                            results.tilemap_art = layers.art_revision;
+                            *p = Phase::Tilemap;
+                            return;
+                        }
+                        let inward = n % 4 < 2;
+                        let z = view.step(inward);
+                        let mid = view.middle();
+                        view.zoom_at(z, mid);
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::RefZoom { n: n + 1 };
+                    }
+                    Phase::Tilemap => {
+                        if layers.pending() == 0 && layers.art_revision != results.tilemap_art {
+                            let since = results.tilemap_started.expect("set when added");
+                            results.tilemap = Some(since.elapsed());
+                            *p = Phase::MapPan { n: 0 };
+                        }
+                    }
+                    Phase::MapPan { n } => {
+                        if watch.started.lock().unwrap().is_some() {
+                            return;
+                        }
+                        if let Some(lap) = watch.lap.lock().unwrap().take() {
+                            results.map_pan.push(lap);
+                        }
+                        if n == STROKES {
+                            *p = Phase::MapZoom { n: 0 };
+                            return;
+                        }
+                        view.pan(7.0, -3.0);
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::MapPan { n: n + 1 };
+                    }
+                    Phase::MapZoom { n } => {
+                        if watch.started.lock().unwrap().is_some() {
+                            return;
+                        }
+                        if let Some(lap) = watch.lap.lock().unwrap().take() {
+                            results.map_zoom.push(lap);
+                        }
+                        if n == STROKES {
+                            *p = Phase::Export;
+                            return;
+                        }
+                        let inward = n % 4 < 2;
+                        let z = view.step(inward);
+                        let mid = view.middle();
+                        view.zoom_at(z, mid);
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::MapZoom { n: n + 1 };
+                    }
+                    Phase::Export => {
+                        let t = Instant::now();
+                        let png = pixl_io::png::export_frame_png(&editor.doc, 0, 1)
+                            .expect("the frame exports");
+                        results.export = Some((t.elapsed(), png.len()));
+                        let t = Instant::now();
+                        let sheet = pixl_io::sheet::sprite_sheet(
+                            &editor.doc,
+                            &pixl_io::sheet::SheetOptions {
+                                layout: pixl_io::sheet::SheetLayout::Packed,
+                                trim: true,
+                                ..Default::default()
+                            },
+                        )
+                        .expect("the sheet lays out");
+                        let png = sheet.to_png().expect("the sheet encodes");
+                        results.sheet = Some((t.elapsed(), png.len()));
+                        *p = Phase::Done;
+                    }
+                    Phase::Done => {}
                 }
-                Phase::Tilemap => {
-                    if layers.pending() == 0 && layers.art_revision != results.tilemap_art {
-                        let since = results.tilemap_started.expect("set when added");
-                        results.tilemap = Some(since.elapsed());
-                        *p = Phase::MapPan { n: 0 };
-                    }
-                }
-                Phase::MapPan { n } => {
-                    if watch.started.lock().unwrap().is_some() {
-                        return;
-                    }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        results.map_pan.push(lap);
-                    }
-                    if n == STROKES {
-                        *p = Phase::MapZoom { n: 0 };
-                        return;
-                    }
-                    view.pan(7.0, -3.0);
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::MapPan { n: n + 1 };
-                }
-                Phase::MapZoom { n } => {
-                    if watch.started.lock().unwrap().is_some() {
-                        return;
-                    }
-                    if let Some(lap) = watch.lap.lock().unwrap().take() {
-                        results.map_zoom.push(lap);
-                    }
-                    if n == STROKES {
-                        *p = Phase::Export;
-                        return;
-                    }
-                    let inward = n % 4 < 2;
-                    let z = view.step(inward);
-                    let mid = view.middle();
-                    view.zoom_at(z, mid);
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::MapZoom { n: n + 1 };
-                }
-                Phase::Export => {
-                    let t = Instant::now();
-                    let png = pixl_io::png::export_frame_png(&editor.doc, 0, 1)
-                        .expect("the frame exports");
-                    results.export = Some((t.elapsed(), png.len()));
-                    let t = Instant::now();
-                    let sheet = pixl_io::sheet::sprite_sheet(
-                        &editor.doc,
-                        &pixl_io::sheet::SheetOptions {
-                            layout: pixl_io::sheet::SheetLayout::Packed,
-                            trim: true,
-                            ..Default::default()
-                        },
-                    )
-                    .expect("the sheet lays out");
-                    let png = sheet.to_png().expect("the sheet encodes");
-                    results.sheet = Some((t.elapsed(), png.len()));
-                    *p = Phase::Done;
-                }
-                Phase::Done => {}
-            }
+            })
+            .before(pixl::settings::keymap::read_keys)
+            .before(pixl::view::input::navigate),
+        )
+        .add_plugin(BenchCapture(world_capture))
+        .run_headless_rendered(HeadlessOptions {
+            dpr: 1.0,
+            ticks: Some(5000),
+            ..Default::default()
         })
-        .before(pixl::settings::keymap::read_keys)
-        .before(pixl::view::input::navigate),
-    )
-    .add_plugin(BenchCapture(world_capture))
-    .run_headless_rendered(HeadlessOptions {
-        dpr: 1.0,
-        ticks: Some(5000),
-    })
-    .expect("the editor runs");
+        .expect("the editor runs");
     stop.store(true, Ordering::Relaxed);
 
     let r = results.lock().unwrap();

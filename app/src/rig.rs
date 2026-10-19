@@ -11,7 +11,7 @@
 //! the preview is the result; the pose is keyed on the frame when the drag
 //! ends. Posing on the rest frame moves the bones alone.
 
-use lumenui::ecs::query::Added;
+use lumenui::bevy_ecs::query::Added;
 use lumenui::glam::Vec2 as Window;
 use lumenui::lumen_core::input::{EditCommitted, ModifiersState, PointerButton};
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -1278,11 +1278,11 @@ pub fn show_rig(
         ("rig-ik", ui.ik),
     ] {
         if let Some(n) = dom::get_by_id(id) {
-            crate::set_class(n, "active", on);
+            n.set_class_on("active", on);
         }
     }
     if let Some(app) = dom::get_by_id("app") {
-        crate::set_class(app, "rigging", ui.mode.is_some());
+        app.set_class_on("rigging", ui.mode.is_some());
     }
     if let Some(rig) = rig {
         // The lists change only with the document, the bone or the rig.
@@ -1633,16 +1633,16 @@ pub fn install(app: App) -> App {
     use lumenui::lumen_core::input::ClickSet;
     use lumenui::lumen_core::signals;
     app.insert_resource(RigUi::default())
-        .insert_signal("rig_none", true)
-        .insert_signal("rig_some", false)
-        .insert_signal("rig_bones", false)
-        .insert_signal("rig_posing", false)
-        .insert_signal("rig_has_bone", false)
-        .insert_signal("rig_bone_name", "")
-        .insert_signal("rig_pose_name", "")
-        .insert_signal("rig_easing", "Linear")
-        .insert_signal("rig_from", "1")
-        .insert_signal("rig_to", "1")
+        .signal("rig_none", true)
+        .signal("rig_some", false)
+        .signal("rig_bones", false)
+        .signal("rig_posing", false)
+        .signal("rig_has_bone", false)
+        .signal("rig_bone_name", "")
+        .signal("rig_pose_name", "")
+        .signal("rig_easing", "Linear")
+        .signal("rig_from", "1")
+        .signal("rig_to", "1")
         .add_systems(
             TickStage::Systems,
             (

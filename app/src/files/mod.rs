@@ -11,9 +11,9 @@ pub mod shipped;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use lumenui::ecs::change_detection::Mut;
-use lumenui::ecs::system::SystemParam;
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::change_detection::Mut;
+use lumenui::bevy_ecs::system::SystemParam;
+use lumenui::bevy_ecs::world::World;
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
@@ -719,7 +719,7 @@ pub fn new_form(
     }
     for (w, h) in PRESETS {
         if let Some(button) = dom::get_by_id(&preset_id(*w, *h)) {
-            crate::set_class(button, "active", now.0 == format!("{w}x{h}"));
+            button.set_class_on("active", now.0 == format!("{w}x{h}"));
         }
     }
     let color = now.1 == "Color";

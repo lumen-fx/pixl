@@ -13,7 +13,7 @@
 //! written again only when the hue or the size changes; the marks over
 //! them are drawn each time the color moves.
 
-use lumenui::ecs::query::Added;
+use lumenui::bevy_ecs::query::Added;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::components::Transform;
 use lumenui::lumen_core::input::{
@@ -474,7 +474,7 @@ fn rect_of(id: &str) -> Option<(Vec2, Vec2)> {
 }
 
 /// What the panel reads from the input of a tick.
-#[derive(lumenui::ecs::system::SystemParam)]
+#[derive(lumenui::bevy_ecs::system::SystemParam)]
 pub struct ColorInput<'w, 's> {
     clicks: MessageReader<'w, 's, ClickEvent>,
     pressed: MessageReader<'w, 's, PointerPressed>,
@@ -756,8 +756,8 @@ pub fn show_color(
     {
         f.set_style("bg", &hex(fg));
         b.set_style("bg", &hex(bg));
-        crate::set_class(f, "editing", panel.target == Target::Foreground);
-        crate::set_class(b, "editing", panel.target == Target::Background);
+        f.set_class_on("editing", panel.target == Target::Foreground);
+        b.set_class_on("editing", panel.target == Target::Background);
         panel.swatches = Some(swatches);
         changed = true;
     }
@@ -771,7 +771,7 @@ pub fn show_color(
             signals.set(&format!("color_c{k}_name"), name);
         }
         if let Some(row) = dom::get_by_id("color-picker") {
-            crate::set_class(row, "wheel", picker == Picker::Wheel);
+            row.set_class_on("wheel", picker == Picker::Wheel);
         }
         panel.shown_modes = Some((picker, channels));
         panel.sliders = None;

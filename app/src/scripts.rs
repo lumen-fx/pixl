@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::world::{Mut, World};
+use lumenui::bevy_ecs::world::{Mut, World};
 use lumenui::lumen_core::app_paths;
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;

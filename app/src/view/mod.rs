@@ -31,7 +31,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::components::Transform;
 use lumenui::lumen_core::tick::WakeDeadline;

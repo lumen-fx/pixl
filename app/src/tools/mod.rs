@@ -11,7 +11,7 @@ pub mod toolbar;
 pub mod toolbox;
 pub mod transform;
 
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{ModifiersState, PointerButton, PointerData};
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -29,7 +29,6 @@ use pixl_paint::{Brush, Canvas, Ink, ToolContext};
 
 use crate::editor::{Editor, Tool};
 use crate::home::Home;
-use crate::ids::ElementIds;
 use crate::settings::Settings;
 use crate::settings::keymap::KeyCommands;
 use crate::tools::dynamics::Live;
@@ -197,23 +196,25 @@ pub fn color_at(editor: &Editor, p: Point) -> Option<Rgba> {
         .copied()
 }
 
-/// Picks tools from their keys and their tool bar buttons.
+/// Picks the tool whose button was clicked, unless a gesture is under way.
+/// The click names the button whatever part of it was hit.
+pub fn pick_tool_on_click(ui: &mut Ui, ev: &Event) {
+    let Some(tool) = ev.id().and_then(Tool::from_button_id) else {
+        return;
+    };
+    if !ui.resource::<Gesture>().active() && ui.resource::<Editor>().tool != tool {
+        ui.resource_mut::<Editor>().tool = tool;
+    }
+}
+
+/// Picks tools from their keys.
 pub fn pick_tool(
     mut editor: ResMut<Editor>,
     keys: Res<KeyCommands>,
-    mut clicks: MessageReader<ClickEvent>,
-    ids: ElementIds,
     gesture: Res<Gesture>,
     home: Res<Home>,
 ) {
     let mut picked = None;
-    for click in clicks.read() {
-        if let Ok(id) = ids.of(click.entity)
-            && let Some(tool) = Tool::from_button_id(&id.0)
-        {
-            picked = Some(tool);
-        }
-    }
     // The start screen keeps the editor's keys until a document shows.
     if !home.open {
         for (id, repeat) in &keys.pressed {
@@ -882,7 +883,7 @@ pub fn show_tool(
     let tool = editor.tool;
     for t in Tool::ALL {
         if let Some(button) = dom::get_by_id(t.button_id()) {
-            crate::set_class(button, "active", t == tool);
+            button.set_class_on("active", t == tool);
         }
     }
     use Tool::*;

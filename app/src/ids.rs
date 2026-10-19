@@ -6,8 +6,8 @@
 //! on the ids of buttons, rows and panels, so input resolves an entity to the
 //! nearest element, itself or an ancestor, that has an id.
 
-use lumenui::ecs::hierarchy::ChildOf;
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::hierarchy::ChildOf;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::prelude::*;
 
 /// Resolves entities to the ids of the elements they are part of.

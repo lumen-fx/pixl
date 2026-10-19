@@ -6,8 +6,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use lumenui::ecs::change_detection::DetectChanges;
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::change_detection::DetectChanges;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::lumen_core::input::{
     Key, MenuClicked, Modifiers, ModifiersState, NamedKey, WindowFocused,
 };

@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
     ModifiersState, MouseWheel, PointerButton, PointerData, PointerMoved, PointerPressed,

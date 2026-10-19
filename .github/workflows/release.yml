@@ -39,8 +39,8 @@ jobs:
       - name: Build
         run: cargo build --release --locked -p pixl -p pixl-cli
 
-      # The markup and stylesheets are compiled into the executable, every
-      # part and import spliced in by app/build.rs. The icons and the font
+      # The markup and stylesheets are compiled into the executable by
+      # app/build.rs, every part and import included. The icons and the font
       # they name are read at run time from the executable's own folder,
       # which lumen.toml beside it marks as the app folder.
       - name: Lay out the package
