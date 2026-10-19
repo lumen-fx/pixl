@@ -1,0 +1,14 @@
+/* The Scripts dialog, its output and its questions. */
+
+.sc-card { min-width: 560; }
+.sc-list { height: 300; bg: var(--surface-1); border: 1px solid var(--edge); }
+.sc-item { align: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--edge-soft); }
+.sc-item:hover { bg: var(--surface-3); }
+.sc-item.current { bg: var(--accent-soft); }
+.sc-label { text-color: var(--text); }
+.sc-group { text-color: var(--text-faint); font-size: var(--font-size-small); }
+.sc-problem { text-color: var(--accent); font-size: var(--font-size-small); padding: var(--space-2) var(--space-3); }
+.sc-folder { text-color: var(--text-faint); font-size: var(--font-size-small); text-overflow: ellipsis; }
+.sc-small-card { min-width: 420; max-width: 640; }
+.sc-text { wrap: word; min-width: 0; }
+.sc-output { max-height: 320; bg: var(--surface-1); border: 1px solid var(--edge); padding: var(--space-3); }

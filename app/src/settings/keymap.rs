@@ -236,6 +236,7 @@ const COMMANDS: &[(&str, &str, &str, Kind)] = &[
     ("file-export-presets", "Export presets", "File", Kind::Press),
     ("file-export-all", "Export all presets", "File", Kind::Press),
     ("file-export-tileset", "Export tileset", "File", Kind::Press),
+    ("file-scripts", "Scripts", "File", Kind::Press),
     ("file-close", "Close", "File", Kind::Press),
     ("tab-next", "Next document", "File", Kind::Press),
     ("tab-prev", "Previous document", "File", Kind::Press),

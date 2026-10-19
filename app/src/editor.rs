@@ -419,6 +419,26 @@ impl Editor {
         Some(dirty)
     }
 
+    /// Takes the document a script left as one undo step named `label`,
+    /// with the selection, layer and frame it left.
+    pub fn apply_script(
+        &mut self,
+        doc: Document,
+        selection: Option<Selection>,
+        layer: LayerId,
+        frame: usize,
+        label: &str,
+    ) {
+        let tx = self.history.begin(&self.doc, label, Scope::All);
+        self.doc = doc;
+        self.history.commit(&mut self.doc, tx);
+        self.selection = selection;
+        self.layer = layer;
+        self.frame = frame;
+        self.after_structure_change();
+        self.touch();
+    }
+
     /// Keeps the active layer pointing at a layer that exists.
     /// The tileset of the active layer, when it is a tilemap layer.
     pub fn active_tileset(&self) -> Option<TilesetId> {

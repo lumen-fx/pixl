@@ -16,6 +16,7 @@
       <menuitem id="file-export-sheet" label="Export sprite sheet..."/>
       <menuitem id="file-export-tileset" label="Export tileset..."/>
       <menuitem id="file-import-sheet" label="Import sprite sheet..."/>
+      <menuitem id="file-scripts" label="Scripts..."/>
       <separator/>
       <menuitem id="file-close" label="Close (Ctrl+W)"/>
     </menu>
@@ -213,6 +214,7 @@
   <include src="parts/palette.lmn"/>
   <include src="parts/timeline-menus.lmn"/>
   <include src="parts/exports.lmn"/>
+  <include src="parts/scripts.lmn"/>
   <include src="parts/layer-menus.lmn"/>
   <include src="parts/tilemap-dialog.lmn"/>
   <include src="parts/presets.lmn"/>

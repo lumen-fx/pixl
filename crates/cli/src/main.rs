@@ -1,11 +1,13 @@
 //! `pixl-cli`: exports pixl, Aseprite, PNG and GIF documents without the
 //! editor, for build pipelines. It reads Aseprite's batch flags, so a
 //! pipeline written for `aseprite -b` runs by changing the program name,
-//! and runs the export presets the editor keeps.
+//! runs the export presets the editor keeps, and runs candela scripts
+//! (`--script`, Aseprite's `-script`).
 //!
-//! Exit codes: 0 when everything was written, 1 when an export failed
-//! (a file could not be read or written, a layer, tag or preset does not
-//! exist), 2 when the command line cannot be read.
+//! Exit codes: 0 when everything was written, 1 when an export or a
+//! script failed (a file could not be read or written, a layer, tag or
+//! preset does not exist, the script raised an error), 2 when the command
+//! line cannot be read.
 
 mod args;
 mod run;
@@ -17,6 +19,7 @@ const HELP: &str = "\
 pixl-cli: export pixl, Aseprite, PNG and GIF documents without the editor
 
 Usage: pixl-cli [OPTIONS] DOCUMENT
+       pixl-cli [DOCUMENT] --script FILE [OPTIONS]
 
 DOCUMENT is a .pixl, .aseprite, .ase, .png or .gif file. Options read in any
 order; the Aseprite ones mean what they mean to `aseprite -b`.
@@ -51,6 +54,12 @@ Presets (the editor's File > Export presets):
   --presets FILE         read presets from FILE, not the editor's exports.json
   --list-presets         print the presets' names
 
+Scripts:
+  --script FILE          run a candela script (.cdl) with DOCUMENT as its
+                         app::document(); the export flags then export the
+                         document as the script left it
+  --script-param K=V     a value the script reads with app::param (repeatable)
+
 Lists, one name per line on standard output:
   --list-layers          the document's layers
   --list-tags            the document's tags
@@ -67,7 +76,8 @@ File name tokens: {name} or {title} the document's name, {tag}, {layer},
 the first frame written). Presets write beside the document; --save-as and
 --sheet write where FILE says.
 
-Exit codes: 0 written, 1 an export failed, 2 the command line is wrong.
+Exit codes: 0 written, 1 an export or a script failed, 2 the command line is
+wrong.
 ";
 
 fn main() -> ExitCode {
@@ -114,6 +124,16 @@ fn main() -> ExitCode {
         }
         Err(run::Failure::Export(e)) => {
             let _ = writeln!(stderr, "pixl-cli: {e}");
+            ExitCode::from(1)
+        }
+        Err(run::Failure::Script { out, err, error }) => {
+            for line in &out {
+                let _ = writeln!(stdout, "{line}");
+            }
+            for line in &err {
+                let _ = writeln!(stderr, "pixl-cli: {line}");
+            }
+            let _ = writeln!(stderr, "pixl-cli: {error}");
             ExitCode::from(1)
         }
     }

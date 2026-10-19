@@ -1,0 +1,30 @@
+// Writes each visible layer of the active frame to its own PNG, named
+// <document>-<layer>.png, beside the document. Parameter: scale (default 1).
+import "pixl" as app;
+
+fn stem(name: string) -> string {
+    let parts = name.split(".");
+    if parts.len() > 1 {
+        parts.remove(parts.len() - 1);
+    }
+    return parts.join(".");
+}
+
+fn main() {
+    let doc = app::document();
+    let scale = int(app::param("scale", "1"));
+    let frame = doc.active_frame();
+    let base = stem(doc.name());
+    let written = 0;
+    for layer in doc.all_layers() {
+        if layer.has_cels() && layer.is_visible() && !layer.cel(frame).is_empty() {
+            let file = base + "-" + layer.name().replace("/", "-") + ".png";
+            doc.export_layer_png(layer, file, frame, scale);
+            print(file);
+            written = written + 1;
+        }
+    }
+    if written == 0 {
+        app::alert("no visible layer has pixels on this frame");
+    }
+}

@@ -1,0 +1,768 @@
+// pixl's scripting API. A script imports it with `import "pixl" as app;`
+// and reaches everything through `app::`. The host block above this text
+// is written from the Rust side's function table when the library is set
+// up; the types and methods below wrap those functions.
+
+/// A color: red, green, blue and alpha, each 0 to 255.
+struct Color {
+    r: int,
+    g: int,
+    b: int,
+    a: int = 255,
+}
+
+/// A rectangle of pixels: its top-left corner, width and height.
+struct Rect {
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+}
+
+/// An open document.
+struct Document {
+    id: int,
+}
+
+/// A layer of a document.
+struct Layer {
+    doc: int,
+    id: int,
+}
+
+/// One frame's content of a raster layer.
+struct Cel {
+    doc: int,
+    layer: int,
+    frame: int,
+}
+
+/// A tileset of a document.
+struct Tileset {
+    doc: int,
+    id: int,
+}
+
+fn rgba(r: int, g: int, b: int, a: int) -> Color {
+    return Color { r: r, g: g, b: b, a: a };
+}
+
+fn rgb(r: int, g: int, b: int) -> Color {
+    return Color { r: r, g: g, b: b, a: 255 };
+}
+
+fn transparent() -> Color {
+    return Color { r: 0, g: 0, b: 0, a: 0 };
+}
+
+/// A color from `#rgb`, `#rrggbb` or `#rrggbbaa`, the `#` optional.
+/// Raises `bad_color` for anything else.
+fn hex_color(text: string) -> Color {
+    let digits = "0123456789abcdef";
+    let t = text.trim().lowercase();
+    if t.starts_with("#") {
+        t = t[1..t.len()];
+    }
+    if t.len() == 3 {
+        t = t[0] + t[0] + t[1] + t[1] + t[2] + t[2];
+    }
+    if t.len() == 6 {
+        t = t + "ff";
+    }
+    if t.len() != 8 {
+        throw("bad_color");
+    }
+    let v = [];
+    for i in range(4) {
+        let hi = digits.find(t[i * 2]);
+        let lo = digits.find(t[i * 2 + 1]);
+        if hi < 0 || lo < 0 {
+            throw("bad_color");
+        }
+        v.push(hi * 16 + lo);
+    }
+    return Color { r: v[0], g: v[1], b: v[2], a: v[3] };
+}
+
+fn color_of(v: int[]) -> Color {
+    return Color { r: v[0], g: v[1], b: v[2], a: v[3] };
+}
+
+fn colors_of(v: int[]) -> Color[] {
+    let out = [];
+    let i = 0;
+    while i + 3 < v.len() {
+        out.push(Color { r: v[i], g: v[i + 1], b: v[i + 2], a: v[i + 3] });
+        i = i + 4;
+    }
+    return out;
+}
+
+fn flat_colors(colors: Color[]) -> int[] {
+    let out = [];
+    for c in colors {
+        out.push(c.r);
+        out.push(c.g);
+        out.push(c.b);
+        out.push(c.a);
+    }
+    return out;
+}
+
+fn rect_of(v: int[]) -> Rect {
+    return Rect { x: v[0], y: v[1], w: v[2], h: v[3] };
+}
+
+impl Color {
+    fn ==(self, other: Color) -> bool {
+        return self.r == other.r && self.g == other.g && self.b == other.b && self.a == other.a;
+    }
+
+    /// The color as `#rrggbbaa`.
+    fn hex(self) -> string {
+        let digits = "0123456789abcdef";
+        let out = "#";
+        for v in [self.r, self.g, self.b, self.a] {
+            out = out + digits[v / 16] + digits[v % 16];
+        }
+        return out;
+    }
+}
+
+impl Rect {
+    fn is_empty(self) -> bool {
+        return self.w <= 0 || self.h <= 0;
+    }
+
+    fn contains(self, x: int, y: int) -> bool {
+        return x >= self.x && y >= self.y && x < self.x + self.w && y < self.y + self.h;
+    }
+}
+
+// ---- the app ----
+
+/// pixl's version.
+fn version() -> string {
+    return pixl_host::version();
+}
+
+/// Whether the script runs in the editor window (false in pixl-cli).
+fn has_ui() -> bool {
+    return pixl_host::has_ui();
+}
+
+/// The document in front: the active tab, or pixl-cli's document. Raises
+/// `no_document` when no document is open.
+fn document() -> Document {
+    let id = pixl_host::active();
+    if id < 0 {
+        throw("no_document");
+    }
+    return Document { id: id };
+}
+
+/// Whether a document is open.
+fn has_document() -> bool {
+    return pixl_host::active() >= 0;
+}
+
+/// Every open document.
+fn documents() -> Document[] {
+    let out = [];
+    for id in pixl_host::docs() {
+        out.push(Document { id: id });
+    }
+    return out;
+}
+
+/// Opens a .pixl, .aseprite, .ase, .png or .gif file. It becomes the
+/// document in front, and in the editor it opens in a tab of its own.
+fn open(path: string) -> Document {
+    return Document { id: pixl_host::open(path) };
+}
+
+/// A new RGBA document with one empty layer and one frame.
+fn new_document(width: int, height: int) -> Document {
+    return Document { id: pixl_host::new_doc(width, height, false) };
+}
+
+/// A new indexed document on pixl's default palette.
+fn new_indexed_document(width: int, height: int) -> Document {
+    return Document { id: pixl_host::new_doc(width, height, true) };
+}
+
+/// The foreground color.
+fn fg() -> Color {
+    return color_of(pixl_host::fg());
+}
+
+fn set_fg(c: Color) {
+    pixl_host::set_fg(c.r, c.g, c.b, c.a);
+}
+
+/// The background color.
+fn bg() -> Color {
+    return color_of(pixl_host::bg());
+}
+
+fn set_bg(c: Color) {
+    pixl_host::set_bg(c.r, c.g, c.b, c.a);
+}
+
+/// The parameters the run was given: pixl-cli's `--script-param`s, or an
+/// extension command's `params`.
+fn params() -> {string: string} {
+    return pixl_host::params();
+}
+
+/// The parameter `name`, or `fallback` when the run was not given it.
+fn param(name: string, fallback: string) -> string {
+    let all = pixl_host::params();
+    if all.contains(name) {
+        return all.get(name);
+    }
+    return fallback;
+}
+
+/// Shows `text` to the user once the script ends: in the editor's script
+/// results, or on standard error in pixl-cli.
+fn alert(text: string) {
+    pixl_host::alert(text);
+}
+
+// ---- documents ----
+
+impl Document {
+    fn ==(self, other: Document) -> bool {
+        return self.id == other.id;
+    }
+
+    /// The file's name, or the name of a document that has no file yet.
+    fn name(self) -> string {
+        return pixl_host::doc_name(self.id);
+    }
+
+    /// The file the document is saved to, or "" when it has none.
+    fn path(self) -> string {
+        return pixl_host::doc_path(self.id);
+    }
+
+    fn width(self) -> int {
+        return pixl_host::doc_width(self.id);
+    }
+
+    fn height(self) -> int {
+        return pixl_host::doc_height(self.id);
+    }
+
+    /// "rgba" or "indexed".
+    fn mode(self) -> string {
+        return pixl_host::doc_mode(self.id);
+    }
+
+    /// Makes the document the one in front.
+    fn activate(self) {
+        pixl_host::set_active(self.id);
+    }
+
+    /// The layers at the top of the tree, bottom first.
+    fn layers(self) -> Layer[] {
+        let out = [];
+        for id in pixl_host::doc_layers(self.id, -1) {
+            out.push(Layer { doc: self.id, id: id });
+        }
+        return out;
+    }
+
+    /// Every layer, in paint order: bottom first, a group before its
+    /// children.
+    fn all_layers(self) -> Layer[] {
+        let out = [];
+        for id in pixl_host::doc_all_layers(self.id) {
+            out.push(Layer { doc: self.id, id: id });
+        }
+        return out;
+    }
+
+    /// The first layer, in paint order, named `name`. Raises `no_layer`
+    /// when there is none.
+    fn layer(self, name: string) -> Layer {
+        for id in pixl_host::doc_all_layers(self.id) {
+            if pixl_host::layer_name(self.id, id) == name {
+                return Layer { doc: self.id, id: id };
+            }
+        }
+        throw("no_layer");
+        return Layer { doc: self.id, id: -1 };
+    }
+
+    /// A new raster layer at the top of the document.
+    fn add_layer(self, name: string) -> Layer {
+        return Layer { doc: self.id, id: pixl_host::doc_add_layer(self.id, "raster", name, -1) };
+    }
+
+    /// A new, empty group at the top of the document.
+    fn add_group(self, name: string) -> Layer {
+        return Layer { doc: self.id, id: pixl_host::doc_add_layer(self.id, "group", name, -1) };
+    }
+
+    /// Deletes a layer and everything in it. The last layer stays.
+    fn remove_layer(self, layer: Layer) {
+        pixl_host::doc_remove_layer(self.id, layer.id);
+    }
+
+    /// The layer tools paint on.
+    fn active_layer(self) -> Layer {
+        return Layer { doc: self.id, id: pixl_host::active_layer(self.id) };
+    }
+
+    fn set_active_layer(self, layer: Layer) {
+        pixl_host::set_active_layer(self.id, layer.id);
+    }
+
+    /// The frame the editor shows, counted from 0.
+    fn active_frame(self) -> int {
+        return pixl_host::active_frame(self.id);
+    }
+
+    fn set_active_frame(self, frame: int) {
+        pixl_host::set_active_frame(self.id, frame);
+    }
+
+    fn frame_count(self) -> int {
+        return pixl_host::doc_frame_count(self.id);
+    }
+
+    /// Frames 0 to frame_count() - 1, for a `for` loop.
+    fn frames(self) -> int[] {
+        return range(pixl_host::doc_frame_count(self.id));
+    }
+
+    /// Inserts an empty frame before `at`; `at == frame_count()` appends.
+    fn add_frame(self, at: int) {
+        pixl_host::doc_add_frame(self.id, at);
+    }
+
+    /// Copies frame `at` after itself and returns the copy's frame.
+    fn duplicate_frame(self, at: int) -> int {
+        return pixl_host::doc_duplicate_frame(self.id, at);
+    }
+
+    /// Deletes frame `at`. The last frame stays.
+    fn remove_frame(self, at: int) {
+        pixl_host::doc_remove_frame(self.id, at);
+    }
+
+    /// How long frame `at` shows, in milliseconds.
+    fn duration(self, at: int) -> int {
+        return pixl_host::frame_duration(self.id, at);
+    }
+
+    fn set_duration(self, at: int, ms: int) {
+        pixl_host::set_frame_duration(self.id, at, ms);
+    }
+
+    /// The tags' names.
+    fn tags(self) -> string[] {
+        return pixl_host::doc_tags(self.id);
+    }
+
+    /// The frames of tag `name`, first to last, both included.
+    fn tag_frames(self, name: string) -> int[] {
+        let r = pixl_host::tag_range(self.id, name);
+        return range(r[0], r[1] + 1);
+    }
+
+    /// Tags frames `from` to `to`, both included.
+    fn add_tag(self, name: string, from: int, to: int) {
+        pixl_host::add_tag(self.id, name, from, to);
+    }
+
+    fn palette(self) -> Color[] {
+        return colors_of(pixl_host::palette(self.id));
+    }
+
+    /// Replaces the palette, up to 256 colors.
+    fn set_palette(self, colors: Color[]) {
+        pixl_host::set_palette(self.id, flat_colors(colors));
+    }
+
+    fn set_palette_color(self, index: int, c: Color) {
+        pixl_host::set_palette_color(self.id, index, c.r, c.g, c.b, c.a);
+    }
+
+    /// At most `max` colors that stand for the document's pixels over every
+    /// frame, by median cut.
+    fn colors_in_image(self, max: int) -> Color[] {
+        return colors_of(pixl_host::palette_from_image(self.id, max));
+    }
+
+    /// The selection's bounds; empty when nothing is selected.
+    fn selection(self) -> Rect {
+        return rect_of(pixl_host::selection(self.id));
+    }
+
+    /// Replaces the selection with a rectangle.
+    fn select(self, r: Rect) {
+        pixl_host::select_rect(self.id, r.x, r.y, r.w, r.h, "replace");
+    }
+
+    /// Combines a rectangle with the selection: "add", "subtract" or
+    /// "intersect".
+    fn select_with(self, r: Rect, op: string) {
+        pixl_host::select_rect(self.id, r.x, r.y, r.w, r.h, op);
+    }
+
+    fn select_all(self) {
+        pixl_host::select_all(self.id);
+    }
+
+    fn deselect(self) {
+        pixl_host::deselect(self.id);
+    }
+
+    fn is_selected(self, x: int, y: int) -> bool {
+        return pixl_host::is_selected(self.id, x, y);
+    }
+
+    /// Resizes the canvas, moving the pixels by `dx`, `dy`.
+    fn resize_canvas(self, width: int, height: int, dx: int, dy: int) {
+        pixl_host::resize_canvas(self.id, width, height, dx, dy);
+    }
+
+    fn crop(self, r: Rect) {
+        pixl_host::crop(self.id, r.x, r.y, r.w, r.h);
+    }
+
+    /// "horizontal" or "vertical".
+    fn flip(self, direction: string) {
+        pixl_host::flip(self.id, direction);
+    }
+
+    /// Quarter turns clockwise; negative turns go the other way.
+    fn rotate(self, quarter_turns: int) {
+        pixl_host::rotate(self.id, quarter_turns);
+    }
+
+    /// Resizes every image to `width` by `height`, resampling by "nearest",
+    /// "rotsprite" or "clean_edge".
+    fn scale(self, width: int, height: int, resample: string) {
+        pixl_host::scale(self.id, width, height, resample);
+    }
+
+    /// Frame `frame` flattened as an export draws it, row by row.
+    fn flatten(self, frame: int) -> Color[] {
+        return colors_of(pixl_host::flatten(self.id, frame));
+    }
+
+    /// Saves to the document's file, in pixl's format.
+    fn save(self) {
+        pixl_host::save(self.id);
+    }
+
+    /// Saves as a .pixl file, which becomes the document's file.
+    fn save_as(self, path: string) {
+        pixl_host::save_as(self.id, path);
+    }
+
+    /// Writes frame `frame` as a PNG, enlarged `scale` times.
+    fn export_png(self, path: string, frame: int, scale: int) {
+        pixl_host::export_png(self.id, path, frame, scale, -1);
+    }
+
+    /// Writes frame `frame` of one layer alone as a PNG.
+    fn export_layer_png(self, layer: Layer, path: string, frame: int, scale: int) {
+        pixl_host::export_png(self.id, path, frame, scale, layer.id);
+    }
+
+    /// Writes every frame as an animated GIF.
+    fn export_gif(self, path: string, scale: int) {
+        pixl_host::export_gif(self.id, path, scale);
+    }
+
+    /// Writes every frame into one sprite sheet PNG, in a row, or in rows
+    /// of `columns` when it is above 0, and the sheet's JSON (Aseprite's
+    /// shape) to `data` unless it is "".
+    fn export_sheet(self, path: string, data: string, columns: int) {
+        pixl_host::export_sheet(self.id, path, data, columns, 1);
+    }
+
+    fn tilesets(self) -> Tileset[] {
+        let out = [];
+        for id in pixl_host::tilesets(self.id) {
+            out.push(Tileset { doc: self.id, id: id });
+        }
+        return out;
+    }
+}
+
+// ---- layers ----
+
+impl Layer {
+    fn ==(self, other: Layer) -> bool {
+        return self.doc == other.doc && self.id == other.id;
+    }
+
+    fn document(self) -> Document {
+        return Document { id: self.doc };
+    }
+
+    fn name(self) -> string {
+        return pixl_host::layer_name(self.doc, self.id);
+    }
+
+    fn set_name(self, name: string) {
+        pixl_host::set_layer_name(self.doc, self.id, name);
+    }
+
+    fn is_visible(self) -> bool {
+        return pixl_host::layer_visible(self.doc, self.id);
+    }
+
+    fn set_visible(self, visible: bool) {
+        pixl_host::set_layer_visible(self.doc, self.id, visible);
+    }
+
+    /// 0 (invisible) to 255 (opaque).
+    fn opacity(self) -> int {
+        return pixl_host::layer_opacity(self.doc, self.id);
+    }
+
+    fn set_opacity(self, opacity: int) {
+        pixl_host::set_layer_opacity(self.doc, self.id, opacity);
+    }
+
+    /// The blend mode, by its name in Aseprite's sheet JSON: "normal",
+    /// "multiply", "screen", "overlay"...
+    fn blend(self) -> string {
+        return pixl_host::layer_blend(self.doc, self.id);
+    }
+
+    fn set_blend(self, mode: string) {
+        pixl_host::set_layer_blend(self.doc, self.id, mode);
+    }
+
+    /// "raster", "tilemap", "group", "reference" or "skeleton".
+    fn kind(self) -> string {
+        return pixl_host::layer_kind(self.doc, self.id);
+    }
+
+    fn is_group(self) -> bool {
+        return pixl_host::layer_kind(self.doc, self.id) == "group";
+    }
+
+    /// Whether the layer has cels: a raster or tilemap layer.
+    fn has_cels(self) -> bool {
+        let k = pixl_host::layer_kind(self.doc, self.id);
+        return k == "raster" || k == "tilemap";
+    }
+
+    /// A group's layers, bottom first.
+    fn children(self) -> Layer[] {
+        let out = [];
+        for id in pixl_host::doc_layers(self.doc, self.id) {
+            out.push(Layer { doc: self.doc, id: id });
+        }
+        return out;
+    }
+
+    /// Whether the layer sits in a group.
+    fn has_parent(self) -> bool {
+        return pixl_host::layer_parent(self.doc, self.id) >= 0;
+    }
+
+    /// The group holding the layer. Raises `no_layer` for a top layer.
+    fn parent(self) -> Layer {
+        let p = pixl_host::layer_parent(self.doc, self.id);
+        if p < 0 {
+            throw("no_layer");
+        }
+        return Layer { doc: self.doc, id: p };
+    }
+
+    /// Moves the layer into `group` at `index` among its children (0 is the
+    /// bottom).
+    fn move_into(self, group: Layer, index: int) {
+        pixl_host::layer_move(self.doc, self.id, group.id, index);
+    }
+
+    /// Moves the layer to `index` among the top layers (0 is the bottom).
+    fn move_to(self, index: int) {
+        pixl_host::layer_move(self.doc, self.id, -1, index);
+    }
+
+    /// The layer's cel at `frame`.
+    fn cel(self, frame: int) -> Cel {
+        return Cel { doc: self.doc, layer: self.id, frame: frame };
+    }
+
+    /// The layer's cels, one per frame, empty ones too.
+    fn cels(self) -> Cel[] {
+        let out = [];
+        for f in range(pixl_host::doc_frame_count(self.doc)) {
+            out.push(Cel { doc: self.doc, layer: self.id, frame: f });
+        }
+        return out;
+    }
+}
+
+// ---- cels ----
+
+impl Cel {
+    fn layer(self) -> Layer {
+        return Layer { doc: self.doc, id: self.layer };
+    }
+
+    /// Whether the cel has no pixels.
+    fn is_empty(self) -> bool {
+        return !pixl_host::cel_exists(self.doc, self.layer, self.frame);
+    }
+
+    /// The smallest rectangle around the cel's pixels.
+    fn bounds(self) -> Rect {
+        return rect_of(pixl_host::cel_bounds(self.doc, self.layer, self.frame));
+    }
+
+    /// The color at a pixel; transparent outside the canvas.
+    fn get(self, x: int, y: int) -> Color {
+        return color_of(pixl_host::get_pixel(self.doc, self.layer, self.frame, x, y));
+    }
+
+    /// Sets a pixel, on an indexed document to the nearest palette color.
+    /// Writes ignore the selection.
+    fn set(self, x: int, y: int, c: Color) {
+        pixl_host::set_pixel(self.doc, self.layer, self.frame, x, y, c.r, c.g, c.b, c.a);
+    }
+
+    /// The palette index at a pixel of an indexed document.
+    fn index(self, x: int, y: int) -> int {
+        return pixl_host::get_index(self.doc, self.layer, self.frame, x, y);
+    }
+
+    fn set_index(self, x: int, y: int, index: int) {
+        pixl_host::set_index(self.doc, self.layer, self.frame, x, y, index);
+    }
+
+    /// Every pixel, row by row, as colors.
+    fn pixels(self) -> Color[] {
+        return colors_of(pixl_host::cel_pixels(self.doc, self.layer, self.frame));
+    }
+
+    /// Writes every pixel, row by row; the list holds width * height
+    /// colors.
+    fn set_pixels(self, colors: Color[]) {
+        pixl_host::set_cel_pixels(self.doc, self.layer, self.frame, flat_colors(colors));
+    }
+
+    /// Fills the selection, or the whole cel.
+    fn fill(self, c: Color) {
+        pixl_host::cel_fill(self.doc, self.layer, self.frame, c.r, c.g, c.b, c.a);
+    }
+
+    /// Empties the cel.
+    fn clear(self) {
+        pixl_host::cel_clear(self.doc, self.layer, self.frame);
+    }
+
+    /// A one-pixel line.
+    fn line(self, x0: int, y0: int, x1: int, y1: int, c: Color) {
+        pixl_host::draw(self.doc, self.layer, self.frame, "line", [x0, y0, x1, y1], c.r, c.g, c.b, c.a, false);
+    }
+
+    /// A rectangle, outlined or filled.
+    fn rect(self, r: Rect, c: Color, filled: bool) {
+        pixl_host::draw(self.doc, self.layer, self.frame, "rect", [r.x, r.y, r.x + r.w - 1, r.y + r.h - 1], c.r, c.g, c.b, c.a, filled);
+    }
+
+    /// The ellipse inside a rectangle, outlined or filled.
+    fn ellipse(self, r: Rect, c: Color, filled: bool) {
+        pixl_host::draw(self.doc, self.layer, self.frame, "ellipse", [r.x, r.y, r.x + r.w - 1, r.y + r.h - 1], c.r, c.g, c.b, c.a, filled);
+    }
+
+    /// A polygon through `points` (x, y, x, y...), outlined or filled.
+    fn polygon(self, points: int[], c: Color, filled: bool) {
+        pixl_host::draw(self.doc, self.layer, self.frame, "polygon", points, c.r, c.g, c.b, c.a, filled);
+    }
+
+    /// The bucket: fills the region of matching pixels at x, y.
+    /// `tolerance` 0 matches the exact color; `contiguous` false takes every
+    /// matching pixel of the cel.
+    fn bucket(self, x: int, y: int, c: Color, tolerance: int, contiguous: bool) {
+        pixl_host::bucket(self.doc, self.layer, self.frame, x, y, c.r, c.g, c.b, c.a, tolerance, contiguous);
+    }
+
+    /// Draws `c` along the edge of the opaque pixels: around them
+    /// (`outside`) or on their own edge pixels.
+    fn outline(self, c: Color, outside: bool) {
+        let o = 0.0;
+        if outside {
+            o = 1.0;
+        }
+        pixl_host::filter(self.doc, self.layer, self.frame, "outline", [float(c.r), float(c.g), float(c.b), float(c.a), o, 0.0]);
+    }
+
+    fn invert(self) {
+        pixl_host::filter(self.doc, self.layer, self.frame, "invert", [0.0]);
+    }
+
+    fn desaturate(self) {
+        pixl_host::filter(self.doc, self.layer, self.frame, "desaturate", [0.0]);
+    }
+
+    /// Keeps `levels` values per channel (2 to 255).
+    fn posterize(self, levels: int) {
+        pixl_host::filter(self.doc, self.layer, self.frame, "posterize", [float(levels)]);
+    }
+
+    /// Turns the hue by `hue` degrees; saturation and lightness run from
+    /// -100 through 0 (unchanged) to 100.
+    fn hue_saturation(self, hue: float, saturation: float, lightness: float) {
+        pixl_host::filter(self.doc, self.layer, self.frame, "hue_saturation", [hue, saturation, lightness]);
+    }
+
+    /// Both -100 to 100; 0 is unchanged.
+    fn brightness_contrast(self, brightness: float, contrast: float) {
+        pixl_host::filter(self.doc, self.layer, self.frame, "brightness_contrast", [brightness, contrast]);
+    }
+
+    /// A hard shadow of `c` behind the art, moved by `dx`, `dy`.
+    fn drop_shadow(self, dx: int, dy: int, c: Color) {
+        pixl_host::filter(self.doc, self.layer, self.frame, "drop_shadow", [float(dx), float(dy), float(c.r), float(c.g), float(c.b), float(c.a)]);
+    }
+
+    /// Blocks of `size` pixels, each taking its most common color.
+    fn pixelate(self, size: int) {
+        pixl_host::filter(self.doc, self.layer, self.frame, "pixelate", [float(size)]);
+    }
+
+    /// Adds noise of up to `amount` to each channel; the same seed gives
+    /// the same noise.
+    fn noise(self, amount: int, monochrome: bool, seed: int) {
+        let m = 0.0;
+        if monochrome {
+            m = 1.0;
+        }
+        pixl_host::filter(self.doc, self.layer, self.frame, "noise", [float(amount), m, float(seed)]);
+    }
+}
+
+// ---- tilesets ----
+
+impl Tileset {
+    fn name(self) -> string {
+        return pixl_host::tileset_name(self.doc, self.id);
+    }
+
+    /// The number of tiles, the empty tile 0 included.
+    fn tile_count(self) -> int {
+        return pixl_host::tileset_count(self.doc, self.id);
+    }
+
+    fn tile_width(self) -> int {
+        return pixl_host::tileset_size(self.doc, self.id)[0];
+    }
+
+    fn tile_height(self) -> int {
+        return pixl_host::tileset_size(self.doc, self.id)[1];
+    }
+}

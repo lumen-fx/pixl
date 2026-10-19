@@ -127,7 +127,7 @@ impl SpriteSheet {
     }
 }
 
-fn blend_name(mode: BlendMode) -> &'static str {
+pub fn blend_name(mode: BlendMode) -> &'static str {
     match mode {
         BlendMode::Normal => "normal",
         BlendMode::Multiply => "multiply",

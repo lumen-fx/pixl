@@ -1,6 +1,7 @@
 //! The command palette (Ctrl+Shift+P): one search field over every command
 //! a key can run, every tool, the workspace layouts and themes, the brushes
-//! and tool presets, the open documents and the recent ones. Typing filters by the letters in order; the arrow keys
+//! and tool presets, the scripts and extension commands, the open documents
+//! and the recent ones. Typing filters by the letters in order; the arrow keys
 //! pick and Enter runs, as a click on a result does.
 //!
 //! A command runs the way its key would, through the keymap's commands; a
@@ -17,6 +18,7 @@ use crate::editor::Editor;
 use crate::files::recents::{Recents, key};
 use crate::home::Home;
 use crate::panels::escape;
+use crate::scripts::Scripts;
 use crate::settings::Theme;
 use crate::settings::keymap::{KeyCommands, Keymap, Kind, commands};
 use crate::settings::themes::Themes;
@@ -109,6 +111,7 @@ pub fn entries(
     themes: &Themes,
     presets: &Presets,
     open: Vec<Entry>,
+    scripts: Vec<Entry>,
     recents: &Recents,
 ) -> Vec<Entry> {
     let mut out: Vec<Entry> = commands()
@@ -163,6 +166,7 @@ pub fn entries(
             run: Run::Item(format!("tp-use-{i}")),
         });
     }
+    out.extend(scripts);
     out.extend(open);
     for recent in &recents.entries {
         let name = recent
@@ -207,6 +211,7 @@ pub struct Sources<'w> {
     home: Res<'w, Home>,
     documents: Res<'w, Documents>,
     editor: Res<'w, Editor>,
+    scripts: ResMut<'w, Scripts>,
 }
 
 /// Opens the palette, moves through it and runs what it picks. Runs right
@@ -220,7 +225,7 @@ pub fn palette_input(
     mut clicks: MessageReader<ClickEvent>,
     mut menu: ParamSet<(MessageReader<MenuClicked>, MessageWriter<MenuClicked>)>,
     ids: Query<&LumenId>,
-    sources: Sources,
+    mut sources: Sources,
     mut signals: Signals,
 ) {
     let open = signals.get::<bool>("cp_open") == Some(true);
@@ -232,6 +237,7 @@ pub fn palette_input(
             &sources.themes,
             &sources.presets,
             palette_entries(&sources.documents, &sources.editor),
+            sources.scripts.palette_entries(),
             &sources.recents,
         );
         palette.query = None;

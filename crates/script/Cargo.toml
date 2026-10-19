@@ -1,0 +1,21 @@
+[package]
+name = "pixl-script"
+description = "Candela scripting for pixl: the API scripts and extensions call, shared by the editor and pixl-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# `embed` makes a script's runtime error unwind back to pixl instead of
+# ending the process. Pinned to the candela release the Lumen engine pins.
+candela = { package = "candela-lang", version = "=0.1.5", features = ["embed"] }
+candela-vm = { version = "=0.1.5", features = ["embed"] }
+pixl-document.workspace = true
+pixl-io.workspace = true
+pixl-paint.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+zip.workspace = true

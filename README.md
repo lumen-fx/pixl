@@ -348,8 +348,8 @@ the status bar says how many files it wrote. The presets are kept in
 `pixl-cli --preset NAME` runs them without the editor.
 
 Ctrl+Shift+P opens the command palette: one search field over every command
-a key can run, every tool, the layouts, the themes, the open documents and
-the recent ones.
+a key can run, every tool, the layouts, the themes, the scripts and
+extension commands, the open documents and the recent ones.
 Typing narrows the list to the entries that have the typed letters in order,
 the arrow keys pick one and Enter runs it. Each entry shows its keys, so the
 palette also answers "what is the shortcut for this".
@@ -535,6 +535,80 @@ place on the sheet, and a JSON file beside it naming each tile's rectangle
 the way sprite sheet JSON names frames, with the tileset's name, tile size,
 count, columns and base index.
 
+## Scripting
+
+Scripts automate what would take many clicks: recolor every frame, build a
+palette from the art, export each layer for an engine, generate a document
+from data. pixl runs scripts written in
+[candela](https://github.com/lumen-fx/candela), a small statically typed
+language, against its own API of documents, layers, cels, frames, tags, the
+palette, the selection and tilesets. Aseprite's Lua scripts do not run in
+pixl.
+
+```rust
+// Outline the active layer on every frame, in the color the run is given.
+import "pixl" as app;
+
+fn main() {
+    let doc = app::document();
+    let color = app::hex_color(app::param("color", "#000000"));
+    for cel in doc.active_layer().cels() {
+        if !cel.is_empty() {
+            cel.outline(color, true);
+        }
+    }
+}
+```
+
+File > Scripts lists the `.cdl` files in pixl's `scripts` folder (and one
+folder down), the examples pixl ships, and the commands of installed
+extensions; Run runs the one picked, Rescan reads the folder again, Open
+folder shows it in the file manager, and Run a script file... runs any
+`.cdl` file. Every script and extension command is in the command palette
+too. A run works on the open documents and shows what it printed when it
+ends. Each document it changed takes the whole run as one undo step, named
+after the script; documents it creates or opens appear in tabs of their own.
+A run that raises an error changes no document and names the error, with
+the script's line when the error is in the script itself. A run that takes
+a while shows a Stop button, which stops the script at its next call into
+the API.
+
+An extension is a folder in pixl's `extensions` folder with an
+`extension.json` naming the commands it adds, each a script with the
+parameters it runs with, and the palettes it brings:
+
+```json
+{
+  "name": "Outlines",
+  "version": "1.0.0",
+  "description": "Outline art in black",
+  "commands": [
+    { "id": "black", "label": "Outline in black", "script": "outline.cdl",
+      "params": { "color": "#000000" } }
+  ],
+  "palettes": [ { "name": "Ink", "file": "ink.gpl" } ]
+}
+```
+
+Install extension... in the Scripts dialog takes a `.zip` or
+`.pixl-extension` holding that folder and asks before it unpacks it; Remove
+extension deletes the one picked.
+
+Scripts are programs: candela can read and write files and call native
+libraries, so a script or extension can do what any program you run can.
+pixl does not ask before a script touches a file, as Aseprite does. A
+script that calls `exit` with a nonzero code ends pixl.
+
+The API is documented in
+[`crates/script/src/pixl.cdl`](crates/script/src/pixl.cdl), the module
+scripts import; the examples are in
+[`crates/script/scripts`](crates/script/scripts). Relative paths a script
+names are read from the folder of the document in front (from the scripts
+folder when it has no file), and in pixl-cli from the working folder.
+candela's standard library modules that need no native library (`list`,
+`map`, `set`, `string`, `option`, `result`, `json`, `convert`, `assert`)
+import as usual; `math`, `time`, `random` and `hash` do not.
+
 ## Command line
 
 `pixl-cli` exports documents without the editor, for game build pipelines
@@ -542,8 +616,8 @@ and CI machines with no display or GPU: PNG frames, GIFs, and sprite sheets
 with their Aseprite-shape JSON, from `.pixl`, `.aseprite`, `.ase`, `.png` and
 `.gif` files. It writes what the editor's exports write for the same
 settings, through the same code. It reads Aseprite's batch flags, so a
-pipeline built on `aseprite -b` switches by changing the program name, and
-it runs the editor's export presets.
+pipeline built on `aseprite -b` switches by changing the program name, it
+runs the editor's export presets, and it runs scripts.
 
 ```sh
 pixl-cli -b hero.aseprite --sheet hero.png --data hero.json --sheet-type packed --trim
@@ -553,12 +627,15 @@ pixl-cli hero.pixl --split-layers --sheet layers.png --data layers.json
 pixl-cli hero.pixl --preset "Sprite sheet"     # one of the editor's presets
 pixl-cli hero.pixl --all-presets               # what File > Export all runs
 pixl-cli hero.pixl --list-tags
+pixl-cli hero.pixl --script outline.cdl --script-param color=#202020 --save-as out.png
+pixl-cli --script make-tiles.cdl              # a script that makes its own documents
 ```
 
 `pixl-cli --help` lists every option. It exits with 0 when everything was
-written, 1 when an export failed (a file that cannot be read or written, a
-layer, tag or preset that does not exist), and 2 when the command line is
-wrong, with the reason on standard error. Its output has no colors. Presets
+written, 1 when an export or a script failed (a file that cannot be read or
+written, a layer, tag or preset that does not exist, an error the script
+raised), and 2 when the command line is wrong, with the reason on standard
+error. Its output has no colors. Presets
 come from the editor's `exports.json` (a new user's starter presets when there
 is none), or from the file `--presets FILE` names, and write beside the
 document as they do in the editor; `--save-as` and `--sheet` write where they
@@ -585,6 +662,8 @@ say, relative to the working folder.
 | `--list-layers`, `--list-tags` | same |
 | `{title}`, `{name}`, `{tag}`, `{layer}`, `{frame1}`, `{frame001}`, `{tagframe}` | same, except `{name}` is the document's name without its extension, like `{title}` |
 | `{frame}` | padded to the last frame's digits; `{frame0}` is Aseprite's unpadded `{frame}` |
+| `--script FILE` | runs a candela script (`.cdl`); the document is its `app::document()`, and the export flags export what the script left |
+| `--script-param K=V` | same; the script reads it with `app::param` |
 | (none) | `--preset NAME`, `--all-presets`, `--presets FILE`, `--list-presets` |
 
 A `--save-as` name without tokens gets the ones Aseprite adds: ` ({layer})`
@@ -594,8 +673,9 @@ Sheet JSON names its frames `{title} {frame}`, without Aseprite's file
 extension.
 
 pixl-cli reads one document per run, so an atlas of several sprites takes
-one sheet per sprite. Aseprite options it does not do (scripts,
-`--filename-format`, `--ignore-empty`, `--merge-duplicates`,
+one sheet per sprite. A script's prints go to standard output and its
+`app::alert`s to standard error, and nothing is saved unless the script
+saves. Aseprite options it does not do (`--shell`, `--filename-format`, `--ignore-empty`, `--merge-duplicates`,
 `--inner-padding`, `--crop`, slices, color mode and palette changes, and
 fractional scales) stop the run with exit code 2 rather than export
 something different.
@@ -612,7 +692,10 @@ something different.
 - `crates/io` (`pixl-io`): other programs' formats: Aseprite files, GIF,
   PNG, and sprite sheets with Aseprite-compatible JSON, and the export
   presets.
-- `crates/cli` (`pixl-cli`): the command line exporter.
+- `crates/script` (`pixl-script`): scripting: the candela API, running a
+  script over a set of documents, the scripts folder and extensions. The
+  editor and pixl-cli both run scripts through it.
+- `crates/cli` (`pixl-cli`): the command line exporter and script runner.
 - `app` (`pixl`): the editor.
 
 ## Quick start
@@ -716,4 +799,6 @@ development packages must be installed.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The candela standard library modules in
+`crates/script/candela/std` are candela's, under the Apache License 2.0; see
+`crates/script/candela/LICENSE` and `NOTICE`.

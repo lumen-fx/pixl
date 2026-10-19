@@ -8,15 +8,22 @@ use pixl_io::export::{
     self, Data, FILE, Format, Frames, Layers, Preset, PresetFile, names_frame, plan, run_job,
     tokens,
 };
-use pixl_io::open::read_document;
+use pixl_io::open::{is_imported, read_document};
+use pixl_script::{Library, ScriptDoc, Session, run_file};
 
 use crate::args::Args;
 
-/// Why a run failed: the command line (exit code 2) or the export (1).
+/// Why a run failed: the command line (exit code 2), the export (1), or a
+/// script (1), with what the script printed before it stopped.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
     Usage(String),
     Export(String),
+    Script {
+        out: Vec<String>,
+        err: Vec<String>,
+        error: String,
+    },
 }
 
 /// What a run printed and wrote.
@@ -280,14 +287,13 @@ pub fn run(args: &Args) -> Result<Outcome, Failure> {
             return Ok(outcome);
         }
     }
+    if let Some(script) = &args.script {
+        return run_script(args, script, outcome);
+    }
     let Some(input) = &args.input else {
         return Err(usage("name a document to export"));
     };
-    let wants_output = args.save_as.is_some()
-        || args.sheet.is_some()
-        || !args.presets.is_empty()
-        || args.all_presets;
-    if !wants_output && !args.list_tags && !args.list_layers {
+    if !wants_output(args) && !args.list_tags && !args.list_layers {
         return Err(usage(
             "say what to write: --save-as, --sheet, --preset or --all-presets",
         ));
@@ -301,8 +307,91 @@ pub fn run(args: &Args) -> Result<Outcome, Failure> {
             .err
             .push(format!("warning: {}: {w}", input.display()));
     }
-    let doc = opened.doc;
     let name = title(input);
+    export_document(args, input, &opened.doc, &name, outcome)
+}
+
+fn wants_output(args: &Args) -> bool {
+    args.save_as.is_some() || args.sheet.is_some() || !args.presets.is_empty() || args.all_presets
+}
+
+/// Runs `--script` over the document, when one is named, then exports
+/// what the script left with any export flags given beside it.
+fn run_script(args: &Args, script: &Path, mut outcome: Outcome) -> Result<Outcome, Failure> {
+    if !script
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("cdl"))
+    {
+        return Err(usage(format!(
+            "pixl runs candela scripts (.cdl), not {}; Aseprite's Lua scripts do not run in pixl",
+            script.display()
+        )));
+    }
+    if args.data.is_some() && args.sheet.is_none() {
+        return Err(usage("--data writes a sheet's JSON; give --sheet too"));
+    }
+    if (wants_output(args) || args.list_tags || args.list_layers) && args.input.is_none() {
+        return Err(usage("the export flags export a document; name one"));
+    }
+    let mut session = Session {
+        base: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        params: args.script_params.iter().cloned().collect(),
+        ..Session::default()
+    };
+    if let Some(input) = &args.input {
+        let opened = read_document(input).map_err(Failure::Export)?;
+        for w in &opened.warnings {
+            outcome
+                .err
+                .push(format!("warning: {}: {w}", input.display()));
+        }
+        let mut doc = ScriptDoc::new(None, opened.doc);
+        if is_imported(input) {
+            doc.name = Some(title(input));
+        } else {
+            doc.path = Some(input.clone());
+        }
+        session.add(doc);
+    }
+    let lib = script_library().map_err(Failure::Export)?;
+    let ran = run_file(script, session, &lib);
+    outcome.out.extend(ran.output.lines().map(str::to_string));
+    outcome.err.extend(ran.session.alerts.iter().cloned());
+    if let Some(e) = ran.error {
+        return Err(Failure::Script {
+            out: outcome.out,
+            err: outcome.err,
+            error: e.to_string(),
+        });
+    }
+    let Some(input) = &args.input else {
+        return Ok(outcome);
+    };
+    let doc = &ran.session.docs[0];
+    export_document(args, input, &doc.doc, &title(input), outcome)
+}
+
+/// Where scripts import `pixl` and candela's standard library from: pixl's
+/// folder of the user data directory, or the temporary folder without one.
+fn script_library() -> Result<Library, String> {
+    let root = export::user_dir().unwrap_or_else(std::env::temp_dir);
+    Library::at(&root).map_err(|e| {
+        format!(
+            "could not write the script library to {}: {e}",
+            root.display()
+        )
+    })
+}
+
+/// Lists and writes what the command line asks of `doc`, read from `input`.
+fn export_document(
+    args: &Args,
+    input: &Path,
+    doc: &Document,
+    name: &str,
+    mut outcome: Outcome,
+) -> Result<Outcome, Failure> {
+    let name = name.to_string();
     if args.list_layers {
         for (_, l) in doc.walk() {
             outcome.out.push(l.props.name.clone());
@@ -314,9 +403,9 @@ pub fn run(args: &Args) -> Result<Outcome, Failure> {
         }
     }
     if let Some(path) = &args.save_as {
-        let preset = save_as_preset(args, &doc, path)?;
+        let preset = save_as_preset(args, doc, path)?;
         run_preset(
-            &doc,
+            doc,
             &name,
             &preset,
             Path::new(""),
@@ -325,9 +414,9 @@ pub fn run(args: &Args) -> Result<Outcome, Failure> {
         )?;
     }
     if let Some(path) = &args.sheet {
-        let preset = sheet_preset(args, &doc, path)?;
+        let preset = sheet_preset(args, doc, path)?;
         run_preset(
-            &doc,
+            doc,
             &name,
             &preset,
             Path::new(""),
@@ -356,7 +445,7 @@ pub fn run(args: &Args) -> Result<Outcome, Failure> {
         // Presets write beside the document, as the editor's do.
         let dir = input.parent().map_or_else(PathBuf::new, Path::to_path_buf);
         for preset in chosen {
-            run_preset(&doc, &name, preset, &dir, &mut outcome, args.verbose)?;
+            run_preset(doc, &name, preset, &dir, &mut outcome, args.verbose)?;
         }
     }
     Ok(outcome)

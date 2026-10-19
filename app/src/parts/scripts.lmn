@@ -1,0 +1,50 @@
+<dialog open="sc_open">
+  <column class="dialog-card sc-card">
+    <label class="dialog-title" text="Scripts"/>
+    <scroll id="sc-list" class="sc-list"/>
+    <label class="dialog-text sc-folder" bind-text="sc_folder" text=""/>
+    <row class="dialog-row">
+      <button id="sc-run-file" class="small" text="Run a script file..."/>
+      <button id="sc-rescan" class="small" text="Rescan"/>
+      <button id="sc-folder" class="small" text="Open folder"/>
+      <spacer/>
+      <button id="sc-install" class="small" text="Install extension..."/>
+      <button id="sc-remove" class="small" text="Remove extension"/>
+    </row>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="sc-close" text="Close"/>
+      <button id="sc-run" class="primary" default="true" text="Run"/>
+    </row>
+  </column>
+</dialog>
+<dialog open="sc_confirm_open">
+  <column class="dialog-card sc-small-card">
+    <label class="dialog-title" text="Install extension"/>
+    <label class="dialog-text sc-text" bind-text="sc_confirm_text" text=""/>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="sc-install-no" text="Cancel"/>
+      <button id="sc-install-yes" class="primary" default="true" text="Install"/>
+    </row>
+  </column>
+</dialog>
+<dialog open="so_open">
+  <column class="dialog-card sc-small-card">
+    <label class="dialog-title" text="Script output"/>
+    <scroll class="sc-output"><label class="sc-text" bind-text="so_text" text=""/></scroll>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="so-close" class="primary" default="true" text="Close"/>
+    </row>
+  </column>
+</dialog>
+<dialog open="sc_busy">
+  <column class="dialog-card sc-small-card">
+    <label class="dialog-text" bind-text="sc_busy_text" text=""/>
+    <row class="dialog-actions">
+      <spacer/>
+      <button id="sc-stop" text="Stop"/>
+    </row>
+  </column>
+</dialog>

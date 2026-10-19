@@ -14,8 +14,12 @@ lumenui-canvas.workspace = true
 pixl-document.workspace = true
 pixl-io.workspace = true
 pixl-paint.workspace = true
+pixl-script.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+zip.workspace = true
 
 [[bench]]
 name = "view"

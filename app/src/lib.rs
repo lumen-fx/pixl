@@ -12,6 +12,7 @@ pub mod menus;
 pub mod panels;
 pub mod perf;
 pub mod rig;
+pub mod scripts;
 pub mod settings;
 pub mod tools;
 pub mod tutorial;
@@ -51,6 +52,7 @@ pub fn app(file: Option<PathBuf>) -> App {
         .insert_resource(clipboard::Pasteboard::system())
         .insert_resource(tools::presets::Presets::user())
         .insert_resource(tools::toolbar::Toolbar::user())
+        .insert_resource(scripts::Scripts::user())
 }
 
 /// `app` (an [`editor`]) starting with no document open: on the start
@@ -178,6 +180,15 @@ pub fn editor(source: Source) -> App {
         .insert_signal("ex_is_sheet", false)
         .insert_signal("ex_is_tag", false)
         .insert_signal("ex_hint", files::exports::PATH_HINT)
+        .insert_resource(scripts::Scripts::in_memory())
+        .insert_signal("sc_open", false)
+        .insert_signal("sc_busy", false)
+        .insert_signal("sc_busy_text", "")
+        .insert_signal("sc_folder", "")
+        .insert_signal("sc_confirm_open", false)
+        .insert_signal("sc_confirm_text", "")
+        .insert_signal("so_open", false)
+        .insert_signal("so_text", "")
         .insert_signal("cp_open", false)
         .insert_signal("cp_query", "")
         .insert_resource(panels::timeline::Timeline::default())
@@ -221,6 +232,7 @@ pub fn editor(source: Source) -> App {
                         workspace::workspace_input,
                         settings::themes::theme_input,
                         files::exports::export_input,
+                        scripts::script_input,
                         files::new_form,
                     )
                     .chain(),
@@ -285,6 +297,7 @@ pub fn editor(source: Source) -> App {
                         settings::themes::show_themes,
                         menus::palette::show_palette,
                         files::exports::show_exports,
+                        scripts::show_scripts,
                     ),
                     timed!(home::track_recents, home::show_home, documents::show_tabs).chain(),
                     timed!(tools::show_tool, tools::toolbox::show_toolbox).chain(),

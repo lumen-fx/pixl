@@ -14,6 +14,7 @@ repository = "https://github.com/lumen-fx/pixl"
 pixl-document = { path = "crates/document" }
 pixl-io = { path = "crates/io" }
 pixl-paint = { path = "crates/paint" }
+pixl-script = { path = "crates/script" }
 
 crc32fast = "1"
 flate2 = "1"
@@ -21,6 +22,7 @@ gif = { version = "0.14", default-features = false, features = ["std", "raii_no_
 png = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 
 # Both link the prebuilt engine of one Lumen release; move them together, and
 # keep rust-toolchain.toml on the compiler that release names.

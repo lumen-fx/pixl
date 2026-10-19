@@ -11,6 +11,7 @@ repository.workspace = true
 [dependencies]
 pixl-document.workspace = true
 pixl-io.workspace = true
+pixl-script.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -1,0 +1,11 @@
+// Replaces the palette with the colors that stand for the document's
+// pixels, over every frame. Parameter: max, the most colors (default 32).
+import "pixl" as app;
+
+fn main() {
+    let doc = app::document();
+    let max = int(app::param("max", "32"));
+    let colors = doc.colors_in_image(max);
+    doc.set_palette(colors);
+    print("the palette holds " + str(colors.len()) + " colors");
+}

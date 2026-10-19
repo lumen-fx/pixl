@@ -1,0 +1,21 @@
+// Outlines the art of the active layer on every frame. Parameters: color
+// (default #000000), inside ("true" draws on the art's own edge pixels).
+import "pixl" as app;
+
+fn main() {
+    let doc = app::document();
+    let layer = doc.active_layer();
+    if !layer.has_cels() {
+        throw("pick a raster layer to outline");
+    }
+    let color = app::hex_color(app::param("color", "#000000"));
+    let outside = app::param("inside", "false") != "true";
+    let done = 0;
+    for cel in layer.cels() {
+        if !cel.is_empty() {
+            cel.outline(color, outside);
+            done = done + 1;
+        }
+    }
+    print("outlined " + str(done) + " frames of " + layer.name());
+}

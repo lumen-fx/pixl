@@ -38,13 +38,14 @@ pub struct Args {
     pub all_presets: bool,
     pub presets_file: Option<PathBuf>,
     pub list_presets: bool,
+    pub script: Option<PathBuf>,
+    /// `--script-param key=value`, in order.
+    pub script_params: Vec<(String, String)>,
 }
 
 /// Aseprite flags pixl-cli knows and does not do; naming one is an error
 /// rather than an export that quietly differs.
-const UNSUPPORTED: [&str; 26] = [
-    "--script",
-    "--script-param",
+const UNSUPPORTED: [&str; 24] = [
     "--shell",
     "--filename-format",
     "--trim-sprite",
@@ -185,6 +186,14 @@ pub fn parse(argv: impl IntoIterator<Item = String>) -> Result<Args, Usage> {
             "--all-presets" => a.all_presets = true,
             "--presets" => a.presets_file = Some(PathBuf::from(value(&mut it)?)),
             "--list-presets" => a.list_presets = true,
+            "--script" => a.script = Some(PathBuf::from(value(&mut it)?)),
+            "--script-param" => {
+                let v = value(&mut it)?;
+                let (k, val) = v
+                    .split_once('=')
+                    .ok_or_else(|| Usage(format!("--script-param takes key=value, not \"{v}\"")))?;
+                a.script_params.push((k.to_string(), val.to_string()));
+            }
             f if UNSUPPORTED.contains(&f) => {
                 return Err(Usage(format!("pixl-cli does not support {f}")));
             }
@@ -253,5 +262,26 @@ mod tests {
         );
         assert_eq!(args("--scale 3.0 a.pixl").unwrap().scale, Some(3));
         assert_eq!(args("--frame-range 1,4").unwrap().frame_range, Some((1, 4)));
+        assert!(
+            args("--script s.cdl --script-param nope")
+                .unwrap_err()
+                .0
+                .contains("key=value")
+        );
+    }
+
+    #[test]
+    fn script_flags_read_like_aseprites() {
+        let a =
+            args("hero.pixl --script-param color=red --script outline.cdl --script-param n=2=3")
+                .unwrap();
+        assert_eq!(a.script, Some(PathBuf::from("outline.cdl")));
+        assert_eq!(
+            a.script_params,
+            [
+                ("color".to_string(), "red".to_string()),
+                ("n".to_string(), "2=3".to_string())
+            ]
+        );
     }
 }
