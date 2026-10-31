@@ -427,7 +427,7 @@ folder, beside the recent list. UI scale grows the text and the sizes the
 theme keeps as tokens; a few fixed sizes (list rows, swatches) stay as they
 are.
 
-The editor builds against Lumen 0.0.11.
+The editor builds against Lumen 0.0.11 from crates.io.
 
 A skeleton layer rigs a character so it can be posed instead of redrawn:
 bones in a tree, with raster layers (or selected regions of them) bound to
@@ -711,11 +711,14 @@ cargo test
 Every build compiles the UI in: `app/build.rs` compiles what `lumen.toml`
 names, the markup and stylesheets under `src/` with every `<include>` and
 `@import`, and the executable carries the result, so a markup or style
-mistake fails `cargo build`. A debug build also reloads the UI from `src/` on
+mistake fails `cargo build`. The build script compiles with the `lumenc` of
+the same Lumen release: the one `LUMEN_LUMENC` names, else a `lumenc` of that
+version on `PATH`, else a copy it downloads once into the user cache. A debug build also reloads the UI from `src/` on
 an edit while the window stays open. The icons and font in
 `assets/` stay files, read from the folder beside the executable when that
 folder holds a `lumen.toml`, and from `app/` in the source tree otherwise. The
-Windows zip is that folder: `pixl.exe`, `pixl-cli.exe`, `lumen.toml`,
+Windows zip is that folder: `pixl.exe`, `pixl-cli.exe`, `lumen-crash.exe`
+(which writes a report and shows a dialog if pixl crashes), `lumen.toml`,
 `LICENSE`, and `assets/icons` and `assets/fonts`. Pushing a `v*` tag that
 matches the workspace version builds it on CI and publishes it as a
 pre-release.

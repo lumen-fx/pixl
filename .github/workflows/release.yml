@@ -42,12 +42,14 @@ jobs:
       # The markup and stylesheets are compiled into the executable by
       # app/build.rs, every part and import included. The icons and the font
       # they name are read at run time from the executable's own folder,
-      # which lumen.toml beside it marks as the app folder.
+      # which lumen.toml beside it marks as the app folder. lumen-crash.exe
+      # is the helper that writes a crash report and shows the crash dialog;
+      # the build puts it beside pixl.exe and pixl starts it from there.
       - name: Lay out the package
         run: |
           dir="dist/$PACKAGE"
           mkdir -p "$dir/assets/icons" "$dir/assets/fonts"
-          cp target/release/pixl.exe target/release/pixl-cli.exe app/lumen.toml LICENSE "$dir/"
+          cp target/release/pixl.exe target/release/pixl-cli.exe target/release/lumen-crash.exe app/lumen.toml LICENSE "$dir/"
           cp app/assets/icons/*.png "$dir/assets/icons/"
           cp app/assets/fonts/* "$dir/assets/fonts/"
           # Every file a stylesheet names with url() is in the package.
