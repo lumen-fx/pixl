@@ -8,6 +8,7 @@ fn the_window_has_its_regions() {
         .screenshot(HeadlessOptions {
             dpr: 1.0,
             ticks: Some(4),
+            ..Default::default()
         })
         .expect("the editor renders");
     assert_eq!((frame.width(), frame.height()), (1440, 900));

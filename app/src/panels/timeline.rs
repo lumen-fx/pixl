@@ -20,8 +20,8 @@ use std::collections::{BTreeSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::query::Added;
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::query::Added;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::lumen_core::input::{
     ContextMenuEvent, DoubleClickEvent, EditCommitted, MenuClicked, ModifiersState, PointerButton,
     PointerMoved, PointerPressed, PointerReleased,
@@ -1144,7 +1144,7 @@ fn mark_tag_color(color: Rgba) {
             continue;
         };
         let c = node.computed_style_of("bg").as_deref().and_then(parse_hex);
-        crate::set_class(node, "chosen", c == Some(color));
+        node.set_class_on("chosen", c == Some(color));
     }
 }
 

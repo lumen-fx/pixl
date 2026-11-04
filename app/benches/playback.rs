@@ -222,130 +222,131 @@ fn run(doc: Document, backend: &str) {
     let world_capture = capture.clone();
     let opened = Instant::now();
 
-    pixl::editor(Source::Disk {
-        dir: app_dir(backend),
-    })
-    .insert_resource(Editor::new(doc))
-    .add_systems(
-        TickStage::Systems,
-        (move |mut phase: Local<Option<Phase>>,
-               mut since: Local<Option<(Instant, usize, usize)>>,
-               mut stepped: Local<Option<Instant>>,
-               mut shown_phase: Local<Option<Phase>>,
-               wake: Option<Res<lumenui::lumen_core::tick::WakeDeadline>>,
-               mut editor: ResMut<Editor>,
-               mut timeline: ResMut<Timeline>,
-               mut signals: Signals,
-               layers: Res<Layers>| {
-            // A window ticks every frame; the bench keeps the headless run
-            // ticking the same way.
-            if let Some(wake) = &wake {
-                wake.request(Instant::now() + Duration::from_millis(2));
-            }
-            let p = phase.get_or_insert(Phase::Opening);
-            // Progress on stderr, once per part of the script.
-            let part = match *p {
-                Phase::Step { onion, .. } => Phase::Step { n: 0, onion },
-                Phase::Play { run } => Phase::Play { run },
-                other => other,
-            };
-            if *shown_phase != Some(part) {
-                eprintln!("{part:?} at {:?}", opened.elapsed());
-                *shown_phase = Some(part);
-            }
-            let mut results = out.lock().unwrap();
-            match *p {
-                Phase::Opening => {
-                    if !layers.rewrites.is_empty() && layers.pending() == 0 {
-                        results.open = Some(opened.elapsed());
-                        *p = Phase::Step { n: 0, onion: false };
-                    }
+    pixl::editor(pixl::ui())
+        .app_dir(app_dir(backend))
+        .insert_resource(Editor::new(doc))
+        .add_systems(
+            TickStage::Systems,
+            (move |mut phase: Local<Option<Phase>>,
+                   mut since: Local<Option<(Instant, usize, usize)>>,
+                   mut stepped: Local<Option<Instant>>,
+                   mut shown_phase: Local<Option<Phase>>,
+                   wake: Option<Res<lumenui::lumen_core::tick::WakeDeadline>>,
+                   mut editor: ResMut<Editor>,
+                   mut timeline: ResMut<Timeline>,
+                   mut signals: Signals,
+                   layers: Res<Layers>| {
+                // A window ticks every frame; the bench keeps the headless run
+                // ticking the same way.
+                if let Some(wake) = &wake {
+                    wake.request(Instant::now() + Duration::from_millis(2));
                 }
-                Phase::Step { n, onion } => {
-                    if watch.started.lock().unwrap().is_some() || layers.pending() > 0 {
-                        return;
-                    }
-                    if timeline.onion.on != onion {
-                        signals.set("onion_on", onion);
-                        return;
-                    }
-                    if let (Some(lap), Some(t0)) = (watch.lap.lock().unwrap().take(), *stepped) {
-                        let list = if onion {
-                            &mut results.onion_steps
-                        } else {
-                            &mut results.steps
-                        };
-                        list.push((lap, t0.elapsed()));
-                    }
-                    if n == STEPS {
-                        *p = if onion {
-                            signals.set("onion_on", false);
-                            Phase::Play { run: 0 }
-                        } else {
-                            Phase::Step { n: 0, onion: true }
-                        };
-                        *stepped = None;
-                        return;
-                    }
-                    let next = (editor.frame + 1) % editor.doc.frame_count();
-                    editor.go_to_frame(next);
-                    *stepped = Some(Instant::now());
-                    *watch.started.lock().unwrap() = Some(Instant::now());
-                    cap.request();
-                    *p = Phase::Step { n: n + 1, onion };
+                let p = phase.get_or_insert(Phase::Opening);
+                // Progress on stderr, once per part of the script.
+                let part = match *p {
+                    Phase::Step { onion, .. } => Phase::Step { n: 0, onion },
+                    Phase::Play { run } => Phase::Play { run },
+                    other => other,
+                };
+                if *shown_phase != Some(part) {
+                    eprintln!("{part:?} at {:?}", opened.elapsed());
+                    *shown_phase = Some(part);
                 }
-                Phase::Play { run } => {
-                    let Some((ms, onion, label)) = RUNS.get(run).copied() else {
-                        *p = Phase::Done;
-                        return;
-                    };
-                    match *since {
-                        None => {
-                            if layers.pending() > 0 || timeline.onion.on != onion {
-                                if timeline.onion.on != onion {
-                                    signals.set("onion_on", onion);
-                                }
-                                return;
-                            }
-                            for f in 0..editor.doc.frame_count() {
-                                let _ = editor.doc.set_frame_duration(f, ms);
-                            }
-                            // The timeline's checkbox owns the setting.
+                let mut results = out.lock().unwrap();
+                match *p {
+                    Phase::Opening => {
+                        if !layers.rewrites.is_empty() && layers.pending() == 0 {
+                            results.open = Some(opened.elapsed());
+                            *p = Phase::Step { n: 0, onion: false };
+                        }
+                    }
+                    Phase::Step { n, onion } => {
+                        if watch.started.lock().unwrap().is_some() || layers.pending() > 0 {
+                            return;
+                        }
+                        if timeline.onion.on != onion {
                             signals.set("onion_on", onion);
-                            timeline.playback.loop_tag = false;
-                            timeline.playback.start(&mut editor, Instant::now());
-                            *since = Some((Instant::now(), editor.frame, 0));
+                            return;
                         }
-                        Some((t0, last, shown)) => {
-                            if t0.elapsed() >= PLAY_FOR {
-                                let fps = timeline.playback.fps().unwrap_or(0.0);
-                                let average = shown as f64 / t0.elapsed().as_secs_f64();
-                                results.plays.push((label, fps, average));
-                                timeline.playback.stop();
+                        if let (Some(lap), Some(t0)) = (watch.lap.lock().unwrap().take(), *stepped)
+                        {
+                            let list = if onion {
+                                &mut results.onion_steps
+                            } else {
+                                &mut results.steps
+                            };
+                            list.push((lap, t0.elapsed()));
+                        }
+                        if n == STEPS {
+                            *p = if onion {
                                 signals.set("onion_on", false);
-                                *since = None;
-                                *p = Phase::Play { run: run + 1 };
-                            } else if editor.frame != last {
-                                *since = Some((t0, editor.frame, shown + 1));
+                                Phase::Play { run: 0 }
+                            } else {
+                                Phase::Step { n: 0, onion: true }
+                            };
+                            *stepped = None;
+                            return;
+                        }
+                        let next = (editor.frame + 1) % editor.doc.frame_count();
+                        editor.go_to_frame(next);
+                        *stepped = Some(Instant::now());
+                        *watch.started.lock().unwrap() = Some(Instant::now());
+                        cap.request();
+                        *p = Phase::Step { n: n + 1, onion };
+                    }
+                    Phase::Play { run } => {
+                        let Some((ms, onion, label)) = RUNS.get(run).copied() else {
+                            *p = Phase::Done;
+                            return;
+                        };
+                        match *since {
+                            None => {
+                                if layers.pending() > 0 || timeline.onion.on != onion {
+                                    if timeline.onion.on != onion {
+                                        signals.set("onion_on", onion);
+                                    }
+                                    return;
+                                }
+                                for f in 0..editor.doc.frame_count() {
+                                    let _ = editor.doc.set_frame_duration(f, ms);
+                                }
+                                // The timeline's checkbox owns the setting.
+                                signals.set("onion_on", onion);
+                                timeline.playback.loop_tag = false;
+                                timeline.playback.start(&mut editor, Instant::now());
+                                *since = Some((Instant::now(), editor.frame, 0));
+                            }
+                            Some((t0, last, shown)) => {
+                                if t0.elapsed() >= PLAY_FOR {
+                                    let fps = timeline.playback.fps().unwrap_or(0.0);
+                                    let average = shown as f64 / t0.elapsed().as_secs_f64();
+                                    results.plays.push((label, fps, average));
+                                    timeline.playback.stop();
+                                    signals.set("onion_on", false);
+                                    *since = None;
+                                    *p = Phase::Play { run: run + 1 };
+                                } else if editor.frame != last {
+                                    *since = Some((t0, editor.frame, shown + 1));
+                                }
                             }
                         }
                     }
+                    Phase::Done => {
+                        report(&results);
+                        // The run has no window to close; the bench is done.
+                        std::process::exit(0);
+                    }
                 }
-                Phase::Done => {
-                    report(&results);
-                    // The run has no window to close; the bench is done.
-                    std::process::exit(0);
-                }
-            }
+            })
+            .before(pixl::panels::timeline::playback),
+        )
+        .add_plugin(BenchCapture(world_capture))
+        .run_headless_rendered(HeadlessOptions {
+            dpr: 1.0,
+            ticks: None,
+            ..Default::default()
         })
-        .before(pixl::panels::timeline::playback),
-    )
-    .add_plugin(BenchCapture(world_capture))
-    .run_headless_rendered(HeadlessOptions {
-        dpr: 1.0,
-        ticks: None,
-    })
-    .expect("the editor runs");
+        .expect("the editor runs");
     stop.store(true, Ordering::Relaxed);
 }
 

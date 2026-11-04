@@ -149,7 +149,7 @@ fn local_of(rect: Rect, shape: Shape, p: (f64, f64)) -> Option<(f64, f64)> {
 
 /// The commands the free transform reads: its buttons, and apply and
 /// cancel (Enter and Escape by default).
-#[derive(lumenui::ecs::system::SystemParam)]
+#[derive(lumenui::bevy_ecs::system::SystemParam)]
 pub struct XfInput<'w> {
     chosen: Res<'w, Chosen>,
     keys: Res<'w, crate::settings::keymap::KeyCommands>,

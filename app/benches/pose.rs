@@ -222,75 +222,75 @@ fn main() {
     let mut editor = Editor::new(doc);
     editor.frame = 1;
     editor.layer = skel;
-    pixl::editor(Source::Disk {
-        dir: app_dir(&backend),
-    })
-    .insert_resource(editor)
-    .add_systems(
-        TickStage::Systems,
-        (move |mut step: Local<Option<usize>>,
-               mut ui: ResMut<RigUi>,
-               view: Res<View>,
-               layers: Res<Layers>,
-               mut down: MessageWriter<PointerPressed>,
-               mut moved: MessageWriter<PointerMoved>| {
-            ui.mode = Some(RigMode::Pose);
-            if view.stage.1.x <= 0.0 || layers.pending() > 0 {
-                return;
-            }
-            if started.lock().unwrap().is_some() {
-                return;
-            }
-            let n = step.get_or_insert(0);
-            if let Some(l) = lap.lock().unwrap().take() {
-                if *n <= IDLE {
-                    idle_out.lock().unwrap().push(l);
-                } else if *n > IDLE + 1 {
-                    out.lock().unwrap().push(l);
+    pixl::editor(pixl::ui())
+        .app_dir(app_dir(&backend))
+        .insert_resource(editor)
+        .add_systems(
+            TickStage::Systems,
+            (move |mut step: Local<Option<usize>>,
+                   mut ui: ResMut<RigUi>,
+                   view: Res<View>,
+                   layers: Res<Layers>,
+                   mut down: MessageWriter<PointerPressed>,
+                   mut moved: MessageWriter<PointerMoved>| {
+                ui.mode = Some(RigMode::Pose);
+                if view.stage.1.x <= 0.0 || layers.pending() > 0 {
+                    return;
                 }
-            }
-            if *n > IDLE + MOVES {
-                return;
-            }
-            if *n < IDLE {
+                if started.lock().unwrap().is_some() {
+                    return;
+                }
+                let n = step.get_or_insert(0);
+                if let Some(l) = lap.lock().unwrap().take() {
+                    if *n <= IDLE {
+                        idle_out.lock().unwrap().push(l);
+                    } else if *n > IDLE + 1 {
+                        out.lock().unwrap().push(l);
+                    }
+                }
+                if *n > IDLE + MOVES {
+                    return;
+                }
+                if *n < IDLE {
+                    *started.lock().unwrap() = Some(Instant::now());
+                    cap.request();
+                    *n += 1;
+                    return;
+                }
+                let screen = |p: Vec2| {
+                    let s = pixl::tools::screen_of(&view, Point::new(p.x as i32, p.y as i32));
+                    Window::new(s.x, s.y)
+                };
+                if *n == IDLE {
+                    down.write(PointerPressed {
+                        position: screen(grab),
+                        button: PointerButton::Primary,
+                        local: None,
+                        pointer: PointerData::mouse(1),
+                    });
+                } else {
+                    // Swing around the arm's shoulder.
+                    let a = (*n - IDLE) as f64 * 0.15;
+                    let p = Vec2::new(150.0 + 30.0 * a.cos(), 105.0 + 30.0 * a.sin());
+                    moved.write(PointerMoved {
+                        position: screen(p),
+                        local: None,
+                        pointer: PointerData::mouse(1),
+                    });
+                }
                 *started.lock().unwrap() = Some(Instant::now());
                 cap.request();
                 *n += 1;
-                return;
-            }
-            let screen = |p: Vec2| {
-                let s = pixl::tools::screen_of(&view, Point::new(p.x as i32, p.y as i32));
-                Window::new(s.x, s.y)
-            };
-            if *n == IDLE {
-                down.write(PointerPressed {
-                    position: screen(grab),
-                    button: PointerButton::Primary,
-                    local: None,
-                    pointer: PointerData::mouse(1),
-                });
-            } else {
-                // Swing around the arm's shoulder.
-                let a = (*n - IDLE) as f64 * 0.15;
-                let p = Vec2::new(150.0 + 30.0 * a.cos(), 105.0 + 30.0 * a.sin());
-                moved.write(PointerMoved {
-                    position: screen(p),
-                    local: None,
-                    pointer: PointerData::mouse(1),
-                });
-            }
-            *started.lock().unwrap() = Some(Instant::now());
-            cap.request();
-            *n += 1;
+            })
+            .before(pixl::view::input::navigate),
+        )
+        .add_plugin(BenchCapture(world_capture))
+        .run_headless_rendered(HeadlessOptions {
+            dpr: 1.0,
+            ticks: Some(1500),
+            ..Default::default()
         })
-        .before(pixl::view::input::navigate),
-    )
-    .add_plugin(BenchCapture(world_capture))
-    .run_headless_rendered(HeadlessOptions {
-        dpr: 1.0,
-        ticks: Some(1500),
-    })
-    .expect("the editor runs");
+        .expect("the editor runs");
     stop.store(true, Ordering::Relaxed);
     let v = laps.lock().unwrap();
     let ms = |d: Duration| format!("{:.2} ms", d.as_secs_f64() * 1000.0);

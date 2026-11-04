@@ -547,7 +547,7 @@ pub fn install(app: App, bar: Toolbar) -> App {
     use lumenui::lumen_core::signals;
     use lumenui_canvas::CanvasSet;
     app.insert_resource(bar)
-        .insert_signal("tb_open", false)
+        .signal("tb_open", false)
         .add_systems(
             TickStage::Systems,
             crate::perf::timed("toolbar::toolbar_input", toolbar_input)

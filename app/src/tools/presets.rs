@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::world::World;
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
@@ -906,11 +906,11 @@ pub fn install(app: App, presets: Presets) -> App {
     use lumenui::lumen_core::signals;
     use lumenui_canvas::CanvasSet;
     app.insert_resource(presets)
-        .insert_signal("brush_name", "")
-        .insert_signal("tp_open", false)
-        .insert_signal("tp_name", "")
-        .insert_signal("tp_message", "")
-        .insert_signal("tp_title", "Tool presets")
+        .signal("brush_name", "")
+        .signal("tp_open", false)
+        .signal("tp_name", "")
+        .signal("tp_message", "")
+        .signal("tp_title", "Tool presets")
         .add_systems(
             TickStage::Systems,
             crate::perf::timed("presets::presets_input", presets_input)

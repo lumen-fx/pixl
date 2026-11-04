@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::system::{IntoSystem, System};
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::system::{IntoSystem, System};
+use lumenui::bevy_ecs::world::World;
 use lumenui::prelude::*;
 use pixl::Editor;
 use pixl_document::{ColorMode, Document, NewLayer, Placement, Rect, Rgba};
@@ -137,78 +137,78 @@ fn main() {
     let mut workspace = pixl::Workspace::in_memory();
     workspace.live = pixl::workspace::Layout::built_in("Rig").unwrap();
 
-    pixl::editor(Source::Disk {
-        dir: app_dir(&backend),
-    })
-    .insert_resource(Editor::new(doc))
-    .insert_resource(themes)
-    .insert_resource(workspace)
-    .add_systems(TickStage::Systems, |mut s: ResMut<pixl::Settings>| {
-        if s.interface.user_theme.is_none() {
-            s.interface.user_theme = Some("Bench".into());
-        }
-    })
-    .add_systems(
-        TickStage::Systems,
-        (
-            timed(
-                "workspace_input",
-                pixl::workspace::workspace_input,
-                times.clone(),
-            ),
-            timed(
-                "show_workspace",
-                pixl::workspace::show_workspace,
-                times.clone(),
-            ),
-            timed(
-                "theme_input",
-                pixl::settings::themes::theme_input,
-                times.clone(),
-            ),
-            timed(
-                "show_themes",
-                pixl::settings::themes::show_themes,
-                times.clone(),
-            ),
-            timed(
-                "palette_input",
-                pixl::menus::palette::palette_input,
-                times.clone(),
-            ),
-            timed(
-                "show_palette",
-                pixl::menus::palette::show_palette,
-                times.clone(),
-            ),
-            timed(
-                "export_input",
-                pixl::files::exports::export_input,
-                times.clone(),
-            ),
-            timed(
-                "show_exports",
-                pixl::files::exports::show_exports,
-                times.clone(),
-            ),
-        )
-            .chain()
-            .after(pixl::files::exports::show_exports),
-    )
-    .add_systems(
-        TickStage::Systems,
-        move |mut last: Local<Option<Instant>>| {
-            let now = Instant::now();
-            if let Some(t) = last.replace(now) {
-                frame_out.lock().unwrap().push(now - t);
+    pixl::editor(pixl::ui())
+        .app_dir(app_dir(&backend))
+        .insert_resource(Editor::new(doc))
+        .insert_resource(themes)
+        .insert_resource(workspace)
+        .add_systems(TickStage::Systems, |mut s: ResMut<pixl::Settings>| {
+            if s.interface.user_theme.is_none() {
+                s.interface.user_theme = Some("Bench".into());
             }
-        },
-    )
-    .run_headless_rendered(HeadlessOptions {
-        dpr: 1.0,
-        ticks: Some(ticks),
-    })
-    .expect("the editor runs");
+        })
+        .add_systems(
+            TickStage::Systems,
+            (
+                timed(
+                    "workspace_input",
+                    pixl::workspace::workspace_input,
+                    times.clone(),
+                ),
+                timed(
+                    "show_workspace",
+                    pixl::workspace::show_workspace,
+                    times.clone(),
+                ),
+                timed(
+                    "theme_input",
+                    pixl::settings::themes::theme_input,
+                    times.clone(),
+                ),
+                timed(
+                    "show_themes",
+                    pixl::settings::themes::show_themes,
+                    times.clone(),
+                ),
+                timed(
+                    "palette_input",
+                    pixl::menus::palette::palette_input,
+                    times.clone(),
+                ),
+                timed(
+                    "show_palette",
+                    pixl::menus::palette::show_palette,
+                    times.clone(),
+                ),
+                timed(
+                    "export_input",
+                    pixl::files::exports::export_input,
+                    times.clone(),
+                ),
+                timed(
+                    "show_exports",
+                    pixl::files::exports::show_exports,
+                    times.clone(),
+                ),
+            )
+                .chain()
+                .after(pixl::files::exports::show_exports),
+        )
+        .add_systems(
+            TickStage::Systems,
+            move |mut last: Local<Option<Instant>>| {
+                let now = Instant::now();
+                if let Some(t) = last.replace(now) {
+                    frame_out.lock().unwrap().push(now - t);
+                }
+            },
+        )
+        .run_headless_rendered(HeadlessOptions {
+            dpr: 1.0,
+            ticks: Some(ticks),
+            ..Default::default()
+        })
+        .expect("the editor runs");
 
     println!("renderer: {backend}, {side}x{side}, {layers} layers, {ticks} ticks");
     let all = times.lock().unwrap();

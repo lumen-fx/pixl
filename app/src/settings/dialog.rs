@@ -524,7 +524,7 @@ pub fn settings_commands(
             changed = true;
         }
         if let Some(b) = dom::get_by_id(&format!("settings-page-{page}")) {
-            crate::set_class(b, "active", on);
+            b.set_class_on("active", on);
         }
     }
     if changed {

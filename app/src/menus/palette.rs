@@ -8,7 +8,7 @@
 //! layout, a theme or a recent document runs the way its menu item or list
 //! entry would.
 
-use lumenui::ecs::system::{ParamSet, SystemParam};
+use lumenui::bevy_ecs::system::{ParamSet, SystemParam};
 use lumenui::lumen_core::input::{Key, MenuClicked, NamedKey};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;

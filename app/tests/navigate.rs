@@ -42,113 +42,117 @@ fn drive(steps: Vec<Step>) -> Vec<View> {
     let views: Arc<Mutex<Vec<View>>> = Arc::default();
     let out = Arc::clone(&views);
     let n = steps.len() as u64;
-    pixl::editor(Source::Disk {
-        dir: common::app_dir("cpu"),
-    })
-    .add_systems(
-        TickStage::Systems,
-        (move |mut tick: Local<usize>,
-               mut shift: Local<bool>,
-               mut modifiers: ResMut<ModifiersState>,
-               mut wheel: MessageWriter<MouseWheel>,
-               mut keys: MessageWriter<KeyPressed>,
-               mut keys_up: MessageWriter<KeyReleased>,
-               mut down: MessageWriter<PointerPressed>,
-               mut moved: MessageWriter<PointerMoved>,
-               mut up: MessageWriter<PointerReleased>| {
-            *tick += 1;
-            modifiers.0.shift = *shift;
-            let Some(step) = tick.checked_sub(5).and_then(|i| steps.get(i)) else {
-                return;
-            };
-            match *step {
-                Step::CharDown(c, m) => {
-                    keys.write(KeyPressed {
-                        key: Key::from(c),
-                        modifiers: m,
-                        repeat: false,
-                        time_stamp: Instant::now(),
-                    });
+    pixl::editor(pixl::ui())
+        .app_dir(common::app_dir("cpu"))
+        .add_systems(
+            TickStage::Systems,
+            (move |mut tick: Local<usize>,
+                   mut shift: Local<bool>,
+                   mut modifiers: ResMut<ModifiersState>,
+                   mut wheel: MessageWriter<MouseWheel>,
+                   mut keys: MessageWriter<KeyPressed>,
+                   mut keys_up: MessageWriter<KeyReleased>,
+                   mut down: MessageWriter<PointerPressed>,
+                   mut moved: MessageWriter<PointerMoved>,
+                   mut up: MessageWriter<PointerReleased>| {
+                *tick += 1;
+                modifiers.0.shift = *shift;
+                let Some(step) = tick.checked_sub(5).and_then(|i| steps.get(i)) else {
+                    return;
+                };
+                match *step {
+                    Step::CharDown(c, m) => {
+                        keys.write(KeyPressed {
+                            code: Key::from(c).us_code(),
+                            key: Key::from(c),
+                            modifiers: m,
+                            repeat: false,
+                            time_stamp: Instant::now(),
+                        });
+                    }
+                    Step::CharUp(c) => {
+                        keys_up.write(KeyReleased {
+                            code: Key::from(c).us_code(),
+                            key: Key::from(c),
+                            modifiers: Modifiers::default(),
+                            time_stamp: Instant::now(),
+                        });
+                    }
+                    Step::Shift(held) => {
+                        *shift = held;
+                        modifiers.0.shift = held;
+                    }
+                    Step::Sleep(ms) => std::thread::sleep(std::time::Duration::from_millis(ms)),
+                    Step::Wait => {}
+                    Step::Wheel(at, dy) => {
+                        wheel.write(MouseWheel {
+                            delta: Vec2::new(0.0, dy),
+                            position: at,
+                            local: None,
+                            time_stamp: Instant::now(),
+                        });
+                    }
+                    Step::KeyDown(k) => {
+                        keys.write(KeyPressed {
+                            code: Key::Named(k).us_code(),
+                            key: Key::Named(k),
+                            modifiers: Modifiers::default(),
+                            repeat: false,
+                            time_stamp: Instant::now(),
+                        });
+                    }
+                    Step::KeyUp(k) => {
+                        keys_up.write(KeyReleased {
+                            code: Key::Named(k).us_code(),
+                            key: Key::Named(k),
+                            modifiers: Modifiers::default(),
+                            time_stamp: Instant::now(),
+                        });
+                    }
+                    Step::Down(at, button) => {
+                        down.write(PointerPressed {
+                            position: at,
+                            button,
+                            local: None,
+                            pointer: PointerData::mouse(button.bit()),
+                        });
+                    }
+                    Step::Move(at, buttons) => {
+                        moved.write(PointerMoved {
+                            position: at,
+                            local: None,
+                            pointer: PointerData::mouse(buttons),
+                        });
+                    }
+                    Step::Up(at, button) => {
+                        up.write(PointerReleased {
+                            position: at,
+                            button,
+                            local: None,
+                            pointer: PointerData::mouse(0),
+                        });
+                    }
                 }
-                Step::CharUp(c) => {
-                    keys_up.write(KeyReleased {
-                        key: Key::from(c),
-                        modifiers: Modifiers::default(),
-                        time_stamp: Instant::now(),
-                    });
+            })
+            .before(pixl::settings::keymap::read_keys)
+            .before(pixl::view::input::navigate),
+        )
+        .add_systems(
+            TickStage::Systems,
+            (move |view: Res<View>, mut tick: Local<usize>| {
+                *tick += 1;
+                if *tick >= 5 {
+                    out.lock().unwrap().push(view.clone());
                 }
-                Step::Shift(held) => {
-                    *shift = held;
-                    modifiers.0.shift = held;
-                }
-                Step::Sleep(ms) => std::thread::sleep(std::time::Duration::from_millis(ms)),
-                Step::Wait => {}
-                Step::Wheel(at, dy) => {
-                    wheel.write(MouseWheel {
-                        delta: Vec2::new(0.0, dy),
-                        position: at,
-                        local: None,
-                        time_stamp: Instant::now(),
-                    });
-                }
-                Step::KeyDown(k) => {
-                    keys.write(KeyPressed {
-                        key: Key::Named(k),
-                        modifiers: Modifiers::default(),
-                        repeat: false,
-                        time_stamp: Instant::now(),
-                    });
-                }
-                Step::KeyUp(k) => {
-                    keys_up.write(KeyReleased {
-                        key: Key::Named(k),
-                        modifiers: Modifiers::default(),
-                        time_stamp: Instant::now(),
-                    });
-                }
-                Step::Down(at, button) => {
-                    down.write(PointerPressed {
-                        position: at,
-                        button,
-                        local: None,
-                        pointer: PointerData::mouse(button.bit()),
-                    });
-                }
-                Step::Move(at, buttons) => {
-                    moved.write(PointerMoved {
-                        position: at,
-                        local: None,
-                        pointer: PointerData::mouse(buttons),
-                    });
-                }
-                Step::Up(at, button) => {
-                    up.write(PointerReleased {
-                        position: at,
-                        button,
-                        local: None,
-                        pointer: PointerData::mouse(0),
-                    });
-                }
-            }
+            })
+            .after(pixl::view::input::navigate),
+        )
+        .run_headless_rendered(HeadlessOptions {
+            dpr: 1.0,
+            ticks: Some(6 + n),
+            ..Default::default()
         })
-        .before(pixl::settings::keymap::read_keys)
-        .before(pixl::view::input::navigate),
-    )
-    .add_systems(
-        TickStage::Systems,
-        (move |view: Res<View>, mut tick: Local<usize>| {
-            *tick += 1;
-            if *tick >= 5 {
-                out.lock().unwrap().push(view.clone());
-            }
-        })
-        .after(pixl::view::input::navigate),
-    )
-    .run_headless_rendered(HeadlessOptions {
-        dpr: 1.0,
-        ticks: Some(6 + n),
-    })
-    .expect("the editor runs");
+        .expect("the editor runs");
     views.lock().unwrap().clone()
 }
 

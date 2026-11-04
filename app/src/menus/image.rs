@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::world::World;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_document::palettes::{

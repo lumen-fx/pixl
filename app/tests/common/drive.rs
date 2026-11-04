@@ -6,13 +6,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use lumenui::ecs::hierarchy::Children;
+use lumenui::bevy_ecs::hierarchy::Children;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{
-    CloseRequest, ContextMenuEvent, Key, MenuClicked, Modifiers, ModifiersState, MouseWheel,
-    NamedKey, PointerButton, PointerData, PointerKind, PointerMoved, PointerPressed,
+    CloseReason, CloseRequest, ContextMenuEvent, Key, MenuClicked, Modifiers, ModifiersState,
+    MouseWheel, NamedKey, PointerButton, PointerData, PointerKind, PointerMoved, PointerPressed,
     PointerReleased, PointerState,
 };
+use lumenui::lumen_core::window::WindowPartitions;
 use lumenui::prelude::*;
 use pixl::files::recents::Recent;
 use pixl::view::View;
@@ -229,9 +230,10 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 ResMut<PointerState>,
             ),
                    mut wheel: MessageWriter<MouseWheel>,
-                   (mut keys, mut close): (
+                   (mut keys, mut close, partitions): (
                 MessageWriter<KeyPressed>,
                 MessageWriter<CloseRequest>,
+                Res<WindowPartitions>,
             ),
                    mut keys_up: MessageWriter<KeyReleased>,
                    mut down: MessageWriter<PointerPressed>,
@@ -318,12 +320,14 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             ..Modifiers::default()
                         };
                         keys.write(KeyPressed {
+                            code: key(name).us_code(),
                             key: key(name),
                             modifiers: m,
                             repeat: false,
                             time_stamp: Instant::now(),
                         });
                         keys_up.write(KeyReleased {
+                            code: key(name).us_code(),
                             key: key(name),
                             modifiers: m,
                             time_stamp: Instant::now(),
@@ -331,6 +335,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     }
                     Step::KeyDown(k) => {
                         keys.write(KeyPressed {
+                            code: Key::Named(k).us_code(),
                             key: Key::Named(k),
                             modifiers: mods,
                             repeat: false,
@@ -339,6 +344,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     }
                     Step::KeyUp(k) => {
                         keys_up.write(KeyReleased {
+                            code: Key::Named(k).us_code(),
                             key: Key::Named(k),
                             modifiers: mods,
                             time_stamp: Instant::now(),
@@ -346,6 +352,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     }
                     Step::Hold(name) => {
                         keys.write(KeyPressed {
+                            code: key(name).us_code(),
                             key: key(name),
                             modifiers: mods,
                             repeat: false,
@@ -354,6 +361,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     }
                     Step::Release(name) => {
                         keys_up.write(KeyReleased {
+                            code: key(name).us_code(),
                             key: key(name),
                             modifiers: mods,
                             time_stamp: Instant::now(),
@@ -430,12 +438,14 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             ..Modifiers::default()
                         };
                         keys.write(KeyPressed {
+                            code: key(name).us_code(),
                             key: key(name),
                             modifiers: m,
                             repeat: false,
                             time_stamp: Instant::now(),
                         });
                         keys_up.write(KeyReleased {
+                            code: key(name).us_code(),
                             key: key(name),
                             modifiers: m,
                             time_stamp: Instant::now(),
@@ -490,12 +500,14 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                             ..Modifiers::default()
                         };
                         keys.write(KeyPressed {
+                            code: Key::Named(k).us_code(),
                             key: Key::Named(k),
                             modifiers: m,
                             repeat: false,
                             time_stamp: Instant::now(),
                         });
                         keys_up.write(KeyReleased {
+                            code: Key::Named(k).us_code(),
                             key: Key::Named(k),
                             modifiers: m,
                             time_stamp: Instant::now(),
@@ -507,7 +519,11 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                     Step::Sleep(ms) => std::thread::sleep(std::time::Duration::from_millis(ms)),
                     Step::Edit(f) => f(&mut editor),
                     Step::CloseWindow => {
-                        close.write(CloseRequest { vetoed: false });
+                        close.write(CloseRequest {
+                            window: partitions.primary().expect("the editor has a window"),
+                            reason: CloseReason::Platform,
+                            vetoed: false,
+                        });
                     }
                     Step::Until(_) | Step::Wait => {}
                 }
@@ -619,6 +635,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         .screenshot(HeadlessOptions {
             dpr: 1.0,
             ticks: Some(8 + n + waits * UNTIL_TICKS),
+            ..Default::default()
         })
         .expect("the editor runs");
     let end = end.lock().unwrap().take().expect("the editor ran");
@@ -658,8 +675,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
 
 /// The editor on the CPU renderer over `doc`.
 pub fn editor_over(doc: Document) -> App {
-    pixl::editor(Source::Disk {
-        dir: super::app_dir("cpu"),
-    })
-    .insert_resource(Editor::new(doc))
+    pixl::editor(pixl::ui())
+        .app_dir(super::app_dir("cpu"))
+        .insert_resource(Editor::new(doc))
 }

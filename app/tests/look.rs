@@ -22,6 +22,7 @@ fn shot(edit: fn(&mut Settings), name: &str) -> Frame {
         .screenshot(HeadlessOptions {
             dpr: 1.0,
             ticks: Some(6),
+            ..Default::default()
         })
         .expect("the editor renders");
     if let Some(dir) = std::env::var_os("PIXL_SHOTS") {

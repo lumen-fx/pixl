@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{PointerButton, PointerData, PointerState};
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -1492,7 +1492,7 @@ fn cancel(editor: &mut Editor, toolbox: &mut Toolbox, preview: &mut Preview) {
 /// Asks for a BDF font file and adds it to the text tool's fonts.
 pub fn load_font(commands: &mut Commands) {
     commands.queue(FileDialog::open().filter("BDF fonts", &["bdf"]).then(
-        |world: &mut lumenui::ecs::world::World, paths| {
+        |world: &mut lumenui::bevy_ecs::world::World, paths| {
             let Some(path) = paths.into_iter().next() else {
                 return;
             };

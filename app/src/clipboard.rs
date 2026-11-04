@@ -9,7 +9,7 @@
 //! program, or one in memory, which the editor the tests run starts with,
 //! so a test never reads or writes the desktop's clipboard.
 
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::prelude::*;
 use pixl_document::{ColorMode, Palette, Pixels, Point, Rgba};
 

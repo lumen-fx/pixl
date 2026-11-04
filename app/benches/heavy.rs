@@ -146,157 +146,162 @@ fn main() {
 
     let mut editor = Editor::new(doc);
     editor.layer = top;
-    pixl::editor(Source::Disk {
-        dir: app_dir(&backend),
-    })
-    .insert_resource(editor)
-    .add_systems(
-        TickStage::Systems,
-        (move |mut phase: Local<Option<Phase>>,
-               mut last: Local<Option<Instant>>,
-               mut ticks: Local<(usize, Duration, Heaviest)>,
-               (times, perf): (Res<pixl::perf::SystemTimes>, Res<pixl::perf::Perf>),
-               mut editor: ResMut<Editor>,
-               view: Res<View>,
-               layers: Res<Layers>,
-               mut signals: Signals,
-               mut keys: MessageWriter<KeyPressed>,
-               mut menu: MessageWriter<MenuClicked>,
-               (mut down, mut moved, mut up): (
-            MessageWriter<PointerPressed>,
-            MessageWriter<PointerMoved>,
-            MessageWriter<PointerReleased>,
-        )| {
-            let now = Instant::now();
-            let tick = last.map_or(Duration::ZERO, |l| now - l);
-            *last = Some(now);
-            let p = phase.get_or_insert(Phase::Opening);
-            match *p {
-                Phase::Opening => {
-                    if view.stage.1.x > 0.0 && !layers.rewrites.is_empty() && layers.pending() == 0
-                    {
-                        *p = Phase::Start { i: 0, step: 0 };
+    pixl::editor(pixl::ui())
+        .app_dir(app_dir(&backend))
+        .insert_resource(editor)
+        .add_systems(
+            TickStage::Systems,
+            (move |mut phase: Local<Option<Phase>>,
+                   mut last: Local<Option<Instant>>,
+                   mut ticks: Local<(usize, Duration, Heaviest)>,
+                   (times, perf): (Res<pixl::perf::SystemTimes>, Res<pixl::perf::Perf>),
+                   mut editor: ResMut<Editor>,
+                   view: Res<View>,
+                   layers: Res<Layers>,
+                   mut signals: Signals,
+                   mut keys: MessageWriter<KeyPressed>,
+                   mut menu: MessageWriter<MenuClicked>,
+                   (mut down, mut moved, mut up): (
+                MessageWriter<PointerPressed>,
+                MessageWriter<PointerMoved>,
+                MessageWriter<PointerReleased>,
+            )| {
+                let now = Instant::now();
+                let tick = last.map_or(Duration::ZERO, |l| now - l);
+                *last = Some(now);
+                let p = phase.get_or_insert(Phase::Opening);
+                match *p {
+                    Phase::Opening => {
+                        if view.stage.1.x > 0.0
+                            && !layers.rewrites.is_empty()
+                            && layers.pending() == 0
+                        {
+                            *p = Phase::Start { i: 0, step: 0 };
+                        }
                     }
-                }
-                Phase::Start { i, step } => {
-                    let mid = view.stage.0 + view.stage.1 / 2.0;
-                    let mut started = false;
-                    match (i, step) {
-                        (0, 0) => editor.tool = Tool::Gradient,
-                        (0, 1) => {
-                            down.write(PointerPressed {
-                                position: mid - Vec2::new(200.0, 0.0),
-                                button: PointerButton::Primary,
-                                local: None,
-                                pointer: PointerData::mouse(1),
-                            });
+                    Phase::Start { i, step } => {
+                        let mid = view.stage.0 + view.stage.1 / 2.0;
+                        let mut started = false;
+                        match (i, step) {
+                            (0, 0) => editor.tool = Tool::Gradient,
+                            (0, 1) => {
+                                down.write(PointerPressed {
+                                    position: mid - Vec2::new(200.0, 0.0),
+                                    button: PointerButton::Primary,
+                                    local: None,
+                                    pointer: PointerData::mouse(1),
+                                });
+                            }
+                            (0, 2) => {
+                                moved.write(PointerMoved {
+                                    position: mid + Vec2::new(200.0, 50.0),
+                                    local: None,
+                                    pointer: PointerData::mouse(1),
+                                });
+                            }
+                            (0, 3) => {
+                                up.write(PointerReleased {
+                                    position: mid + Vec2::new(200.0, 50.0),
+                                    button: PointerButton::Primary,
+                                    local: None,
+                                    pointer: PointerData::mouse(0),
+                                });
+                                started = true;
+                            }
+                            (1, 0) => {
+                                keys.write(KeyPressed {
+                                    code: Key::Character("t".into()).us_code(),
+                                    key: Key::Character("t".into()),
+                                    modifiers: Modifiers {
+                                        ctrl: true,
+                                        ..Modifiers::default()
+                                    },
+                                    repeat: false,
+                                    time_stamp: Instant::now(),
+                                });
+                            }
+                            (1, 1) => {}
+                            (1, 2) => signals.set("opt_angle", "30"),
+                            (1, 3) => {
+                                keys.write(KeyPressed {
+                                    code: Key::Named(lumenui::lumen_core::input::NamedKey::Enter)
+                                        .us_code(),
+                                    key: Key::Named(lumenui::lumen_core::input::NamedKey::Enter),
+                                    modifiers: Modifiers::default(),
+                                    repeat: false,
+                                    time_stamp: Instant::now(),
+                                });
+                                started = true;
+                            }
+                            (2, 0) => {
+                                signals.set("quantize_open", true);
+                                signals.set("quantize_colors", "32");
+                            }
+                            (2, 1) => {
+                                menu.write(MenuClicked {
+                                    id: "quantize-ok".into(),
+                                });
+                                started = true;
+                            }
+                            (3, 0) => {
+                                signals.set("indexed_open", true);
+                                signals.set("indexed_palette", "Current palette");
+                                signals.set("indexed_dither", "Floyd-Steinberg");
+                            }
+                            (3, 1) => {
+                                menu.write(MenuClicked {
+                                    id: "indexed-ok".into(),
+                                });
+                                started = true;
+                            }
+                            _ => {}
                         }
-                        (0, 2) => {
-                            moved.write(PointerMoved {
-                                position: mid + Vec2::new(200.0, 50.0),
-                                local: None,
-                                pointer: PointerData::mouse(1),
-                            });
-                        }
-                        (0, 3) => {
-                            up.write(PointerReleased {
-                                position: mid + Vec2::new(200.0, 50.0),
-                                button: PointerButton::Primary,
-                                local: None,
-                                pointer: PointerData::mouse(0),
-                            });
-                            started = true;
-                        }
-                        (1, 0) => {
-                            keys.write(KeyPressed {
-                                key: Key::Character("t".into()),
-                                modifiers: Modifiers {
-                                    ctrl: true,
-                                    ..Modifiers::default()
-                                },
-                                repeat: false,
-                                time_stamp: Instant::now(),
-                            });
-                        }
-                        (1, 1) => {}
-                        (1, 2) => signals.set("opt_angle", "30"),
-                        (1, 3) => {
-                            keys.write(KeyPressed {
-                                key: Key::Named(lumenui::lumen_core::input::NamedKey::Enter),
-                                modifiers: Modifiers::default(),
-                                repeat: false,
-                                time_stamp: Instant::now(),
-                            });
-                            started = true;
-                        }
-                        (2, 0) => {
-                            signals.set("quantize_open", true);
-                            signals.set("quantize_colors", "32");
-                        }
-                        (2, 1) => {
-                            menu.write(MenuClicked {
-                                id: "quantize-ok".into(),
-                            });
-                            started = true;
-                        }
-                        (3, 0) => {
-                            signals.set("indexed_open", true);
-                            signals.set("indexed_palette", "Current palette");
-                            signals.set("indexed_dither", "Floyd-Steinberg");
-                        }
-                        (3, 1) => {
-                            menu.write(MenuClicked {
-                                id: "indexed-ok".into(),
-                            });
-                            started = true;
-                        }
-                        _ => {}
-                    }
-                    *p = if started {
-                        *ticks = (0, Duration::ZERO, Vec::new());
-                        Phase::Running {
-                            i,
-                            since: now,
-                            longest: Duration::ZERO,
-                        }
-                    } else {
-                        Phase::Start { i, step: step + 1 }
-                    };
-                }
-                Phase::Running { i, since, longest } => {
-                    ticks.0 += 1;
-                    if tick > longest {
-                        let mut heavy = times.last.clone();
-                        heavy.sort_by_key(|(_, t)| std::cmp::Reverse(*t));
-                        heavy.truncate(4);
-                        ticks.2 = heavy;
-                        ticks.1 = perf.frames.back().map_or(Duration::ZERO, |f| f.work);
-                    }
-                    let longest = longest.max(tick);
-                    let landed = editor.history.undo_labels().any(|l| l == EDITS[i].1);
-                    if landed {
-                        out.lock().unwrap()[i] =
-                            Some((now - since, longest, ticks.0, ticks.1, ticks.2.clone()));
-                        *p = if i + 1 < EDITS.len() {
-                            Phase::Start { i: i + 1, step: 0 }
+                        *p = if started {
+                            *ticks = (0, Duration::ZERO, Vec::new());
+                            Phase::Running {
+                                i,
+                                since: now,
+                                longest: Duration::ZERO,
+                            }
                         } else {
-                            Phase::Done
+                            Phase::Start { i, step: step + 1 }
                         };
-                    } else {
-                        *p = Phase::Running { i, since, longest };
                     }
+                    Phase::Running { i, since, longest } => {
+                        ticks.0 += 1;
+                        if tick > longest {
+                            let mut heavy = times.last.clone();
+                            heavy.sort_by_key(|(_, t)| std::cmp::Reverse(*t));
+                            heavy.truncate(4);
+                            ticks.2 = heavy;
+                            ticks.1 = perf.frames.back().map_or(Duration::ZERO, |f| f.work);
+                        }
+                        let longest = longest.max(tick);
+                        let landed = editor.history.undo_labels().any(|l| l == EDITS[i].1);
+                        if landed {
+                            out.lock().unwrap()[i] =
+                                Some((now - since, longest, ticks.0, ticks.1, ticks.2.clone()));
+                            *p = if i + 1 < EDITS.len() {
+                                Phase::Start { i: i + 1, step: 0 }
+                            } else {
+                                Phase::Done
+                            };
+                        } else {
+                            *p = Phase::Running { i, since, longest };
+                        }
+                    }
+                    Phase::Done => {}
                 }
-                Phase::Done => {}
-            }
+            })
+            .before(pixl::settings::keymap::read_keys)
+            .before(pixl::view::input::navigate),
+        )
+        .run_headless_rendered(HeadlessOptions {
+            dpr: 1.0,
+            ticks: Some(3000),
+            ..Default::default()
         })
-        .before(pixl::settings::keymap::read_keys)
-        .before(pixl::view::input::navigate),
-    )
-    .run_headless_rendered(HeadlessOptions {
-        dpr: 1.0,
-        ticks: Some(3000),
-    })
-    .expect("the editor runs");
+        .expect("the editor runs");
 
     let ms = |d: Duration| format!("{:.1} ms", d.as_secs_f64() * 1000.0);
     println!("renderer: {backend}, {side}x{side}, {layers} layers");

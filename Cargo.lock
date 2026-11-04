@@ -18,6 +18,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arbitrary"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
+dependencies = [
+ "derive_arbitrary",
+]
+
+[[package]]
 name = "ariadne"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -170,6 +179,17 @@ checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
  "typenum",
+]
+
+[[package]]
+name = "derive_arbitrary"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b034bd7d5f032402a2479444dcc6f74e36a03f31854d41680fb240ef682a1ac"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -528,22 +548,33 @@ dependencies = [
 
 [[package]]
 name = "lumenui"
-version = "0.0.10"
+version = "0.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b405e22674687113af503318ffc86d1baeedf73614ff9a0f76705595d8ce2c44"
+checksum = "df1cebb812aae0675f5e0b31c565601b9072ee6c060439aac7949fee0960fbfb"
 dependencies = [
+ "lumenui-build",
+]
+
+[[package]]
+name = "lumenui-build"
+version = "0.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ed8b991d73593e475c330d3e1e42d03cbf6daaab7936254d284cdabc22ba450"
+dependencies = [
+ "flate2",
  "ruzstd",
  "serde_json",
  "sha2",
  "tar",
  "ureq",
+ "zip 6.0.0",
 ]
 
 [[package]]
 name = "lumenui-canvas"
-version = "0.0.10"
+version = "0.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8909e3298260e2891ddb612341974d5a4af6042e2b6863eea4940ecc2c65ec90"
+checksum = "a09ebf1fb76803cf5fadb22d6fa6a59a1aa4ff3b7967d747403455c66220837f"
 dependencies = [
  "lumenui",
 ]
@@ -606,6 +637,7 @@ name = "pixl"
 version = "0.1.0"
 dependencies = [
  "lumenui",
+ "lumenui-build",
  "lumenui-canvas",
  "pixl-document",
  "pixl-io",
@@ -613,7 +645,7 @@ dependencies = [
  "pixl-script",
  "serde",
  "serde_json",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -663,7 +695,7 @@ dependencies = [
  "pixl-paint",
  "serde",
  "serde_json",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -1274,6 +1306,20 @@ checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
 
 [[package]]
 name = "zip"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb2a05c7c36fde6c09b08576c9f7fb4cda705990f73b58fe011abf7dfb24168b"
+dependencies = [
+ "arbitrary",
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "zopfli",
+]
+
+[[package]]
+name = "zip"
 version = "8.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
@@ -1296,3 +1342,15 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "zopfli"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaf7fc5d30c28483d93805c4a5e12b05bbb52407fa67c5f8bd552374cd01fb11"
+dependencies = [
+ "bumpalo",
+ "crc32fast",
+ "log",
+ "simd-adler32",
+]

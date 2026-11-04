@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::world::World;
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;

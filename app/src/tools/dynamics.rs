@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{PointerButton, PointerData, PointerKind};
 use lumenui::lumen_core::tick::WakeDeadline;
@@ -567,7 +567,7 @@ pub fn dynamics_popup(
         if popup.open {
             node.set_style("inset", &format!("{} auto auto {}", at.1, at.0));
         }
-        crate::set_class(node, "open", popup.open);
+        node.set_class_on("open", popup.open);
         popup.placed = Some(placed);
         crate::repaint_soon(&wake);
     }
@@ -663,27 +663,27 @@ pub fn install(app: App) -> App {
     let d = ToolDynamics::for_tool(Tool::Pencil);
     let mut app = app
         .insert_resource(DynamicsPopup::default())
-        .insert_signal("show_dynamics", true)
-        .insert_signal("dyn_title", "Pencil dynamics")
-        .insert_signal("dyn_show_angle", true)
-        .insert_signal("dyn_show_color", true)
-        .insert_signal("dyn_size", d.size.label())
-        .insert_signal("dyn_size_min", d.min_size.to_string())
-        .insert_signal("dyn_size_max", d.max_size.to_string())
-        .insert_signal("dyn_angle", d.angle.label())
-        .insert_signal("dyn_angle_min", d.min_angle.to_string())
-        .insert_signal("dyn_angle_max", d.max_angle.to_string())
-        .insert_signal("dyn_color", d.color.label())
-        .insert_signal("dyn_dither", d.dither.clone());
+        .signal("show_dynamics", true)
+        .signal("dyn_title", "Pencil dynamics")
+        .signal("dyn_show_angle", true)
+        .signal("dyn_show_color", true)
+        .signal("dyn_size", d.size.label())
+        .signal("dyn_size_min", d.min_size.to_string())
+        .signal("dyn_size_max", d.max_size.to_string())
+        .signal("dyn_angle", d.angle.label())
+        .signal("dyn_angle_min", d.min_angle.to_string())
+        .signal("dyn_angle_max", d.max_angle.to_string())
+        .signal("dyn_color", d.color.label())
+        .signal("dyn_dither", d.dither.clone());
     for key in ["p", "v"] {
         let r = InputResponse::default();
         app = app
-            .insert_signal(format!("dyn_{key}_curve"), r.curve)
-            .insert_signal(format!("dyn_{key}_curve_text"), curve_text(r.curve))
-            .insert_signal(format!("dyn_{key}_min"), f64::from(r.min))
-            .insert_signal(format!("dyn_{key}_min_text"), percent_text(r.min))
-            .insert_signal(format!("dyn_{key}_max"), f64::from(r.max))
-            .insert_signal(format!("dyn_{key}_max_text"), percent_text(r.max));
+            .signal(format!("dyn_{key}_curve"), r.curve)
+            .signal(format!("dyn_{key}_curve_text"), curve_text(r.curve))
+            .signal(format!("dyn_{key}_min"), f64::from(r.min))
+            .signal(format!("dyn_{key}_min_text"), percent_text(r.min))
+            .signal(format!("dyn_{key}_max"), f64::from(r.max))
+            .signal(format!("dyn_{key}_max_text"), percent_text(r.max));
     }
     app.add_systems(
         TickStage::Systems,

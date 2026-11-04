@@ -6,7 +6,7 @@ pub mod common;
 use std::sync::{Arc, Mutex};
 
 use common::drive::{Step, drive, editor_over};
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::world::World;
 use lumenui::prelude::*;
 use pixl::settings::store::Store;
 use pixl::settings::themes::{UserTheme, import};

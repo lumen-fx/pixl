@@ -40,3 +40,6 @@ harness = false
 [[bench]]
 name = "heavy"
 harness = false
+
+[build-dependencies]
+lumenui-build.workspace = true

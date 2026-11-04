@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 
-use lumenui::ecs::world::World;
+use lumenui::bevy_ecs::world::World;
 use lumenui::lumen_core::components::Transform;
 use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;

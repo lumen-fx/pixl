@@ -9,7 +9,7 @@
 
 use std::result::Result;
 
-use lumenui::ecs::system::SystemParam;
+use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::prelude::*;
 use pixl_document::{
     ColorMode, CompositeOptions, Document, Error, NewLayer, Pixels, Point, Rect, Rgba, Scope,

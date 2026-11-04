@@ -119,49 +119,36 @@ fn history_class(k: usize, current: usize) -> &'static str {
     }
 }
 
-fn history_markup(labels: &[String], current: usize) -> String {
-    let mut out = String::new();
-    for (k, label) in labels.iter().enumerate() {
-        out.push_str(&format!(
-            r#"<row id="history-{k}" class="{}"><label class="history-label" text="{}"/></row>"#,
-            history_class(k, current),
-            escape(label)
-        ));
+/// Brings the history list (`<for each="$history">`) up to date. Rows are
+/// keyed by position, so an undo or a redo, which only moves the current
+/// entry, updates the rows whose class changed and builds none.
+fn show_history(panels: &mut Panels, entries: (Vec<String>, usize), signals: &mut Signals) -> bool {
+    if panels.history.as_ref() == Some(&entries) {
+        return false;
     }
-    out
-}
-
-/// Brings the history list up to date: an undo or a redo moves the current
-/// entry by changing two rows' classes; a new edit writes the list again.
-fn show_history(panels: &mut Panels, entries: (Vec<String>, usize)) -> bool {
     let (labels, current) = &entries;
-    match &panels.history {
-        Some((shown, was)) if shown == labels => {
-            if was == current {
-                return false;
-            }
-            for k in [*was, *current] {
-                if let Some(row) = dom::get_by_id(&format!("history-{k}")) {
-                    row.set_class(history_class(k, *current));
-                }
-            }
-            // Rows between the two change from done to undone or back.
-            let (a, b) = ((*was).min(*current), (*was).max(*current));
-            for k in a + 1..b {
-                if let Some(row) = dom::get_by_id(&format!("history-{k}")) {
-                    row.set_class(history_class(k, *current));
-                }
-            }
-        }
-        _ => {
-            let Some(node) = dom::get_by_id("history-list") else {
-                return false;
-            };
-            node.set_inner_markup(&history_markup(labels, *current));
-        }
-    }
+    signals.set_list(
+        "history",
+        labels.iter().enumerate().map(|(k, label)| {
+            Record::new()
+                .with("k", k)
+                .with("label", label)
+                .with("class", history_class(k, *current))
+        }),
+    );
     panels.history = Some(entries);
     true
+}
+
+/// A click on a history row goes back or forward to that entry.
+pub fn history_row_click(ui: &mut Ui, ev: &Event) {
+    let Some(k) = ev.row().map(Row::index) else {
+        return;
+    };
+    ui.resource_scope(|ui, mut editor: Mut<Editor>| {
+        close_edit(&mut editor, &mut ui.resource_mut::<Panels>());
+        jump_to(&mut editor, k);
+    });
 }
 
 /// Rewrites a panel's content when what it shows changed.
@@ -197,7 +184,7 @@ pub fn show_panels(
             palette_markup(&editor),
         );
     }
-    if !current && show_history(&mut panels, history_entries(&editor)) {
+    if !current && show_history(&mut panels, history_entries(&editor), &mut signals) {
         changed = true;
         // A new edit scrolls the list to its end, where the edit is.
         if panels.history_len.is_some_and(|n| entries > n) {
@@ -276,12 +263,6 @@ pub fn panel_clicks(
                     if c.a > 0 {
                         editor.fg = c;
                     }
-                } else if let Some(k) = other
-                    .strip_prefix("history-")
-                    .and_then(|n| n.parse::<usize>().ok())
-                {
-                    close_edit(editor, &mut panels);
-                    jump_to(editor, k);
                 }
             }
         }
