@@ -17,7 +17,8 @@ font it reads at start. On Windows and Linux keep those files beside the
 executable; on macOS they are inside `pixl.app`.
 
 - Windows (x86_64): unzip `pixl-<version>-windows-x86_64.zip` anywhere and
-  run `pixl.exe`.
+  run `pixl.exe`. `pixl-cli.exe` beside it exports documents from the command
+  line (see Command line).
 - Linux (x86_64): unpack `pixl-<version>-linux-x86_64.tar.gz` anywhere and
   run `pixl`. It links GTK 3, which desktop distributions install by
   default.

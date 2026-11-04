@@ -175,7 +175,7 @@ jobs:
         run: |
           dir="dist/$PACKAGE"
           mkdir -p "$dir/assets/icons" "$dir/assets/fonts"
-          cp target/release/pixl app/lumen.toml LICENSE "$dir/"
+          cp target/release/pixl target/release/lumen-crash app/lumen.toml LICENSE "$dir/"
           cp app/assets/icons/*.png "$dir/assets/icons/"
           cp app/assets/fonts/* "$dir/assets/fonts/"
           missing=0
@@ -288,7 +288,7 @@ jobs:
           exe="$app/Contents/MacOS"
           res="$app/Contents/Resources"
           mkdir -p "$exe" "$res/assets/icons" "$res/assets/fonts"
-          cp target/release/pixl "$exe/"
+          cp target/release/pixl target/release/lumen-crash "$exe/"
           cp app/lumen.toml "$res/"
           cp app/assets/icons/*.png "$res/assets/icons/"
           cp app/assets/fonts/* "$res/assets/fonts/"
