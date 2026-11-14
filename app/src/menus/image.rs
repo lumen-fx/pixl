@@ -216,20 +216,20 @@ pub fn image_commands(
     mut state: ResMut<ImageMenu>,
     mut signals: Signals,
     mut commands: Commands,
-    (wake, ft): (
+    (wake, mut ft): (
         Option<Res<WakeDeadline>>,
-        Res<crate::tools::transform::FreeTransform>,
+        ResMut<crate::tools::transform::FreeTransform>,
     ),
 ) {
     let editor = &mut *editor;
-    let size = (editor.doc.width(), editor.doc.height());
     for id in &chosen.0 {
         // The free transform holds the cel it floats pixels over: an edit of
-        // the whole image under it would be undone by its Apply or Cancel.
-        if ft.active() && edits_the_image(id) {
-            editor.message = Some(crate::tools::transform::FIRST.to_string());
-            continue;
+        // the whole image applies the box first, so the edit takes in what
+        // the box held.
+        if edits_the_image(id) {
+            ft.apply(editor);
         }
+        let size = (editor.doc.width(), editor.doc.height());
         match id.as_str() {
             "image-crop" => match editor.selection.as_ref().map(|s| s.bounds()) {
                 Some(b) if !b.is_empty() => crop_to(editor, b),

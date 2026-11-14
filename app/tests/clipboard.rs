@@ -610,51 +610,43 @@ fn a_paste_on_another_layer_turns_there_and_enter_only_applies_it() {
     assert_eq!(colors.iter().filter(|c| **c == Rgba::WHITE).count(), 1);
 }
 
+/// Copy the bar, paste it, turn the paste a quarter turn, then `then`.
+fn turned_paste(then: &[Step]) -> Vec<Step> {
+    steps(&[
+        &[
+            Step::Ctrl("c", false),
+            Step::Wait,
+            Step::Ctrl("v", false),
+            Step::Wait,
+            Step::Text("opt_angle", "90"),
+            Step::Wait,
+        ],
+        then,
+        &[Step::Wait, Step::Wait],
+    ])
+}
+
 #[test]
-fn image_commands_wait_for_the_floating_paste() {
-    let out = drive(
+fn image_and_filter_commands_apply_the_floating_paste_first() {
+    let rotated = drive(
         editor_over(bar()),
-        steps(&[
-            &[
-                Step::Ctrl("c", false),
-                Step::Wait,
-                Step::Ctrl("v", false),
-                Step::Wait,
-                Step::Text("opt_angle", "90"),
-                Step::Wait,
-                Step::Menu("image-rotate-cw"),
-                Step::Wait,
-                Step::Menu("filter-invert"),
-                Step::Wait,
-            ],
-            &[Step::Wait],
-        ]),
+        turned_paste(&[Step::Menu("image-rotate-cw"), Step::Wait]),
     );
-    assert_eq!(
-        out.message.as_deref(),
-        Some("Apply the free transform first, or cancel it with Escape")
-    );
-    assert!(
-        out.undo.is_empty(),
-        "nothing ran under the box: {:?}",
-        out.undo
-    );
-    let applied = drive(
+    assert_eq!(rotated.undo, vec!["Paste", "Rotate canvas"]);
+    assert_eq!(rotated.tool, pixl::Tool::Move, "the box closed");
+    assert_eq!(rotated.message, None);
+    // The same as applying with Enter and rotating after.
+    let mut by_hand = enter().to_vec();
+    by_hand.extend([Step::Wait, Step::Menu("image-rotate-cw"), Step::Wait]);
+    let expected = drive(editor_over(bar()), turned_paste(&by_hand));
+    assert_eq!(expected.undo, rotated.undo);
+    assert_eq!(rotated.doc, expected.doc, "the rotation took in the paste");
+
+    let inverted = drive(
         editor_over(bar()),
-        steps(&[
-            &[
-                Step::Ctrl("c", false),
-                Step::Wait,
-                Step::Ctrl("v", false),
-                Step::Wait,
-                Step::Text("opt_angle", "90"),
-                Step::Wait,
-                Step::Menu("image-rotate-cw"),
-                Step::Wait,
-            ],
-            &enter(),
-            &[Step::Wait],
-        ]),
+        turned_paste(&[Step::Menu("filter-invert"), Step::Wait, Step::Wait]),
     );
-    assert_eq!(applied.undo, vec!["Paste"]);
+    assert_eq!(inverted.undo.first().map(String::as_str), Some("Paste"));
+    assert_eq!(inverted.undo.len(), 2, "{:?}", inverted.undo);
+    assert_eq!(inverted.tool, pixl::Tool::Move);
 }

@@ -184,8 +184,9 @@ was copied from when that place is in view and in the middle of the view
 otherwise; move, scale and turn it with the box's handles, then Enter keeps
 it as one undo step and Escape drops it. Pressing the canvas takes the
 keyboard focus from the button clicked before it, so Enter applies the box
-and does not also press that button. While the box is open, the Image and
-Filter menus' commands do not run; apply or cancel the box first. Paste as
+and does not also press that button. An Image or Filter menu command
+chosen while the box is open applies the box first, as its own undo step,
+and then runs on the result. Paste as
 new layer (Ctrl+Shift+V) puts it on a new layer above the active one, and
 Paste as new document
 (Ctrl+Alt+V) opens it in a tab of its own. An image copied in another

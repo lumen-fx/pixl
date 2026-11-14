@@ -271,9 +271,9 @@ pub fn filter_commands(
     mut adjust: ResMut<Adjust>,
     view: Res<View>,
     mut signals: Signals,
-    (wake, ft): (
+    (wake, mut ft): (
         Option<Res<WakeDeadline>>,
-        Res<crate::tools::transform::FreeTransform>,
+        ResMut<crate::tools::transform::FreeTransform>,
     ),
 ) {
     let editor = &mut *editor;
@@ -283,10 +283,9 @@ pub fn filter_commands(
             if adjust.session.is_some() {
                 continue;
             }
-            if ft.active() {
-                editor.message = Some(crate::tools::transform::FIRST.to_string());
-                continue;
-            }
+            // A box over the cel is applied first, so the filter takes in
+            // what it held.
+            ft.apply(editor);
             let Some(mut s) = open(editor, fid, title) else {
                 continue;
             };

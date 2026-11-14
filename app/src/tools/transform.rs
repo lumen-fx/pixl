@@ -187,6 +187,27 @@ impl FreeTransform {
     pub fn float(&mut self, floating: Floating) {
         self.floating = Some(floating);
     }
+
+    /// Keeps what the box shows, as one undo step, and closes it: the
+    /// pasted or lifted pixels land where the box puts them, at once even
+    /// when the preview of a large box is still filling in. A command that
+    /// edits the whole image runs this first, as Aseprite does. Returns
+    /// whether a box was open.
+    pub fn apply(&mut self, editor: &mut Editor) -> bool {
+        if let Some(f) = self.floating.take() {
+            if let Some(s) = self.session.take() {
+                finish(editor, s, true);
+            }
+            self.session = start_paste(editor, f);
+        }
+        let Some(mut s) = self.session.take() else {
+            return false;
+        };
+        preview(editor, &mut s, self.resample);
+        finish(editor, s, true);
+        editor.tool = Tool::Move;
+        true
+    }
 }
 
 fn clear_of(editor: &Editor) -> u32 {
@@ -473,6 +494,9 @@ pub fn use_transform(
         pointer.events();
         if let Some(s) = ft.session.take() {
             finish(editor, s, true);
+        }
+        // The box goes, also when a command applied it.
+        if aids.transform_box.is_some() {
             aids.transform_box = None;
             aids.revision += 1;
         }
