@@ -271,13 +271,20 @@ pub fn filter_commands(
     mut adjust: ResMut<Adjust>,
     view: Res<View>,
     mut signals: Signals,
-    wake: Option<Res<WakeDeadline>>,
+    (wake, ft): (
+        Option<Res<WakeDeadline>>,
+        Res<crate::tools::transform::FreeTransform>,
+    ),
 ) {
     let editor = &mut *editor;
     let focus = view.to_doc(view.middle());
     for id in &chosen.0 {
         if let Some((fid, title, settings)) = FILTERS.iter().find(|(f, _, _)| f == id) {
             if adjust.session.is_some() {
+                continue;
+            }
+            if ft.active() {
+                editor.message = Some(crate::tools::transform::FIRST.to_string());
                 continue;
             }
             let Some(mut s) = open(editor, fid, title) else {

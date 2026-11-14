@@ -5,9 +5,10 @@ pub mod common;
 
 use std::sync::{Arc, Mutex};
 
-use common::drive::{Step, drive, editor_over};
+use common::drive::{At, Step, drive, editor_over};
 use lumenui::glam::Vec2;
 use lumenui::lumen_core::input::{ContextMenuEvent, PointerButton};
+use lumenui::lumen_core::window::{PrimaryWindow, Window};
 use lumenui::prelude::*;
 use pixl::Workspace;
 use pixl::settings::store::Store;
@@ -23,6 +24,12 @@ struct Docks {
     closed: Vec<String>,
     /// The left and right docks' widths.
     widths: (f32, f32),
+    /// The bottom dock's height and the tool bar's width.
+    bottom: f32,
+    toolbar: f32,
+    /// Each panel's box and its close button's, as (left, top, right,
+    /// bottom).
+    boxes: Vec<(String, [f32; 4], [f32; 4])>,
 }
 
 impl Docks {
@@ -69,6 +76,34 @@ fn watch(app: App) -> (App, Arc<Mutex<Docks>>) {
                 .map_or(0.0, |r| r.width)
         };
         d.widths = (width("dock-left"), width("dock-right"));
+        d.toolbar = width("toolbar");
+        d.bottom = dom::get_by_id("dock-bottom")
+            .and_then(|n| n.rect())
+            .map_or(0.0, |r| r.height);
+        let edges = |id: &str| {
+            dom::get_by_id(id)
+                .and_then(|n| n.rect())
+                .map_or([0.0; 4], |r| {
+                    [
+                        r.client_x,
+                        r.client_y,
+                        r.client_x + r.width,
+                        r.client_y + r.height,
+                    ]
+                })
+        };
+        for dock in Dock::ALL {
+            let Some(node) = dom::get_by_id(dock.element_id()) else {
+                continue;
+            };
+            for child in node.children() {
+                let Some(id) = child.id() else { continue };
+                if !child.has_class("closed") {
+                    d.boxes
+                        .push((id.clone(), edges(&id), edges(&format!("{id}-close"))));
+                }
+            }
+        }
         *out.lock().unwrap() = d;
     });
     (app, seen)
@@ -76,6 +111,21 @@ fn watch(app: App) -> (App, Arc<Mutex<Docks>>) {
 
 fn editor() -> App {
     editor_over(Document::new(32, 32, ColorMode::Rgba).unwrap())
+}
+
+/// The editor in a smaller window than `lumen.toml` asks for, as a laptop
+/// or a tiling window manager gives it.
+fn small_editor() -> App {
+    editor().add_systems(
+        TickStage::Systems,
+        |mut windows: Query<&mut Window, With<PrimaryWindow>>| {
+            for mut w in &mut windows {
+                if w.size != Vec2::new(1200.0, 720.0) {
+                    w.size = Vec2::new(1200.0, 720.0);
+                }
+            }
+        },
+    )
 }
 
 #[test]
@@ -346,4 +396,135 @@ fn the_dialog_lists_panels_and_saves_a_layout_that_outlives_the_window() {
     drive(app, vec![Step::Wait, Step::Wait]);
     assert_eq!(docks.lock().unwrap().panels(Dock::Left), ["panel-palette"]);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A press on the gutter left of the right dock, dragged `by` window units
+/// to the right, and released.
+fn drag_right_gutter(by: f32) -> Vec<Step> {
+    // The tests' window is 1440 wide; the gutter is the 4 units left of
+    // the right dock.
+    let (x, y) = (1440.0 - 264.0 - 2.0, 400.0);
+    vec![
+        Step::Move(At::Window(Vec2::new(x, y))),
+        Step::Down(At::Window(Vec2::new(x, y)), PointerButton::Primary),
+        Step::Move(At::Window(Vec2::new(x + by / 2.0, y))),
+        Step::Move(At::Window(Vec2::new(x + by, y))),
+        Step::Up(At::Window(Vec2::new(x + by, y)), PointerButton::Primary),
+        Step::Wait,
+        Step::Wait,
+    ]
+}
+
+#[test]
+fn the_docks_and_the_tool_bar_keep_their_size_with_a_dock_on_each_side() {
+    // Paint has no left dock: the canvas has room to spare.
+    let (app, docks) = watch(small_editor());
+    drive(app, vec![Step::Wait, Step::Wait]);
+    let paint = docks.lock().unwrap().clone();
+    // Rig adds the left dock; the canvas gives way, not the docks or the
+    // tool bar, whose second column of tools would go.
+    let (app, docks) = watch(small_editor());
+    let out = drive(
+        app,
+        vec![Step::Menu("window-layout-rig"), Step::Wait, Step::Wait],
+    );
+    common::save(&out.frame, "workspace-rig-room");
+    let rig = docks.lock().unwrap().clone();
+    assert_eq!(rig.toolbar, paint.toolbar, "the tool bar keeps its width");
+    assert_eq!(
+        rig.widths.0, paint.widths.1,
+        "the left dock has the theme's width"
+    );
+    assert_eq!(
+        rig.widths.1, paint.widths.1,
+        "the right dock keeps the theme's width"
+    );
+}
+
+#[test]
+fn every_shown_panel_keeps_its_close_button_and_some_room() {
+    let (app, docks) = watch(small_editor());
+    let out = drive(
+        app,
+        vec![
+            Step::Menu("window-layout-rig"),
+            Step::Wait,
+            Step::Menu("window-show-all"),
+            Step::Wait,
+            Step::Wait,
+        ],
+    );
+    common::save(&out.frame, "workspace-crowded");
+    let d = docks.lock().unwrap().clone();
+    assert!(d.closed.is_empty());
+    for (id, panel, close) in &d.boxes {
+        assert!(
+            close[2] > close[0] && close[2] <= panel[2] + 0.5,
+            "{id}'s close button is inside it: {panel:?} {close:?}"
+        );
+        if !d.collapsed.contains(id) {
+            assert!(panel[3] - panel[1] >= 40.0, "{id} has room: {panel:?}");
+        }
+    }
+}
+
+#[test]
+fn a_gutter_drag_sizes_the_dock_and_the_size_outlives_the_window() {
+    let dir = std::env::temp_dir().join(format!("pixl-ws-gutter-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let app = editor().insert_resource(Workspace::load(Store::at(&dir)));
+    let (app, docks) = watch(app);
+    // The first drag after the window opens counts.
+    let mut steps = vec![Step::Wait, Step::Wait];
+    steps.extend(drag_right_gutter(-60.0));
+    drive(app, steps);
+    let right = docks.lock().unwrap().widths.1;
+    assert_eq!(right, 264.0 + 60.0, "the drag widened the right dock");
+    let kept = Workspace::load(Store::at(&dir));
+    assert_eq!(kept.live.sizes.right, Some(right), "the size was kept");
+
+    // The next window opens with it.
+    let app = editor().insert_resource(Workspace::load(Store::at(&dir)));
+    let (app, docks) = watch(app);
+    drive(app, vec![Step::Wait, Step::Wait, Step::Wait]);
+    assert_eq!(docks.lock().unwrap().widths.1, right);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_dock_shown_after_a_gutter_drag_has_the_theme_width() {
+    let (app, docks) = watch(editor());
+    let mut steps = vec![Step::Wait];
+    steps.extend(drag_right_gutter(-40.0));
+    steps.extend([
+        Step::ContextMenu("panel-history"),
+        Step::Wait,
+        Step::Menu("panel-menu-left"),
+        Step::Wait,
+        Step::Wait,
+        Step::Wait,
+    ]);
+    drive(app, steps);
+    let d = docks.lock().unwrap().clone();
+    assert_eq!(d.panels(Dock::Left), ["panel-history"]);
+    assert_eq!(
+        d.widths,
+        (264.0, 304.0),
+        "left at the theme's width, right as dragged"
+    );
+}
+
+#[test]
+fn reset_layout_puts_a_dragged_dock_back() {
+    let (app, docks) = watch(editor());
+    let mut steps = vec![Step::Wait];
+    steps.extend(drag_right_gutter(-40.0));
+    steps.extend([
+        Step::Menu("window-layout-reset"),
+        Step::Wait,
+        Step::Wait,
+        Step::Wait,
+    ]);
+    drive(app, steps);
+    assert_eq!(docks.lock().unwrap().widths.1, 264.0);
 }

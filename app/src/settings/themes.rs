@@ -36,7 +36,7 @@ pub const EXTENSION: &str = "pixltheme";
 pub const FOLDER: &str = "themes";
 
 /// The color tokens a theme sets, in the order the editor lists them.
-pub const TOKENS: [&str; 23] = [
+pub const TOKENS: [&str; 24] = [
     "surface-0",
     "surface-1",
     "surface-2",
@@ -60,6 +60,7 @@ pub const TOKENS: [&str; 23] = [
     "marquee-a",
     "marquee-b",
     "preview",
+    "tool-ghost",
 ];
 
 /// The signal the editor's color field for `token` writes.

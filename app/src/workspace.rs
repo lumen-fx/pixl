@@ -8,8 +8,10 @@
 //! default place. A layout names the panels it places and leaves the rest
 //! where the markup put them, so a panel added later joins every layout.
 
-use lumenui::lumen_core::input::{ContextMenuEvent, MenuClicked, PointerReleased};
+use lumenui::bevy_ecs::change_detection::DetectChanges;
+use lumenui::lumen_core::input::{ContextMenuEvent, MenuClicked};
 use lumenui::lumen_core::tick::WakeDeadline;
+use lumenui::lumen_primitives::split::{Split, SplitResized, SplitSizes};
 use lumenui::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -347,8 +349,14 @@ pub struct Workspace {
     menu_panel: Option<String>,
     /// The arrangement must be put on the window.
     dirty: bool,
-    /// The docks' sizes at the last pointer release, to tell a gutter drag.
-    measured: Sizes,
+    /// The docks' sizes must be held on the splits again: the layout or a
+    /// gutter changed them, or the theme's sizes changed.
+    hold: bool,
+    /// Each dock's size as the window first laid it out, before anything
+    /// held it: what a dock the user has not sized goes back to. A dock
+    /// that was empty then, or any dock after the interface scale changed,
+    /// goes back to the theme's size.
+    natural: Option<Sizes>,
     /// What the panel list and layout list last showed.
     shown_lists: Option<(String, String)>,
 }
@@ -368,7 +376,8 @@ impl Workspace {
             known: Vec::new(),
             menu_panel: None,
             dirty: true,
-            measured: Sizes::default(),
+            hold: true,
+            natural: None,
             shown_lists: None,
         }
     }
@@ -477,7 +486,27 @@ impl Workspace {
 
     fn changed(&mut self) {
         self.dirty = true;
+        self.hold = true;
         self.persist();
+    }
+
+    /// Keeps the sizes a gutter drag left: each shown dock's size across
+    /// the canvas, from the panes of the split that was resized.
+    pub fn resized(&mut self, panes: &[(String, f32)]) {
+        let mut sizes = self.live.sizes;
+        for (id, size) in panes {
+            if let Some(dock) = Dock::from_element_id(id)
+                && self.live.dock_shows(dock)
+            {
+                sizes.set(dock, Some(size.round()));
+            }
+        }
+        // A drag holds every pane where it is; hold them as the docks want.
+        self.hold = true;
+        if sizes != self.live.sizes {
+            self.live.sizes = sizes;
+            self.persist();
+        }
     }
 
     fn persist(&self) {
@@ -567,8 +596,8 @@ fn on_screen(places: &[Place]) -> bool {
     })
 }
 
-/// Puts `places` and `sizes` on the window.
-fn put_on_screen(places: &[Place], sizes: &Sizes) {
+/// Puts `places` on the window.
+fn put_on_screen(places: &[Place]) {
     for dock in Dock::ALL {
         let Some(node) = dom::get_by_id(dock.element_id()) else {
             continue;
@@ -598,14 +627,6 @@ fn put_on_screen(places: &[Place], sizes: &Sizes) {
                 node.remove_class("empty");
             } else {
                 node.add_class("empty");
-            }
-        }
-        match sizes.get(dock) {
-            Some(px) => {
-                node.set_style("flex-basis", &format!("{}", px.round()));
-            }
-            None => {
-                node.remove_style("flex-basis");
             }
         }
     }
@@ -648,6 +669,130 @@ fn put_on_screen(places: &[Place], sizes: &Sizes) {
     }
 }
 
+/// Keeps the docks' sizes: a gutter the user moved leaves the docks beside
+/// it at their new size, and the splits hold each dock at its size once
+/// the layout is on the window.
+pub fn keep_dock_sizes(
+    mut ws: ResMut<Workspace>,
+    mut resized: MessageReader<SplitResized>,
+    (splits, mut split_sizes): (DockSplits, SplitSizes),
+    settings: Res<crate::settings::Settings>,
+    wake: Option<Res<WakeDeadline>>,
+) {
+    for r in resized.read() {
+        let Ok((_, _, split)) = splits.splits.get(r.split) else {
+            continue;
+        };
+        let panes: Vec<(String, f32)> = split
+            .panes
+            .iter()
+            .zip(&r.sizes)
+            .filter_map(|(p, size)| Some((splits.ids.get(p.entity).ok()?.0.clone(), *size)))
+            .collect();
+        ws.resized(&panes);
+    }
+    // The interface scale changes the theme's dock sizes.
+    if settings.is_changed() && !settings.is_added() {
+        ws.natural = Some(Sizes::default());
+        ws.hold = true;
+    }
+    if !ws.hold || ws.dirty {
+        return;
+    }
+    if ws.natural.is_none() {
+        // Wait for the first layout of the splits.
+        if splits.splits.iter().all(|(_, _, s)| s.panes.is_empty()) {
+            return;
+        }
+        ws.natural = Some(laid_out(&splits));
+    }
+    let natural = ws.natural.unwrap_or_default();
+    let mut sizes = ws.live.sizes;
+    for dock in Dock::ALL {
+        if sizes.get(dock).is_none() {
+            sizes.set(dock, natural.get(dock).or_else(|| theme_size(dock)));
+        }
+    }
+    if hold_dock_sizes(&sizes, &splits, &mut split_sizes) {
+        ws.hold = false;
+        crate::repaint_soon(&wake);
+    }
+}
+
+/// A dock's size across the canvas as the theme sets it: the side docks'
+/// `width`, the bottom dock's `height`.
+fn theme_size(dock: Dock) -> Option<f32> {
+    let property = if dock == Dock::Bottom {
+        "height"
+    } else {
+        "width"
+    };
+    let value = dom::get_by_id(dock.element_id())?.computed_style_of(property)?;
+    let number: String = value
+        .trim()
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    number.parse().ok()
+}
+
+/// The size of each dock that shows, as the splits last measured it.
+fn laid_out(splits: &DockSplits) -> Sizes {
+    let mut out = Sizes::default();
+    for (_, _, split) in &splits.splits {
+        for pane in &split.panes {
+            if let Some(dock) = splits
+                .ids
+                .get(pane.entity)
+                .ok()
+                .and_then(|id| Dock::from_element_id(&id.0))
+                && pane.size > 0.0
+            {
+                out.set(dock, Some(pane.size));
+            }
+        }
+    }
+    out
+}
+
+/// Holds the panes of the docks' splits: each dock at `sizes`, and the
+/// canvas at none, so it takes what the docks leave. A gutter drag holds
+/// every pane where it is, a hidden dock at nothing, and this puts them
+/// back. Returns false while the splits are not laid out yet.
+fn hold_dock_sizes(sizes: &Sizes, splits: &DockSplits, split_sizes: &mut SplitSizes) -> bool {
+    let mut held = true;
+    for (entity, id, split) in &splits.splits {
+        if !matches!(id.0.as_str(), "docks" | "center") {
+            continue;
+        }
+        let mut want = Vec::with_capacity(split.panes.len());
+        for pane in &split.panes {
+            let dock = splits
+                .ids
+                .get(pane.entity)
+                .ok()
+                .and_then(|id| Dock::from_element_id(&id.0));
+            let size = match dock {
+                Some(d) => sizes.get(d).unwrap_or_else(|| {
+                    held = false;
+                    pane.size
+                }),
+                None => 0.0,
+            };
+            want.push(size);
+        }
+        held &= split_sizes.set(entity, &want);
+    }
+    held
+}
+
+/// The docks' splits and the ids of their panes.
+#[derive(lumenui::bevy_ecs::system::SystemParam)]
+pub struct DockSplits<'w, 's> {
+    splits: Query<'w, 's, (Entity, &'static LumenId, &'static Split)>,
+    ids: Query<'w, 's, &'static LumenId>,
+}
+
 /// The panel an element belongs to, through its ancestors' ids.
 fn panel_of(entity: Entity, ids: &ElementIds, ws: &Workspace) -> Option<String> {
     ids.up(entity)
@@ -663,7 +808,6 @@ pub fn workspace_input(
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
     mut context: MessageReader<ContextMenuEvent>,
-    mut released: MessageReader<PointerReleased>,
     ids: ElementIds,
     (home, keys): (Res<Home>, Res<KeyCommands>),
     mut signals: Signals,
@@ -684,41 +828,10 @@ pub fn workspace_input(
         }
     }
     if home.open {
-        released.clear();
         return;
     }
     for id in chosen {
         run(&mut ws, &id, &mut signals);
-    }
-    // A gutter drag ends with a release: a dock whose size changed since
-    // the last release was dragged, and keeps its new size.
-    if released.read().count() > 0 && !ws.dirty {
-        let mut sizes = ws.live.sizes;
-        for dock in Dock::ALL {
-            if !ws.live.dock_shows(dock) {
-                continue;
-            }
-            let Some(rect) = dom::get_by_id(dock.element_id()).and_then(|n| n.rect()) else {
-                continue;
-            };
-            let size = if dock == Dock::Bottom {
-                rect.height
-            } else {
-                rect.width
-            };
-            if ws
-                .measured
-                .get(dock)
-                .is_some_and(|m| (m - size).abs() >= 1.0)
-            {
-                sizes.set(dock, Some(size.round()));
-            }
-            ws.measured.set(dock, Some(size));
-        }
-        if sizes != ws.live.sizes {
-            ws.live.sizes = sizes;
-            ws.persist();
-        }
     }
 }
 
@@ -915,9 +1028,8 @@ pub fn show_workspace(
         let places = ws.live.resolve(&ws.known_docks());
         if on_screen(&places) {
             ws.dirty = false;
-            ws.measured = Sizes::default();
         } else {
-            put_on_screen(&places, &ws.live.sizes);
+            put_on_screen(&places);
             crate::repaint_soon(&wake);
         }
         ws.shown_lists = None;

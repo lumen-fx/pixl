@@ -340,6 +340,7 @@
     <tile id="probe-marquee-a"/>
     <tile id="probe-marquee-b"/>
     <tile id="probe-preview"/>
+    <tile id="probe-ghost"/>
     <tile id="probe-curve"/>
     <tile id="probe-curve-grid"/>
   </tile>

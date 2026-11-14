@@ -128,6 +128,9 @@ pub struct Outcome {
     pub perf_lines: Vec<String>,
     /// The pixels the tool preview draws over the document.
     pub preview: usize,
+    /// The pixels the hover preview covers where the pointer rests, and
+    /// its color.
+    pub hover: (usize, Rgba),
     /// The tutorial on each tick from the fifth on.
     pub tutorial: Vec<Tutor>,
     /// Each open document's title, in tab order, and the place of the one
@@ -181,6 +184,7 @@ struct Snapshot {
     last_stroke: Option<std::time::Duration>,
     perf_lines: Vec<String>,
     preview: usize,
+    hover: (usize, Rgba),
     tabs: Vec<String>,
     front: Option<usize>,
     asking: Option<String>,
@@ -550,6 +554,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                 Res<pixl::view::Preview>,
                 Res<pixl::tutorial::Tutorial>,
             ),
+                   hover: Res<pixl::view::Hover>,
                    (docs, layers, board): (
                 Res<Documents>,
                 Res<pixl::view::Layers>,
@@ -618,6 +623,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
                         .filter_map(|i| signals.get::<String>(&format!("perf_line_{i}")))
                         .collect(),
                     preview: preview.pixels.len(),
+                    hover: (hover.len(), hover.color),
                     tabs: docs.editors(&editor).map(|(_, e)| e.title()).collect(),
                     front: docs
                         .front()
@@ -663,6 +669,7 @@ pub fn drive(app: App, steps: Vec<Step>) -> Outcome {
         last_stroke: end.last_stroke,
         perf_lines: end.perf_lines,
         preview: end.preview,
+        hover: end.hover,
         tutorial,
         tabs: end.tabs,
         front: end.front,

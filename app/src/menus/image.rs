@@ -216,11 +216,20 @@ pub fn image_commands(
     mut state: ResMut<ImageMenu>,
     mut signals: Signals,
     mut commands: Commands,
-    wake: Option<Res<WakeDeadline>>,
+    (wake, ft): (
+        Option<Res<WakeDeadline>>,
+        Res<crate::tools::transform::FreeTransform>,
+    ),
 ) {
     let editor = &mut *editor;
     let size = (editor.doc.width(), editor.doc.height());
     for id in &chosen.0 {
+        // The free transform holds the cel it floats pixels over: an edit of
+        // the whole image under it would be undone by its Apply or Cancel.
+        if ft.active() && edits_the_image(id) {
+            editor.message = Some(crate::tools::transform::FIRST.to_string());
+            continue;
+        }
         match id.as_str() {
             "image-crop" => match editor.selection.as_ref().map(|s| s.bounds()) {
                 Some(b) if !b.is_empty() => crop_to(editor, b),
@@ -525,6 +534,29 @@ pub fn image_commands(
             crate::repaint_soon(&wake);
         }
     }
+}
+
+/// Whether the Image menu command `id` changes the document's pixels, its
+/// size or its colors, or opens a dialog that does.
+fn edits_the_image(id: &str) -> bool {
+    matches!(
+        id,
+        "image-crop"
+            | "image-flip-h"
+            | "image-flip-v"
+            | "image-rotate-cw"
+            | "image-rotate-ccw"
+            | "image-canvas-size"
+            | "image-resize"
+            | "image-indexed"
+            | "image-rgba"
+            | "image-replace-color"
+            | "palette-load"
+            | "palette-sort"
+            | "palette-ramp"
+            | "palette-from-image"
+            | "palette-lock"
+    )
 }
 
 /// Asks for a palette file and puts the document on it.

@@ -412,6 +412,9 @@ pub struct ViewColors {
     pub marquee_a: Option<Rgba>,
     pub marquee_b: Option<Rgba>,
     pub preview: Option<Rgba>,
+    /// What the tools show before the click: the eraser's footprint in
+    /// this color, every tool preview at its alpha.
+    pub ghost: Option<Rgba>,
     /// The look and the canvas settings these were read under.
     read_for: Option<(Look, [Option<String>; 3])>,
     /// Ticks since the look changed; the cascade lands a tick or two later.
@@ -433,6 +436,7 @@ impl ViewColors {
             && self.marquee_a.is_some()
             && self.marquee_b.is_some()
             && self.preview.is_some()
+            && self.ghost.is_some()
     }
 }
 
@@ -483,6 +487,7 @@ pub fn read_view_colors(look: Res<Look>, settings: Res<Settings>, mut colors: Re
         marquee_a: probe("probe-marquee-a"),
         marquee_b: probe("probe-marquee-b"),
         preview: probe("probe-preview"),
+        ghost: probe("probe-ghost"),
         ..ViewColors::default()
     };
     let changed = read.checker_a != colors.checker_a
@@ -490,7 +495,8 @@ pub fn read_view_colors(look: Res<Look>, settings: Res<Settings>, mut colors: Re
         || read.grid != colors.grid
         || read.marquee_a != colors.marquee_a
         || read.marquee_b != colors.marquee_b
-        || read.preview != colors.preview;
+        || read.preview != colors.preview
+        || read.ghost != colors.ghost;
     if changed {
         colors.checker_a = read.checker_a;
         colors.checker_b = read.checker_b;
@@ -498,6 +504,7 @@ pub fn read_view_colors(look: Res<Look>, settings: Res<Settings>, mut colors: Re
         colors.marquee_a = read.marquee_a;
         colors.marquee_b = read.marquee_b;
         colors.preview = read.preview;
+        colors.ghost = read.ghost;
         colors.revision += 1;
     }
 }
@@ -532,6 +539,68 @@ impl Preview {
             self.revision += 1;
         }
     }
+}
+
+/// What the tool in hand will do where the pointer rests, before the
+/// click: the brush's footprint, or the area the bucket would fill. Drawn
+/// see-through over the document, as runs of document pixels on a row.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct Hover {
+    /// Each run: its row, first column and the column after its last.
+    pub runs: Vec<(i32, i32, i32)>,
+    pub color: Rgba,
+    pub revision: u64,
+}
+
+impl Hover {
+    pub fn set(&mut self, runs: Vec<(i32, i32, i32)>, color: Rgba) {
+        if self.runs != runs || self.color != color {
+            self.runs = runs;
+            self.color = color;
+            self.revision += 1;
+        }
+    }
+
+    pub fn clear(&mut self) {
+        if !self.runs.is_empty() {
+            self.runs.clear();
+            self.revision += 1;
+        }
+    }
+
+    /// How many document pixels it covers.
+    pub fn len(&self) -> usize {
+        self.runs
+            .iter()
+            .map(|(_, a, b)| (b - a).max(0) as usize)
+            .sum()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.runs.is_empty()
+    }
+}
+
+/// `pixels` as runs along their rows.
+pub fn runs_of(pixels: impl IntoIterator<Item = Point>) -> Vec<(i32, i32, i32)> {
+    let mut sorted: Vec<Point> = pixels.into_iter().collect();
+    sorted.sort_by_key(|p| (p.y, p.x));
+    sorted.dedup();
+    let mut out: Vec<(i32, i32, i32)> = Vec::new();
+    for p in sorted {
+        match out.last_mut() {
+            Some((y, _, end)) if *y == p.y && *end == p.x => *end += 1,
+            _ => out.push((p.y, p.x, p.x + 1)),
+        }
+    }
+    out
+}
+
+/// `c` with its alpha scaled by the theme's ghost alpha: how see-through
+/// a tool preview draws.
+pub fn ghosted(c: Rgba, ghost: Option<Rgba>) -> Rgba {
+    let a = ghost.map_or(128, |g| u16::from(g.a));
+    Rgba::new(c.r, c.g, c.b, ((u16::from(c.a) * a) / 255) as u8)
 }
 
 // ---- the composition plan ----
@@ -1786,6 +1855,7 @@ pub struct Drawn {
     view: u64,
     colors: u64,
     preview: u64,
+    hover: u64,
     selection: Option<Selection>,
     /// The view aids' revision the overlay last drew.
     aids: u64,
@@ -1855,6 +1925,7 @@ pub fn sync_layers(
 pub struct OverStage<'w> {
     colors: Res<'w, ViewColors>,
     preview: Res<'w, Preview>,
+    hover: Res<'w, Hover>,
     aids: Res<'w, crate::view::aids::Aids>,
 }
 
@@ -1870,6 +1941,7 @@ pub fn draw_stage(
     let OverStage {
         colors,
         preview,
+        hover,
         aids,
     } = over;
     let size = (view.stage.1.x, view.stage.1.y);
@@ -1929,6 +2001,7 @@ pub fn draw_stage(
     if view_changed
         || drawn.colors != colors.revision
         || drawn.preview != preview.revision
+        || drawn.hover != hover.revision
         || drawn.selection != editor.selection
         || drawn.aids != aids.revision
         || drawn.tile_grid != tile_grid
@@ -1937,13 +2010,14 @@ pub fn draw_stage(
             &overlay,
             &view,
             &colors,
-            &preview,
+            (&preview, &hover),
             editor.selection.as_ref(),
             doc_size,
             grid_from,
         );
         crate::view::aids::draw(&overlay, &view, &aids, &editor);
         drawn.preview = preview.revision;
+        drawn.hover = hover.revision;
         drawn.selection = editor.selection.clone();
         drawn.aids = aids.revision;
         drawn.tile_grid = tile_grid;
@@ -2033,12 +2107,14 @@ fn draw_checker(
 }
 
 /// The pixel grid, from the zoom `grid_from` on while it is on, the
-/// selection outline and the tool preview.
+/// selection outline, and the tool previews: what a drag will draw and
+/// what the tool in hand will do where the pointer rests, both
+/// see-through.
 fn draw_overlay(
     ctx: &Context2d,
     view: &View,
     colors: &ViewColors,
-    preview: &Preview,
+    (preview, hover): (&Preview, &Hover),
     selection: Option<&Selection>,
     doc: (u32, u32),
     grid_from: Option<f64>,
@@ -2047,10 +2123,27 @@ fn draw_overlay(
     view.apply_turn(ctx);
     let z = view.zoom;
     let (ox, oy) = view.origin;
+    let visible = view.visible_pixels(doc.0, doc.1);
+    if !hover.runs.is_empty() {
+        ctx.set_fill_color(canvas_color(hover.color));
+        for &(y, x0, x1) in &hover.runs {
+            if y < visible.y || y >= visible.bottom() {
+                continue;
+            }
+            let (a, b) = (x0.max(visible.x), x1.min(visible.right()));
+            if a < b {
+                ctx.fill_rect(
+                    ox + f64::from(a) * z,
+                    oy + f64::from(y) * z,
+                    f64::from(b - a) * z,
+                    z,
+                );
+            }
+        }
+    }
     if !preview.pixels.is_empty() {
-        let c = preview.color;
+        let c = ghosted(preview.color, colors.ghost);
         ctx.set_fill_color(canvas_color(c));
-        let visible = view.visible_pixels(doc.0, doc.1);
         for p in &preview.pixels {
             if visible.contains(p.x, p.y) {
                 ctx.fill_rect(ox + f64::from(p.x) * z, oy + f64::from(p.y) * z, z, z);

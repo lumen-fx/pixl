@@ -30,6 +30,9 @@ use crate::view::aids::Aids;
 use crate::view::input::{Pointer, PointerInput};
 use crate::view::jobs::{TileJob, WRITE_BUDGET, finishes_at_once, tiles_of};
 
+/// What a command that cannot run under the free transform says.
+pub const FIRST: &str = "Apply the free transform first, or cancel it with Escape";
+
 /// How near, in screen pixels, a press takes a handle.
 const HANDLE_REACH: f64 = 6.0;
 

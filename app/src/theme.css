@@ -28,6 +28,8 @@
   --header-h: 22;
   --panel-w: 264;
   --dock-bottom-h: 200;
+  --panel-fill-min: 160;
+  --panel-tools-w: 40;
   --gutter: 4;
   --toolbar-w: 71;
   --swatch: 16;
@@ -67,6 +69,10 @@
   --marquee-a: #ffffff;
   --marquee-b: #000000;
   --preview: #4f9cf0;
+  /* What a tool will do, drawn over the canvas before the click: the
+     eraser's footprint in this color, and every tool preview at its
+     alpha. */
+  --tool-ghost: #ffffff80;
 
 }
 
@@ -94,6 +100,7 @@
   --marquee-a: #000000;
   --marquee-b: #ffffff;
   --preview: #2f78d6;
+  --tool-ghost: #00000080;
 
 }
 
@@ -448,3 +455,4 @@ dialog { bg: #00000080; }
 #probe-marquee-a { bg: var(--marquee-a); }
 #probe-marquee-b { bg: var(--marquee-b); }
 #probe-preview { bg: var(--preview); }
+#probe-ghost { bg: var(--tool-ghost); }

@@ -1,8 +1,13 @@
 /* The docks around the canvas and the panels in them. */
 
-#center { flex-direction: column; grow: 1; min-width: 0; min-height: 0; }
+/* The canvas takes what the docks leave: a side dock keeps its width and
+   the canvas gives way, never the docks or the tool bar beside them. */
+#center { flex-direction: column; grow: 1; flex-basis: 0; min-width: 0; min-height: 0; }
 .dock { gap: 1; min-width: 0; min-height: 0; }
-.dock.side { min-width: 160; }
+/* A side dock with more panels than fit scrolls instead of squeezing a
+   panel to nothing. */
+.dock.side { min-width: 160; shrink: 0; overflow-y: scroll; }
+.dock.side > .panel.fill { min-height: var(--panel-fill-min); }
 #dock-bottom { min-height: 80; flex-direction: row; }
 #dock-bottom .panel { grow: 1; min-width: 0; }
 .dock.empty { display: none; }
@@ -19,8 +24,21 @@
 .panel.closed { display: none; }
 .panel.collapsed { grow: 0; }
 .panel.collapsed > .panel-body { display: none; }
-.panel-title { grow: 1; }
-.panel-tools { align: center; gap: 1; }
+/* The collapse and close buttons keep the header's right end, over
+   whatever else the header holds when the panel is narrow. */
+.panel > .panel-header { overflow: hidden; padding: 0 var(--panel-tools-w) 0 var(--space-4); }
+.panel-title { grow: 1; min-width: 0; text-overflow: ellipsis; }
+.panel-tools {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: var(--panel-tools-w);
+  justify: center;
+  align: center;
+  gap: 1;
+  bg: var(--surface-3);
+}
+/* In a side dock the buttons stay clear of the dock's scroll bar. */
+.dock.side .panel-tools { inset: 0 var(--scrollbar) 0 auto; }
 .panel-btn {
   width: 16;
   height: 16;

@@ -13,7 +13,9 @@ pub mod transform;
 
 use lumenui::bevy_ecs::system::SystemParam;
 use lumenui::glam::Vec2;
-use lumenui::lumen_core::input::{ModifiersState, PointerButton, PointerData};
+use lumenui::lumen_core::input::{
+    FocusTracker, FocusVisible, ModifiersState, PointerButton, PointerData, PointerPressed,
+};
 use lumenui::lumen_core::tick::WakeDeadline;
 use lumenui::prelude::*;
 use pixl_document::history::Transaction;
@@ -271,6 +273,32 @@ pub fn stage_hovered<'a>(mut hovered: impl Iterator<Item = Option<&'a LumenId>>)
             )
         })
     })
+}
+
+/// A press on the stage takes the keyboard focus from the control that
+/// had it, as a press on a page's background does in a browser: Enter then
+/// applies a transform or a shape and nothing else, not also the button
+/// clicked last. A text field keeps its own handling.
+pub fn blur_on_stage_press(
+    mut presses: MessageReader<PointerPressed>,
+    hovered: Query<Option<&LumenId>, With<Hovered>>,
+    mut tracker: ResMut<FocusTracker>,
+    typing: Query<(), With<TextInput>>,
+    mut commands: Commands,
+) {
+    if presses.read().count() == 0 || !stage_hovered(hovered.iter()) {
+        return;
+    }
+    let Some(focused) = tracker.0 else {
+        return;
+    };
+    if typing.contains(focused) {
+        return;
+    }
+    tracker.0 = None;
+    if let Ok(mut e) = commands.get_entity(focused) {
+        e.remove::<(Focused, FocusVisible)>();
+    }
 }
 
 /// Runs the active tool over this tick's pointer events.
@@ -791,6 +819,168 @@ fn show_shape(editor: &Editor, preview: &mut Preview, session: &Session, shift: 
         let pixels = shape_pixels(*tool, *from, to, editor.options.filled, &b);
         preview.set(pixels, paint_color(editor, *button));
     }
+}
+
+/// The tools whose brush footprint shows where the pointer rests: the ones
+/// the size slider sizes.
+fn shows_footprint(tool: Tool) -> bool {
+    matches!(
+        tool,
+        Tool::Pencil
+            | Tool::Eraser
+            | Tool::Line
+            | Tool::Rectangle
+            | Tool::Ellipse
+            | Tool::Curve
+            | Tool::Polygon
+    ) || (crate::tools::toolbox::sized(tool) && tool != Tool::Spray)
+}
+
+/// The tools that take color away or move it rather than lay the
+/// foreground down: their footprint shows in the theme's ghost color.
+fn footprint_in_ghost(tool: Tool) -> bool {
+    matches!(tool, Tool::Eraser | Tool::Smudge | Tool::Blur)
+}
+
+/// The largest document, in pixels, whose bucket fill area the hover
+/// preview works out: past it the preview shows the pixel under the
+/// pointer, so a move over a huge canvas never waits on a flood fill.
+pub const FILL_PREVIEW_MOST: u64 = 1 << 20;
+
+/// What the bucket's hover preview was worked out for: the pixel, the
+/// pixels it read and the options it used.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FillKey {
+    p: Point,
+    revision: u64,
+    generation: u64,
+    at: (pixl_document::LayerId, usize),
+    tolerance: u8,
+    contiguous: bool,
+    selection: Option<Rect>,
+}
+
+/// Runs of document pixels along their rows: row, first column, the column
+/// after the last.
+type Runs = Vec<(i32, i32, i32)>;
+
+/// What decides whether the hover preview shows.
+#[derive(SystemParam)]
+pub struct HoverState<'w, 's> {
+    gesture: Res<'w, Gesture>,
+    toolbox: Res<'w, crate::tools::toolbox::Toolbox>,
+    transform: Res<'w, crate::tools::transform::FreeTransform>,
+    home: Res<'w, Home>,
+    colors: Res<'w, crate::view::ViewColors>,
+    moved: MessageReader<'w, 's, lumenui::lumen_core::input::PointerMoved>,
+    left: MessageReader<'w, 's, lumenui::lumen_core::input::PointerLeft>,
+}
+
+/// Shows, see-through over the canvas, what the tool in hand will do where
+/// the pointer rests: the brush's footprint at its size in the color it
+/// paints, or the area the bucket would fill. It follows the pointer over
+/// the stage and goes when the pointer leaves it, a press starts, or a
+/// shape, a transform or a rig mode takes the stage. Nothing here asks for
+/// a frame: with the pointer still, nothing changes and nothing redraws.
+pub fn hover_preview(
+    editor: Res<Editor>,
+    place: Place,
+    mut state: HoverState,
+    mut hover: ResMut<crate::view::Hover>,
+    mut away: Local<bool>,
+    mut fill: Local<Option<(FillKey, Runs)>>,
+) {
+    if state.left.read().count() > 0 {
+        *away = true;
+    }
+    if state.moved.read().count() > 0 {
+        *away = false;
+    }
+    let (view, nav) = (&place.view, &place.nav);
+    let tool = editor.tool;
+    let at = nav.hover.filter(|at| view.contains(*at));
+    let busy = state.gesture.active()
+        || state.toolbox.active()
+        || state.transform.active()
+        || state.home.open
+        || nav.space_held
+        || nav.panning.is_some()
+        || place.rig.captures_pointer()
+        || crate::tools::reference::takes_pointer(&editor)
+        || editor.placing_tiles();
+    let Some(at) = at.filter(|_| !busy && !*away && place.over_stage()) else {
+        hover.clear();
+        return;
+    };
+    let p = view.doc_pixel(at);
+    let ghost = state.colors.ghost;
+    if shows_footprint(tool) {
+        let brush = editor.brush(editor.options.size);
+        let bounds = editor.doc.bounds();
+        let pixels: Vec<Point> = brush
+            .offsets()
+            .iter()
+            .map(|o| Point::new(p.x + o.x, p.y + o.y))
+            .filter(|q| bounds.contains(q.x, q.y))
+            .collect();
+        let color = if footprint_in_ghost(tool) {
+            ghost.unwrap_or(Rgba::new(255, 255, 255, 128))
+        } else {
+            crate::view::ghosted(editor.fg, ghost)
+        };
+        hover.set(crate::view::runs_of(pixels), color);
+    } else if tool == Tool::Bucket && editor.doc.bounds().contains(p.x, p.y) {
+        let key = FillKey {
+            p,
+            revision: editor.revision,
+            generation: editor.generation,
+            at: (editor.layer, editor.frame),
+            tolerance: editor.options.tolerance,
+            contiguous: editor.options.contiguous,
+            selection: editor.selection.as_ref().map(|s| s.bounds()),
+        };
+        if fill.as_ref().is_none_or(|(k, _)| *k != key) {
+            *fill = Some((key, fill_area(&editor, p)));
+        }
+        let runs = fill.as_ref().map(|(_, r)| r.clone()).unwrap_or_default();
+        hover.set(runs, crate::view::ghosted(editor.fg, ghost));
+    } else {
+        hover.clear();
+    }
+}
+
+/// The pixels a bucket fill at `p` would cover, as runs; the pixel alone
+/// on a document past [`FILL_PREVIEW_MOST`] or while a mask is edited.
+fn fill_area(editor: &Editor, p: Point) -> Runs {
+    let doc = &editor.doc;
+    let area = u64::from(doc.width()) * u64::from(doc.height());
+    let sampler = fill::Sampler::cel(doc, editor.layer, editor.frame);
+    let (true, false, Ok(sampler)) = (area <= FILL_PREVIEW_MOST, editor.mask_edit, sampler) else {
+        return vec![(p.y, p.x, p.x + 1)];
+    };
+    let opts = FillOptions {
+        connectivity: Connectivity::Four,
+        tolerance: editor.options.tolerance,
+        contiguous: editor.options.contiguous,
+    };
+    let region = fill::region(&sampler, p, &opts, editor.selection.as_ref());
+    let b = region.bounds();
+    let mut runs = Vec::new();
+    for y in b.y..b.bottom() {
+        let mut start = None;
+        for x in b.x..=b.right() {
+            let inside = x < b.right() && region.contains(x, y);
+            match (inside, start) {
+                (true, None) => start = Some(x),
+                (false, Some(a)) => {
+                    runs.push((y, a, x));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+    }
+    runs
 }
 
 /// Tells the status bar where the pointer is and what is under it.

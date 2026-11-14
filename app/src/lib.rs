@@ -126,6 +126,7 @@ pub fn editor(ui: CompiledUi) -> App {
         .insert_resource(view::View::default())
         .insert_resource(view::ViewColors::default())
         .insert_resource(view::Preview::default())
+        .insert_resource(view::Hover::default())
         .insert_resource(view::Drawn::default())
         .insert_resource(view::Layers::default())
         .insert_resource(view::input::Navigation::default())
@@ -247,12 +248,14 @@ pub fn editor(ui: CompiledUi) -> App {
                         panels::timeline::timeline_input,
                         panels::preview::preview_controls,
                         tools::pick_tool,
+                        tools::blur_on_stage_press,
                         tools::tool_options,
                         tools::use_tools,
                         tools::toolbox::toolbox_options,
                         tools::toolbox::use_toolbox,
                         tools::transform::use_transform,
                         tools::reference::place_reference,
+                        tools::hover_preview,
                         perf::note_stroke,
                     )
                     .chain(),
@@ -307,6 +310,9 @@ pub fn editor(ui: CompiledUi) -> App {
         .on_click("lp-cancel", panels::layers::properties_cancel)
         // A row of the history list.
         .on_click("history-rows", panels::history_row_click)
+        // After the tick's systems, the splits' among them, so the end of a
+        // gutter drag is kept on the tick it happens.
+        .add_systems(TickStage::LayoutSync, workspace::keep_dock_sizes)
         .add_systems(
             TickStage::A11ySync,
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),
