@@ -1,5 +1,4 @@
-<column id="panel-color" class="panel">
-  <row class="panel-header"><label class="panel-title" text="Color"/></row>
+<dock-panel id="panel-color" title="Color" class="panel">
   <column id="color-body" class="panel-body">
     <row class="color-pair">
       <tooltip text="Edit the foreground color"><tile id="color-fg" class="swatch big editing"/></tooltip>
@@ -29,4 +28,4 @@
     <row class="channel"><label class="channel-name" bind-text="color_c2_name" text="B"/><slider id="color-c2" class="channel-slider" min="0" max="1" step="0.001" value="0" bind-value="color_c2"/><input id="color-c2-field" class="channel-field" bind-text="color_c2_text" text="0"/></row>
     <row class="channel"><label class="channel-name" text="A"/><slider id="color-c3" class="channel-slider" min="0" max="1" step="0.001" value="1" bind-value="color_c3"/><input id="color-c3-field" class="channel-field" bind-text="color_c3_text" text="255"/></row>
   </column>
-</column>
+</dock-panel>

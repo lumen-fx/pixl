@@ -1,55 +1,33 @@
-/* The docks around the canvas and the panels in them. */
+/* The dock around the canvas, in pixl's colors: its tab strips are the
+   panels' headers. */
 
-/* The canvas takes what the docks leave: a side dock keeps its width and
-   the canvas gives way, never the docks or the tool bar beside them. */
-#center { flex-direction: column; grow: 1; flex-basis: 0; min-width: 0; min-height: 0; }
-.dock { gap: 1; min-width: 0; min-height: 0; }
-/* A side dock with more panels than fit scrolls instead of squeezing a
-   panel to nothing. */
-.dock.side { min-width: 160; shrink: 0; overflow-y: scroll; }
-.dock.side > .panel.fill { min-height: var(--panel-fill-min); }
-#dock-bottom { min-height: 80; flex-direction: row; }
-#dock-bottom .panel { grow: 1; min-width: 0; }
-.dock.empty { display: none; }
-.split-gutter { flex-basis: var(--gutter); bg: var(--edge); }
-.split-gutter:hover { bg: var(--accent-soft); }
-.split-gutter:focus { bg: var(--accent); }
-
-/* An empty side dock takes its gutter with it: the docks split's children
-   are the left dock, a gutter, the center, a gutter and the right dock. */
-#docks.no-left > .split-gutter:nth-child(2) { display: none; }
-#docks.no-right > .split-gutter:nth-child(4) { display: none; }
-#center.no-bottom > .split-gutter { display: none; }
-
-.panel.closed { display: none; }
-.panel.collapsed { grow: 0; }
-.panel.collapsed > .panel-body { display: none; }
-/* The collapse and close buttons keep the header's right end, over
-   whatever else the header holds when the panel is narrow. */
-.panel > .panel-header { overflow: hidden; padding: 0 var(--panel-tools-w) 0 var(--space-4); }
-.panel-title { grow: 1; min-width: 0; text-overflow: ellipsis; }
-.panel-tools {
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: var(--panel-tools-w);
-  justify: center;
-  align: center;
-  gap: 1;
-  bg: var(--surface-3);
+.pixl {
+  --lumen-dock-stack-bg: var(--surface-2);
+  --lumen-dock-border: var(--edge);
+  --lumen-dock-strip-bg: var(--surface-3);
+  --lumen-dock-tab-height: var(--header-h);
+  --lumen-dock-tab-font-size: var(--font-size-small);
+  --lumen-dock-tab-text: var(--text-dim);
+  --lumen-dock-tab-hover-bg: var(--surface-4);
+  --lumen-dock-tab-active-bg: var(--surface-2);
+  --lumen-dock-tab-active-text: var(--text);
+  --lumen-dock-accent: var(--accent);
+  --lumen-dock-window-bg: var(--surface-1);
+  --lumen-dock-drop-bg: var(--accent-soft);
+  --lumen-dock-drop-border: var(--accent);
+  --lumen-dock-float-bg: var(--surface-2);
+  --lumen-dock-float-border: var(--edge);
+  --lumen-dock-sidebar-bg: var(--surface-1);
 }
-/* In a side dock the buttons stay clear of the dock's scroll bar. */
-.dock.side .panel-tools { inset: 0 var(--scrollbar) 0 auto; }
-.panel-btn {
-  width: 16;
-  height: 16;
-  min-height: 16;
-  padding: 0;
-  bg: #00000000;
-  border: none;
-  text-color: var(--text-faint);
-  font-size: var(--font-size-small);
-}
-.panel-btn:hover { bg: var(--surface-4); text-color: var(--text); }
+#dock { bg: var(--edge); }
+/* The canvas shows no tab while it is alone in its stack; a panel dropped
+   beside it brings the tabs back, so the canvas can be picked again. */
+.dock-stack.center.single > .tab-strip { display: none; }
+.dock-stack.center { border: none; }
+.dock-panel.panel { bg: var(--surface-2); }
+/* A folded panel shows its tab. */
+.dock-stack.collapsed { min-height: var(--header-h); }
+.panel.fill { min-height: 120; }
 
 /* The Panels and layouts dialog. */
 .ws-card { min-width: 720; }

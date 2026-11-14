@@ -1,19 +1,20 @@
-//! The workspace: which dock each panel sits in (left, right or bottom of
-//! the canvas), their order, which are collapsed or hidden, and how wide or
-//! tall the docks are; named layouts of all of that, three built in and any
-//! number of the user's, kept in `workspace.json` in pixl's data folder.
-//!
-//! A panel is any element with the class `panel` inside a dock, found in
-//! the markup when the window opens; where the markup puts it is its
-//! default place. A layout names the panels it places and leaves the rest
-//! where the markup put them, so a panel added later joins every layout.
+//! The workspace: pixl's panels in Lumen's dock around the canvas. The dock
+//! itself (`lumenui-dock`) moves panels by dragging their tabs, pops them out
+//! into windows of their own, keeps the arrangement between runs and holds
+//! the named layouts; the markup declares the panels, the default
+//! arrangement and the built-in layouts. This module adds what pixl puts on
+//! top: the Window menu's layout commands, the Panels and layouts dialog,
+//! folding a panel to its tab, and taking over the arrangement an earlier
+//! pixl kept in `workspace.json`.
 
-use lumenui::bevy_ecs::change_detection::DetectChanges;
-use lumenui::lumen_core::input::{ContextMenuEvent, MenuClicked};
+use lumenui::lumen_core::components::{A11yLabel, DirtyLayout};
+use lumenui::lumen_core::input::MenuClicked;
 use lumenui::lumen_core::tick::WakeDeadline;
-use lumenui::lumen_primitives::split::{Split, SplitResized, SplitSizes};
+use lumenui::lumen_primitives::TabStripButton;
 use lumenui::prelude::*;
-use serde::{Deserialize, Serialize};
+use lumenui_dock::model::Node;
+use lumenui_dock::{Dock, DockCloseButton, DockTab, DockTabCaption, Layout, Persist};
+use serde::Deserialize;
 
 use crate::home::Home;
 use crate::ids::ElementIds;
@@ -21,793 +22,438 @@ use crate::panels::escape;
 use crate::settings::keymap::KeyCommands;
 use crate::settings::store::Store;
 
-/// The file the workspace is kept in.
-pub const FILE: &str = "workspace.json";
+/// The id of the dock the panels sit in.
+pub const DOCK: &str = "dock";
 
-/// The built-in layouts, in the order the Window menu lists them.
+/// The panel holding the canvas: always docked, never listed.
+pub const CANVAS: &str = "panel-canvas";
+
+/// The built-in layouts, in the order the Window menu lists them. The
+/// markup writes them as `<dock-layout>`s.
 pub const BUILT_IN: [&str; 4] = ["Paint", "Animate", "Rig", "Tiles"];
 
-/// The docks around the canvas.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
-pub enum Dock {
+/// The file an earlier pixl kept its arrangement in, before the dock: read
+/// once, carried over, and removed.
+pub const LEGACY_FILE: &str = "workspace.json";
+
+/// The sides of the canvas the dialog moves panels to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Edge {
     Left,
     Right,
     Bottom,
 }
 
-impl Dock {
-    pub const ALL: [Dock; 3] = [Dock::Left, Dock::Right, Dock::Bottom];
-
-    /// The id of the dock's element.
-    pub fn element_id(self) -> &'static str {
-        match self {
-            Dock::Left => "dock-left",
-            Dock::Right => "dock-right",
-            Dock::Bottom => "dock-bottom",
-        }
-    }
-
-    pub fn from_element_id(id: &str) -> Option<Dock> {
-        Dock::ALL.into_iter().find(|d| d.element_id() == id)
-    }
-
-    /// The short name the panel list's dock buttons show.
-    pub fn short(self) -> &'static str {
-        match self {
-            Dock::Left => "Left",
-            Dock::Right => "Right",
-            Dock::Bottom => "Bottom",
-        }
-    }
+impl Edge {
+    pub const ALL: [Edge; 3] = [Edge::Left, Edge::Right, Edge::Bottom];
 
     fn key(self) -> &'static str {
         match self {
-            Dock::Left => "left",
-            Dock::Right => "right",
-            Dock::Bottom => "bottom",
+            Edge::Left => "left",
+            Edge::Right => "right",
+            Edge::Bottom => "bottom",
         }
     }
 
-    fn from_key(key: &str) -> Option<Dock> {
-        Dock::ALL.into_iter().find(|d| d.key() == key)
-    }
-}
-
-/// Where one panel is.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Place {
-    /// The panel element's id.
-    pub panel: String,
-    pub dock: Dock,
-    /// Only the header shows.
-    #[serde(default)]
-    pub collapsed: bool,
-    #[serde(default = "shown")]
-    pub shown: bool,
-}
-
-fn shown() -> bool {
-    true
-}
-
-/// The size of each dock across the canvas: the left and right docks'
-/// width, the bottom dock's height. `None` is the theme's size.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
-pub struct Sizes {
-    #[serde(default)]
-    pub left: Option<f32>,
-    #[serde(default)]
-    pub right: Option<f32>,
-    #[serde(default)]
-    pub bottom: Option<f32>,
-}
-
-impl Sizes {
-    pub fn get(&self, dock: Dock) -> Option<f32> {
-        match dock {
-            Dock::Left => self.left,
-            Dock::Right => self.right,
-            Dock::Bottom => self.bottom,
-        }
+    fn from_key(key: &str) -> Option<Edge> {
+        Edge::ALL.into_iter().find(|e| e.key() == key)
     }
 
-    pub fn set(&mut self, dock: Dock, size: Option<f32>) {
-        match dock {
-            Dock::Left => self.left = size,
-            Dock::Right => self.right = size,
-            Dock::Bottom => self.bottom = size,
+    /// The short name the panel list's buttons show.
+    fn short(self) -> &'static str {
+        match self {
+            Edge::Left => "Left",
+            Edge::Right => "Right",
+            Edge::Bottom => "Bottom",
         }
     }
 }
 
-/// A named arrangement of the panels.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-pub struct Layout {
-    pub name: String,
-    /// The panels this layout places, each dock's in order from the top
-    /// (left for the bottom dock).
-    #[serde(default)]
-    pub panels: Vec<Place>,
-    #[serde(default)]
-    pub sizes: Sizes,
-}
-
-impl Layout {
-    /// One of the built-in layouts.
-    pub fn built_in(name: &str) -> Option<Layout> {
-        let place = |panel: &str, dock: Dock, shown: bool| Place {
-            panel: panel.to_string(),
-            dock,
-            collapsed: false,
-            shown,
-        };
-        // The Rig panel shows its header alone outside the Rig layout.
-        let rig_folded = Place {
-            collapsed: true,
-            ..place("panel-rig", Dock::Right, true)
-        };
-        // The timeline lists the layers against the frames, as Aseprite's
-        // does, so the Layers panel waits in the Window menu's list.
-        let panels = match name {
-            // Drawing: color at hand, the timeline below the canvas for the
-            // layers and frames.
-            "Paint" => vec![
-                place("panel-color", Dock::Right, true),
-                place("panel-palette", Dock::Right, true),
-                place("panel-layers", Dock::Right, false),
-                rig_folded,
-                place("panel-history", Dock::Right, true),
-                place("panel-brushes", Dock::Right, true),
-                place("panel-tileset", Dock::Right, false),
-                place("panel-timeline", Dock::Bottom, true),
-                place("panel-preview", Dock::Bottom, false),
-            ],
-            // Animation: the frames and the preview below the canvas,
-            // history out of the way.
-            "Animate" => vec![
-                place("panel-color", Dock::Right, true),
-                place("panel-palette", Dock::Right, true),
-                place("panel-layers", Dock::Right, false),
-                rig_folded,
-                place("panel-history", Dock::Right, false),
-                place("panel-brushes", Dock::Right, false),
-                place("panel-tileset", Dock::Right, false),
-                place("panel-timeline", Dock::Bottom, true),
-                place("panel-preview", Dock::Bottom, true),
-            ],
-            // Rigging: the rig and history on the right, colors on the
-            // left.
-            "Rig" => vec![
-                place("panel-color", Dock::Left, true),
-                place("panel-palette", Dock::Left, true),
-                place("panel-layers", Dock::Right, false),
-                place("panel-rig", Dock::Right, true),
-                place("panel-history", Dock::Right, true),
-                place("panel-brushes", Dock::Right, false),
-                place("panel-tileset", Dock::Right, false),
-                place("panel-timeline", Dock::Bottom, true),
-                place("panel-preview", Dock::Bottom, false),
-            ],
-            // Tile work: the tileset beside the colors, the map's layers
-            // and frames below.
-            "Tiles" => vec![
-                place("panel-color", Dock::Right, true),
-                place("panel-palette", Dock::Right, true),
-                place("panel-tileset", Dock::Right, true),
-                place("panel-layers", Dock::Right, false),
-                rig_folded,
-                place("panel-history", Dock::Right, true),
-                place("panel-brushes", Dock::Right, false),
-                place("panel-timeline", Dock::Bottom, true),
-                place("panel-preview", Dock::Bottom, false),
-            ],
-            _ => return None,
-        };
-        Some(Layout {
-            name: name.to_string(),
-            panels,
-            sizes: Sizes::default(),
-        })
-    }
-
-    /// Every panel of `known` (each with its default dock, in markup order)
-    /// placed: as this layout says, else where the markup puts it, shown.
-    /// Panels the layout names that are not in the window are left out.
-    pub fn resolve(&self, known: &[(String, Dock)]) -> Vec<Place> {
-        let mut out: Vec<Place> = self
-            .panels
-            .iter()
-            .filter(|p| known.iter().any(|(id, _)| *id == p.panel))
-            .cloned()
-            .collect();
-        for (id, dock) in known {
-            if !out.iter().any(|p| p.panel == *id) {
-                out.push(Place {
-                    panel: id.clone(),
-                    dock: *dock,
-                    collapsed: false,
-                    shown: true,
-                });
-            }
-        }
-        out
-    }
-
-    /// This layout with every panel of `known` in it, so later edits have
-    /// a place to change.
-    pub fn completed(&self, known: &[(String, Dock)]) -> Layout {
-        let mut out = self.clone();
-        let resolved = self.resolve(known);
-        // Keep what the layout says about panels not in the window now.
-        let absent: Vec<Place> = self
-            .panels
-            .iter()
-            .filter(|p| !known.iter().any(|(id, _)| *id == p.panel))
-            .cloned()
-            .collect();
-        out.panels = resolved;
-        out.panels.extend(absent);
-        out
-    }
-
-    pub fn place(&self, panel: &str) -> Option<&Place> {
-        self.panels.iter().find(|p| p.panel == panel)
-    }
-
-    fn place_mut(&mut self, panel: &str) -> Option<&mut Place> {
-        self.panels.iter_mut().find(|p| p.panel == panel)
-    }
-
-    /// The panels of `dock`, in order.
-    pub fn in_dock(&self, dock: Dock) -> Vec<&Place> {
-        self.panels.iter().filter(|p| p.dock == dock).collect()
-    }
-
-    /// Moves `panel` to the end of `dock`, showing it.
-    pub fn move_to(&mut self, panel: &str, dock: Dock) {
-        if let Some(i) = self.panels.iter().position(|p| p.panel == panel) {
-            let mut place = self.panels.remove(i);
-            place.dock = dock;
-            place.shown = true;
-            self.panels.push(place);
-        }
-    }
-
-    /// Moves `panel` one step toward the start of its dock (`up`) or the
-    /// end.
-    pub fn shift(&mut self, panel: &str, up: bool) {
-        let Some(i) = self.panels.iter().position(|p| p.panel == panel) else {
-            return;
-        };
-        let dock = self.panels[i].dock;
-        let same: Vec<usize> = (0..self.panels.len())
-            .filter(|&k| self.panels[k].dock == dock)
-            .collect();
-        let at = same
-            .iter()
-            .position(|&k| k == i)
-            .expect("the panel is in its dock");
-        let other = if up {
-            at.checked_sub(1)
-        } else {
-            Some(at + 1).filter(|&k| k < same.len())
-        };
-        if let Some(other) = other {
-            self.panels.swap(i, same[other]);
-        }
-    }
-
-    pub fn toggle_collapsed(&mut self, panel: &str) {
-        if let Some(p) = self.place_mut(panel) {
-            p.collapsed = !p.collapsed;
-        }
-    }
-
-    pub fn set_shown(&mut self, panel: &str, shown: bool) {
-        if let Some(p) = self.place_mut(panel) {
-            p.shown = shown;
-        }
-    }
-
-    /// Whether any panel of `dock` shows.
-    pub fn dock_shows(&self, dock: Dock) -> bool {
-        self.panels.iter().any(|p| p.dock == dock && p.shown)
-    }
-}
-
-/// What `workspace.json` holds.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-struct Saved {
-    /// The arrangement in use, with the name of the layout it came from.
-    live: Option<Layout>,
-    /// The user's own layouts.
-    #[serde(default)]
-    layouts: Vec<Layout>,
-}
-
-/// A panel the window has, as the markup put it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Known {
-    pub id: String,
-    pub dock: Dock,
-    /// The text of its header's title.
-    pub title: String,
-}
-
-/// The workspace in use and the user's layouts.
+/// What the rest of pixl reads about the workspace, and the dialog's state.
 #[derive(Resource)]
 pub struct Workspace {
-    store: Store,
-    /// The arrangement on screen; its name is the layout it started from.
-    pub live: Layout,
-    /// The user's own layouts.
-    pub layouts: Vec<Layout>,
-    /// The panels the window has, found when it opened.
-    pub known: Vec<Known>,
-    /// The panel the panel menu was opened for.
-    menu_panel: Option<String>,
-    /// The arrangement must be put on the window.
-    dirty: bool,
-    /// The docks' sizes must be held on the splits again: the layout or a
-    /// gutter changed them, or the theme's sizes changed.
-    hold: bool,
-    /// Each dock's size as the window first laid it out, before anything
-    /// held it: what a dock the user has not sized goes back to. A dock
-    /// that was empty then, or any dock after the interface scale changed,
-    /// goes back to the theme's size.
-    natural: Option<Sizes>,
+    /// The named layout the arrangement came from.
+    pub layout: String,
+    /// Every layout name: the built-in ones, then the user's.
+    pub names: Vec<String>,
+    /// Where an earlier pixl's `workspace.json` is looked for.
+    legacy: Store,
+    /// The dock has its first arrangement: the one it kept, the one carried
+    /// over from `workspace.json`, or the Paint layout.
+    started: bool,
     /// What the panel list and layout list last showed.
     shown_lists: Option<(String, String)>,
 }
 
 impl Workspace {
-    /// The workspace kept in `store`, or the Paint layout when it keeps
-    /// none.
-    pub fn load(store: Store) -> Self {
-        let saved: Saved = store.load(FILE).unwrap_or_default();
-        let live = saved
-            .live
-            .unwrap_or_else(|| Layout::built_in("Paint").expect("Paint is built in"));
+    /// The workspace of the `pixl` program, which carries over the
+    /// arrangement in pixl's data folder.
+    pub fn user() -> Self {
+        Self::with_legacy(Store::user())
+    }
+
+    /// A workspace with nothing to carry over.
+    pub fn in_memory() -> Self {
+        Self::with_legacy(Store::in_memory())
+    }
+
+    /// A workspace that carries over the `workspace.json` in `store`.
+    pub fn with_legacy(store: Store) -> Self {
         Self {
-            store,
-            live,
-            layouts: saved.layouts,
-            known: Vec::new(),
-            menu_panel: None,
-            dirty: true,
-            hold: true,
-            natural: None,
+            layout: String::new(),
+            names: BUILT_IN.iter().map(|s| s.to_string()).collect(),
+            legacy: store,
+            started: false,
             shown_lists: None,
         }
     }
-
-    /// The workspace in pixl's data folder.
-    pub fn user() -> Self {
-        Self::load(Store::user())
-    }
-
-    pub fn in_memory() -> Self {
-        Self::load(Store::in_memory())
-    }
-
-    fn known_docks(&self) -> Vec<(String, Dock)> {
-        self.known.iter().map(|k| (k.id.clone(), k.dock)).collect()
-    }
-
-    /// The layout named `name`: the user's own, else a built-in one.
-    pub fn layout(&self, name: &str) -> Option<Layout> {
-        self.layouts
-            .iter()
-            .find(|l| l.name == name)
-            .cloned()
-            .or_else(|| Layout::built_in(name))
-    }
-
-    /// Every layout name: the built-in ones, then the user's.
-    pub fn names(&self) -> Vec<String> {
-        BUILT_IN
-            .iter()
-            .map(|s| s.to_string())
-            .chain(
-                self.layouts
-                    .iter()
-                    .map(|l| l.name.clone())
-                    .filter(|n| !BUILT_IN.contains(&n.as_str())),
-            )
-            .collect()
-    }
-
-    /// Puts the layout named `name` on screen.
-    pub fn switch(&mut self, name: &str) -> bool {
-        let Some(layout) = self.layout(name) else {
-            return false;
-        };
-        self.live = layout.completed(&self.known_docks());
-        self.changed();
-        true
-    }
-
-    /// Puts the live layout back the way its layout has it.
-    pub fn reset(&mut self) {
-        let name = self.live.name.clone();
-        if !self.switch(&name) {
-            self.switch("Paint");
-        }
-    }
-
-    /// Saves the arrangement on screen as the user's layout `name`,
-    /// replacing one of that name. A built-in name stays the built-in
-    /// layout's.
-    pub fn save_as(&mut self, name: &str) -> std::result::Result<(), String> {
-        let name = name.trim();
-        if name.is_empty() {
-            return Err("Name the layout first".to_string());
-        }
-        if BUILT_IN.contains(&name) {
-            return Err(format!("{name} is a built-in layout; pick another name"));
-        }
-        let mut layout = self.live.clone();
-        layout.name = name.to_string();
-        match self.layouts.iter_mut().find(|l| l.name == name) {
-            Some(l) => *l = layout,
-            None => self.layouts.push(layout),
-        }
-        self.live.name = name.to_string();
-        self.persist();
-        Ok(())
-    }
-
-    /// Deletes the user's layout `name`.
-    pub fn delete(&mut self, name: &str) -> bool {
-        let before = self.layouts.len();
-        self.layouts.retain(|l| l.name != name);
-        let gone = self.layouts.len() != before;
-        if gone {
-            self.persist();
-        }
-        gone
-    }
-
-    /// Edits the live layout, then shows and keeps it.
-    pub fn edit(&mut self, f: impl FnOnce(&mut Layout)) {
-        f(&mut self.live);
-        self.changed();
-    }
-
-    /// Shows every panel.
-    pub fn show_all(&mut self) {
-        self.edit(|l| {
-            for p in &mut l.panels {
-                p.shown = true;
-            }
-        });
-    }
-
-    fn changed(&mut self) {
-        self.dirty = true;
-        self.hold = true;
-        self.persist();
-    }
-
-    /// Keeps the sizes a gutter drag left: each shown dock's size across
-    /// the canvas, from the panes of the split that was resized.
-    pub fn resized(&mut self, panes: &[(String, f32)]) {
-        let mut sizes = self.live.sizes;
-        for (id, size) in panes {
-            if let Some(dock) = Dock::from_element_id(id)
-                && self.live.dock_shows(dock)
-            {
-                sizes.set(dock, Some(size.round()));
-            }
-        }
-        // A drag holds every pane where it is; hold them as the docks want.
-        self.hold = true;
-        if sizes != self.live.sizes {
-            self.live.sizes = sizes;
-            self.persist();
-        }
-    }
-
-    fn persist(&self) {
-        let saved = Saved {
-            live: Some(self.live.clone()),
-            layouts: self.layouts.clone(),
-        };
-        // A workspace that cannot be written still works for this session.
-        let _ = self.store.save(FILE, &saved);
-    }
-
-    /// The panel's header title.
-    pub fn title(&self, panel: &str) -> String {
-        self.known
-            .iter()
-            .find(|k| k.id == panel)
-            .map_or_else(|| panel.to_string(), |k| k.title.clone())
-    }
 }
 
-/// Finds the window's panels: each `.panel` child of a dock, with its
-/// header's title. Empty until the markup is in the window.
-fn discover() -> Vec<Known> {
-    let mut out = Vec::new();
-    for dock in Dock::ALL {
-        let Some(node) = dom::get_by_id(dock.element_id()) else {
-            continue;
-        };
-        for child in node.children() {
-            if !child.has_class("panel") {
-                continue;
-            }
-            let Some(id) = child.id() else {
-                continue;
-            };
-            let title = child
-                .first_child()
-                .and_then(|h| {
-                    h.children()
-                        .into_iter()
-                        .find(|n| n.has_class("panel-title"))
-                })
-                .and_then(|t| t.text())
-                .unwrap_or_else(|| id.clone());
-            out.push(Known { id, dock, title });
-        }
-    }
+/// The layout names in the order pixl lists them: the built-in ones, then
+/// the user's in the dock's order.
+fn ordered_names(dock: &Dock) -> Vec<String> {
+    let mut out: Vec<String> = BUILT_IN.iter().map(|s| s.to_string()).collect();
+    out.extend(
+        dock.layouts()
+            .into_iter()
+            .filter(|n| !BUILT_IN.contains(&n.as_str())),
+    );
     out
 }
 
-/// Gives a panel's header its collapse and close buttons.
-fn add_header_tools(panel: &str, header: dom::Node) {
-    let tools = dom::spawn("row");
-    tools.set_class("panel-tools");
-    header.append(tools);
-    tools.set_inner_markup(&format!(
-        r#"<button id="{panel}-collapse" class="panel-btn collapse" text="-"/><button id="{panel}-close" class="panel-btn close" text="x"/>"#
-    ));
-}
-
-/// Whether the window shows `layout` (every panel of `known` in its dock,
-/// in order, collapsed and shown as it says).
-fn on_screen(places: &[Place]) -> bool {
-    for dock in Dock::ALL {
-        let Some(node) = dom::get_by_id(dock.element_id()) else {
-            return false;
-        };
-        let here: Vec<String> = node
-            .children()
-            .into_iter()
-            .filter(|c| c.has_class("panel"))
-            .filter_map(|c| c.id())
-            .collect();
-        let want: Vec<&str> = places
-            .iter()
-            .filter(|p| p.dock == dock)
-            .map(|p| p.panel.as_str())
-            .collect();
-        if here != want {
-            return false;
-        }
-    }
-    places.iter().all(|p| {
-        dom::get_by_id(&p.panel).is_some_and(|n| {
-            n.has_class("collapsed") == p.collapsed && n.has_class("closed") == !p.shown
+/// The panels the dialog lists, in the order of their titles.
+fn listed_panels(dock: &Dock) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = dock
+        .panels()
+        .into_iter()
+        .filter(|p| p != CANVAS)
+        .map(|p| {
+            let title = dom::get_by_id(&p)
+                .and_then(|n| n.get_attr("title"))
+                .unwrap_or_else(|| p.clone());
+            (p, title)
         })
-    })
+        .collect();
+    out.sort_by(|a, b| a.1.cmp(&b.1));
+    out
 }
 
-/// Puts `places` on the window.
-fn put_on_screen(places: &[Place]) {
-    for dock in Dock::ALL {
-        let Some(node) = dom::get_by_id(dock.element_id()) else {
-            continue;
-        };
-        let here: Vec<String> = node
-            .children()
-            .into_iter()
-            .filter(|c| c.has_class("panel"))
-            .filter_map(|c| c.id())
-            .collect();
-        let want: Vec<&Place> = places.iter().filter(|p| p.dock == dock).collect();
-        if here
-            .iter()
-            .map(String::as_str)
-            .ne(want.iter().map(|p| p.panel.as_str()))
-        {
-            // Appending each in turn leaves them in order.
-            for p in &want {
-                if let Some(panel) = dom::get_by_id(&p.panel) {
-                    panel.move_to(node);
-                }
-            }
-        }
-        let shows = want.iter().any(|p| p.shown);
-        if node.has_class("empty") == shows {
-            if shows {
-                node.remove_class("empty");
-            } else {
-                node.add_class("empty");
-            }
-        }
-    }
-    for p in places {
-        if let Some(panel) = dom::get_by_id(&p.panel) {
-            if panel.has_class("collapsed") != p.collapsed {
-                panel.toggle_class("collapsed");
-            }
-            if panel.has_class("closed") == p.shown {
-                panel.toggle_class("closed");
-            }
-            if let Some(button) = dom::get_by_id(&format!("{}-collapse", p.panel)) {
-                button.set_text(if p.collapsed { "+" } else { "-" });
-            }
-        }
-    }
-    // The gutter beside an empty side dock goes with it.
-    let side = |dock: Dock| places.iter().any(|p| p.dock == dock && p.shown);
-    if let Some(docks) = dom::get_by_id("docks") {
-        let mut class = String::from("docks");
-        if !side(Dock::Left) {
-            class.push_str(" no-left");
-        }
-        if !side(Dock::Right) {
-            class.push_str(" no-right");
-        }
-        let mut have = docks.classes();
-        have.sort();
-        let mut want: Vec<String> = class.split(' ').map(str::to_string).collect();
-        want.sort();
-        if have != want {
-            docks.set_class(&class);
-        }
-    }
-    if let Some(center) = dom::get_by_id("center") {
-        let bottom = side(Dock::Bottom);
-        if center.has_class("no-bottom") == bottom {
-            center.toggle_class("no-bottom");
-        }
-    }
+/// Whether `node` holds `panel`.
+fn holds(node: &Node, panel: &str) -> bool {
+    node.panels().iter().any(|p| *p == panel)
 }
 
-/// Keeps the docks' sizes: a gutter the user moved leaves the docks beside
-/// it at their new size, and the splits hold each dock at its size once
-/// the layout is on the window.
-pub fn keep_dock_sizes(
-    mut ws: ResMut<Workspace>,
-    mut resized: MessageReader<SplitResized>,
-    (splits, mut split_sizes): (DockSplits, SplitSizes),
-    settings: Res<crate::settings::Settings>,
-    wake: Option<Res<WakeDeadline>>,
-) {
-    for r in resized.read() {
-        let Ok((_, _, split)) = splits.splits.get(r.split) else {
-            continue;
-        };
-        let panes: Vec<(String, f32)> = split
-            .panes
-            .iter()
-            .zip(&r.sizes)
-            .filter_map(|(p, size)| Some((splits.ids.get(p.entity).ok()?.0.clone(), *size)))
-            .collect();
-        ws.resized(&panes);
+/// The side of the canvas `panel` is on in `layout`'s dock, if it is docked
+/// there. Every pixl layout is a row of columns around the canvas's column,
+/// so a panel in a column before the canvas's is on its left, one after it
+/// on its right, and one in the canvas's column below it.
+pub fn edge_of(layout: &Layout, panel: &str) -> Option<Edge> {
+    let Node::Split(row) = &layout.docks.get(DOCK)?.root else {
+        return None;
+    };
+    let center = row.children.iter().position(|c| holds(&c.node, CANVAS))?;
+    let at = row.children.iter().position(|c| holds(&c.node, panel))?;
+    if at < center {
+        return Some(Edge::Left);
     }
-    // The interface scale changes the theme's dock sizes.
-    if settings.is_changed() && !settings.is_added() {
-        ws.natural = Some(Sizes::default());
-        ws.hold = true;
+    if at > center {
+        return Some(Edge::Right);
     }
-    if !ws.hold || ws.dirty {
+    let canvas = layout.find(CANVAS)?.stack;
+    (layout.find(panel)?.stack != canvas).then_some(Edge::Bottom)
+}
+
+/// The panels docked on `edge` of the canvas, in tree order.
+fn panels_on(layout: &Layout, edge: Edge) -> Vec<String> {
+    let Some(area) = layout.docks.get(DOCK) else {
+        return Vec::new();
+    };
+    area.root
+        .panels()
+        .into_iter()
+        .filter(|p| edge_of(layout, p) == Some(edge))
+        .cloned()
+        .collect()
+}
+
+/// Moves `panel` to `edge` of the canvas: below the last panel there (to
+/// the right of it below the canvas), or along that edge when none is.
+/// Shows it if it was hidden.
+pub fn move_to_edge(dock: &Dock, panel: &str, edge: Edge) {
+    let layout = dock.save();
+    if dock.is_shown(panel) && edge_of(&layout, panel) == Some(edge) {
         return;
     }
-    if ws.natural.is_none() {
-        // Wait for the first layout of the splits.
-        if splits.splits.iter().all(|(_, _, s)| s.panes.is_empty()) {
-            return;
-        }
-        ws.natural = Some(laid_out(&splits));
-    }
-    let natural = ws.natural.unwrap_or_default();
-    let mut sizes = ws.live.sizes;
-    for dock in Dock::ALL {
-        if sizes.get(dock).is_none() {
-            sizes.set(dock, natural.get(dock).or_else(|| theme_size(dock)));
-        }
-    }
-    if hold_dock_sizes(&sizes, &splits, &mut split_sizes) {
-        ws.hold = false;
-        crate::repaint_soon(&wake);
-    }
-}
-
-/// A dock's size across the canvas as the theme sets it: the side docks'
-/// `width`, the bottom dock's `height`.
-fn theme_size(dock: Dock) -> Option<f32> {
-    let property = if dock == Dock::Bottom {
-        "height"
-    } else {
-        "width"
-    };
-    let value = dom::get_by_id(dock.element_id())?.computed_style_of(property)?;
-    let number: String = value
-        .trim()
-        .chars()
-        .take_while(|c| c.is_ascii_digit() || *c == '.')
+    let others: Vec<String> = panels_on(&layout, edge)
+        .into_iter()
+        .filter(|p| p != panel)
         .collect();
-    number.parse().ok()
+    // A panel the dock refuses to move keeps its place.
+    let _ = match (others.last(), edge) {
+        (Some(last), Edge::Bottom) => dock.move_to(panel, last, "right"),
+        (Some(last), _) => dock.move_to(panel, last, "bottom"),
+        (None, Edge::Bottom) => dock.move_to(panel, CANVAS, "bottom"),
+        (None, side) => dock.move_to(panel, DOCK, side.key()),
+    };
 }
 
-/// The size of each dock that shows, as the splits last measured it.
-fn laid_out(splits: &DockSplits) -> Sizes {
-    let mut out = Sizes::default();
-    for (_, _, split) in &splits.splits {
-        for pane in &split.panes {
-            if let Some(dock) = splits
-                .ids
-                .get(pane.entity)
-                .ok()
-                .and_then(|id| Dock::from_element_id(&id.0))
-                && pane.size > 0.0
-            {
-                out.set(dock, Some(pane.size));
+/// Whether the stack holding `panel` shows only its tab.
+pub fn folded(layout: &Layout, panel: &str) -> bool {
+    layout
+        .find(panel)
+        .and_then(|loc| layout.stack(&loc.stack).map(|s| s.collapsed))
+        .unwrap_or(false)
+}
+
+/// How much of the height of its column each panel takes while it is
+/// open, as the markup's layouts give it: the color and palette panels
+/// their content's height, the others a share of what is left.
+const SIZES: [(&str, Size); 7] = [
+    ("panel-color", Size::Basis(400.0)),
+    ("panel-palette", Size::Basis(92.0)),
+    ("panel-layers", Size::Share(40.0)),
+    ("panel-rig", Size::Share(30.0)),
+    ("panel-history", Size::Share(23.0)),
+    ("panel-brushes", Size::Share(20.0)),
+    ("panel-tileset", Size::Share(26.0)),
+];
+
+/// A panel's height in its column.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Size {
+    /// This many pixels.
+    Basis(f32),
+    /// This share of the room the fixed panels leave.
+    Share(f32),
+}
+
+/// The height `panel` takes in its column while open.
+fn size_of(panel: &str) -> Size {
+    SIZES
+        .iter()
+        .find(|(p, _)| *p == panel)
+        .map_or(Size::Share(20.0), |(_, s)| *s)
+}
+
+/// Folds or unfolds the stack `stack` under `node`, giving its room in the
+/// split it is in to the stacks beside it while folded. Returns whether it
+/// found the stack.
+fn fold_in(node: &mut Node, stack: &str, fold: bool, size: Size) -> bool {
+    let Node::Split(split) = node else {
+        return false;
+    };
+    for child in &mut split.children {
+        if let Node::Stack(s) = &mut child.node
+            && s.id == stack
+        {
+            s.collapsed = fold;
+            (child.basis, child.grow) = match (fold, size) {
+                (true, _) => (None, 0.0),
+                (false, Size::Basis(px)) => (Some(px), 0.0),
+                (false, Size::Share(share)) => (None, share),
+            };
+            return true;
+        }
+        if fold_in(&mut child.node, stack, fold, size) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Folds `panel`'s stack to its tab, giving its room to the stacks beside
+/// it, or unfolds it to its share again. lumen-dock 0.0.11's own collapse
+/// keeps a folded stack's room (lumen-fx/lumen#641), so this sets the
+/// layout itself.
+pub fn set_folded(dock: &Dock, panel: &str, fold: bool) {
+    let mut layout = dock.save();
+    let Some(loc) = layout.find(panel) else {
+        return;
+    };
+    let size = size_of(panel);
+    let found = layout
+        .docks
+        .values_mut()
+        .any(|area| fold_in(&mut area.root, &loc.stack, fold, size));
+    if found {
+        dock.restore(&layout);
+    }
+}
+
+/// Folds `panel`'s stack to its tab, or unfolds it.
+pub fn toggle_fold(dock: &Dock, panel: &str) {
+    let now = folded(&dock.save(), panel);
+    set_folded(dock, panel, !now);
+}
+
+/// Shows `panel` unfolded: what a mode that works in a panel does.
+pub fn unfold(dock: &Dock, panel: &str) {
+    if !dock.is_shown(panel) {
+        let _ = dock.show(panel);
+    }
+    if folded(&dock.save(), panel) {
+        set_folded(dock, panel, false);
+    }
+}
+
+/// Puts the layout called `name` on screen.
+pub fn switch(dock: &Dock, name: &str) -> bool {
+    dock.apply_layout(name).is_ok()
+}
+
+// ---- carrying over workspace.json -------------------------------------------
+
+/// A panel as `workspace.json` placed it.
+#[derive(Deserialize)]
+struct LegacyPlace {
+    panel: String,
+    dock: String,
+    #[serde(default)]
+    collapsed: bool,
+    #[serde(default = "yes")]
+    shown: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// The docks' sizes as `workspace.json` kept them.
+#[derive(Deserialize, Default)]
+struct LegacySizes {
+    #[serde(default)]
+    left: Option<f32>,
+    #[serde(default)]
+    right: Option<f32>,
+    #[serde(default)]
+    bottom: Option<f32>,
+}
+
+/// A layout as `workspace.json` kept it.
+#[derive(Deserialize)]
+struct LegacyLayout {
+    name: String,
+    #[serde(default)]
+    panels: Vec<LegacyPlace>,
+    #[serde(default)]
+    sizes: LegacySizes,
+}
+
+/// What `workspace.json` held.
+#[derive(Deserialize)]
+struct Legacy {
+    live: Option<LegacyLayout>,
+    #[serde(default)]
+    layouts: Vec<LegacyLayout>,
+}
+
+/// Arranges the dock as `old` was: from the built-in layout it names (Paint
+/// for one of the user's), each panel shown, hidden, folded and on the side
+/// of the canvas it had, and the side columns and the bottom row as wide
+/// and tall as they were.
+fn arrange_like(dock: &Dock, old: &LegacyLayout) {
+    let base = if BUILT_IN.contains(&old.name.as_str()) {
+        old.name.as_str()
+    } else {
+        "Paint"
+    };
+    let _ = dock.apply_layout(base);
+    let known = dock.panels();
+    for place in old.panels.iter().filter(|p| known.contains(&p.panel)) {
+        if !place.shown {
+            if dock.is_shown(&place.panel) {
+                let _ = dock.hide(&place.panel);
+            }
+            continue;
+        }
+        if let Some(edge) = Edge::from_key(&place.dock) {
+            move_to_edge(dock, &place.panel, edge);
+        }
+        if folded(&dock.save(), &place.panel) != place.collapsed {
+            set_folded(dock, &place.panel, place.collapsed);
+        }
+    }
+    let mut layout = dock.save();
+    let Some(area) = layout.docks.get_mut(DOCK) else {
+        return;
+    };
+    let Node::Split(row) = &mut area.root else {
+        return;
+    };
+    let Some(center) = row.children.iter().position(|c| holds(&c.node, CANVAS)) else {
+        return;
+    };
+    let last = row.children.len() - 1;
+    for (i, child) in row.children.iter_mut().enumerate() {
+        let size = if i < center {
+            old.sizes.left
+        } else if i > center && i == last {
+            old.sizes.right
+        } else {
+            None
+        };
+        if size.is_some() {
+            child.basis = size;
+        }
+    }
+    if let Node::Split(column) = &mut row.children[center].node
+        && let Some(bottom) = old.sizes.bottom
+    {
+        for child in &mut column.children {
+            if !holds(&child.node, CANVAS) {
+                child.basis = Some(bottom);
             }
         }
     }
-    out
+    dock.restore(&layout);
 }
 
-/// Holds the panes of the docks' splits: each dock at `sizes`, and the
-/// canvas at none, so it takes what the docks leave. A gutter drag holds
-/// every pane where it is, a hidden dock at nothing, and this puts them
-/// back. Returns false while the splits are not laid out yet.
-fn hold_dock_sizes(sizes: &Sizes, splits: &DockSplits, split_sizes: &mut SplitSizes) -> bool {
-    let mut held = true;
-    for (entity, id, split) in &splits.splits {
-        if !matches!(id.0.as_str(), "docks" | "center") {
-            continue;
-        }
-        let mut want = Vec::with_capacity(split.panes.len());
-        for pane in &split.panes {
-            let dock = splits
-                .ids
-                .get(pane.entity)
-                .ok()
-                .and_then(|id| Dock::from_element_id(&id.0));
-            let size = match dock {
-                Some(d) => sizes.get(d).unwrap_or_else(|| {
-                    held = false;
-                    pane.size
-                }),
-                None => 0.0,
-            };
-            want.push(size);
-        }
-        held &= split_sizes.set(entity, &want);
+/// Takes over the arrangement and the user's layouts an earlier pixl kept
+/// in `workspace.json`, then removes the file. Returns whether there was
+/// one.
+fn carry_over(dock: &Dock, store: &Store) -> bool {
+    let Some(old) = store.load::<Legacy>(LEGACY_FILE) else {
+        return false;
+    };
+    for layout in old
+        .layouts
+        .iter()
+        .filter(|l| !BUILT_IN.contains(&l.name.as_str()))
+    {
+        arrange_like(dock, layout);
+        dock.save_layout(&layout.name);
     }
-    held
+    match &old.live {
+        Some(live) => arrange_like(dock, live),
+        None => {
+            let _ = dock.apply_layout("Paint");
+        }
+    }
+    if let Some(path) = store.path(LEGACY_FILE) {
+        // The dock keeps the arrangement now; a file left behind would be
+        // carried over again.
+        let _ = std::fs::remove_file(path);
+    }
+    true
 }
 
-/// The docks' splits and the ids of their panes.
-#[derive(lumenui::bevy_ecs::system::SystemParam)]
-pub struct DockSplits<'w, 's> {
-    splits: Query<'w, 's, (Entity, &'static LumenId, &'static Split)>,
-    ids: Query<'w, 's, &'static LumenId>,
+/// Whether the dock kept an arrangement from an earlier run, which it puts
+/// back on its own.
+fn dock_kept_one(persist: Option<&Persist>) -> bool {
+    persist == Some(&Persist::Auto)
+        && lumenui::lumen_core::app_paths::data_dir()
+            .join(lumenui_dock::FILE)
+            .exists()
 }
 
-/// The panel an element belongs to, through its ancestors' ids.
-fn panel_of(entity: Entity, ids: &ElementIds, ws: &Workspace) -> Option<String> {
-    ids.up(entity)
-        .find(|id| ws.known.iter().any(|k| k.id == *id))
-        .map(str::to_owned)
-}
+// ---- systems ------------------------------------------------------------------
 
-/// The Window menu, the panel menu, the panel headers' buttons and the
-/// Panels and layouts dialog.
-#[allow(clippy::too_many_arguments)]
+/// The Window menu's layout commands and the dialog's buttons.
 pub fn workspace_input(
     mut ws: ResMut<Workspace>,
+    dock: Dock,
     mut menu: MessageReader<MenuClicked>,
     mut clicks: MessageReader<ClickEvent>,
-    mut context: MessageReader<ContextMenuEvent>,
     ids: ElementIds,
     (home, keys): (Res<Home>, Res<KeyCommands>),
     mut signals: Signals,
@@ -821,23 +467,16 @@ pub fn workspace_input(
             .map(|(id, _)| id.clone()),
     );
     chosen.extend(clicks.read().filter_map(|c| ids.id_of(c.entity)));
-    for request in context.read() {
-        if let Some(panel) = panel_of(request.entity, &ids, &ws) {
-            ws.menu_panel = Some(panel);
-            signals.open_menu_at("panel-menu", request.position.x, request.position.y);
-        }
-    }
     if home.open {
         return;
     }
     for id in chosen {
-        run(&mut ws, &id, &mut signals);
+        run(&mut ws, &dock, &id, &mut signals);
     }
 }
 
 /// Carries out one workspace command by its element or menu item id.
-pub fn run(ws: &mut Workspace, id: &str, signals: &mut Signals) {
-    let menu_panel = ws.menu_panel.clone();
+pub fn run(ws: &mut Workspace, dock: &Dock, id: &str, signals: &mut Signals) {
     match id {
         "menu-window" => {
             signals.toggle("__menu_open:window-menu");
@@ -848,20 +487,31 @@ pub fn run(ws: &mut Workspace, id: &str, signals: &mut Signals) {
             signals.set("ws_open", true);
         }
         "ws-close" => signals.set("ws_open", false),
-        "window-show-all" => ws.show_all(),
-        "window-layout-reset" | "ws-reset" => ws.reset(),
+        "window-show-all" => {
+            for (panel, _) in listed_panels(dock) {
+                if !dock.is_shown(&panel) {
+                    let _ = dock.show(&panel);
+                }
+            }
+        }
+        "window-layout-reset" | "ws-reset" => dock.reset(),
         "ws-save" => {
             let name = signals.get::<String>("ws_name").unwrap_or_default();
-            let note = match ws.save_as(&name) {
-                Ok(()) => format!("Saved {}", name.trim()),
-                Err(e) => e,
+            let name = name.trim();
+            let note = if name.is_empty() {
+                "Name the layout first".to_string()
+            } else if BUILT_IN.contains(&name) {
+                format!("{name} is a built-in layout; pick another name")
+            } else {
+                dock.save_layout(name);
+                format!("Saved {name}")
             };
             ws.shown_lists = None;
             signals.set("ws_message", note);
         }
         "ws-delete" => {
-            let name = ws.live.name.clone();
-            let note = if ws.delete(&name) {
+            let name = ws.layout.clone();
+            let note = if dock.delete_layout(&name) {
                 format!("Deleted {name}")
             } else {
                 format!("{name} is built in")
@@ -869,112 +519,91 @@ pub fn run(ws: &mut Workspace, id: &str, signals: &mut Signals) {
             ws.shown_lists = None;
             signals.set("ws_message", note);
         }
-        "panel-menu-left" | "panel-menu-right" | "panel-menu-bottom" => {
-            if let (Some(panel), Some(dock)) = (
-                menu_panel,
-                id.strip_prefix("panel-menu-").and_then(Dock::from_key),
-            ) {
-                ws.edit(|l| l.move_to(&panel, dock));
-            }
-        }
-        "panel-menu-up" | "panel-menu-down" => {
-            if let Some(panel) = menu_panel {
-                let up = id.ends_with("up");
-                ws.edit(|l| l.shift(&panel, up));
-            }
-        }
-        "panel-menu-collapse" => {
-            if let Some(panel) = menu_panel {
-                ws.edit(|l| l.toggle_collapsed(&panel));
-            }
-        }
-        "panel-menu-hide" => {
-            if let Some(panel) = menu_panel {
-                ws.edit(|l| l.set_shown(&panel, false));
-            }
-        }
         other => {
             if let Some(name) = other.strip_prefix("window-layout-") {
                 let name = BUILT_IN
                     .iter()
                     .find(|b| b.eq_ignore_ascii_case(name))
                     .map_or_else(|| name.to_string(), |b| b.to_string());
-                ws.switch(&name);
+                switch(dock, &name);
             } else if let Some(k) = other
                 .strip_prefix("ws-layout-")
                 .and_then(|k| k.parse::<usize>().ok())
             {
-                if let Some(name) = ws.names().get(k).cloned() {
-                    ws.switch(&name);
+                if let Some(name) = ws.names.get(k).cloned() {
+                    switch(dock, &name);
                     signals.set("ws_name", name);
                     ws.shown_lists = None;
                 }
-            } else if let Some(panel) = other.strip_suffix("-collapse") {
-                let panel = panel.to_string();
-                ws.edit(|l| l.toggle_collapsed(&panel));
-            } else if let Some(panel) = other.strip_suffix("-close") {
-                let panel = panel.to_string();
-                ws.edit(|l| l.set_shown(&panel, false));
             } else if let Some(rest) = other.strip_prefix("ws-") {
-                panel_row_command(ws, rest);
+                panel_row_command(dock, rest);
+                ws.shown_lists = None;
             }
         }
     }
 }
 
-/// A click in the dialog's panel list: `show-<panel>`, `dock-<dock>-<panel>`,
-/// `up-<panel>` or `down-<panel>`.
-fn panel_row_command(ws: &mut Workspace, rest: &str) {
+/// A click in the dialog's panel list: `show-<panel>`, `fold-<panel>`,
+/// `window-<panel>` or `edge-<edge>-<panel>`.
+fn panel_row_command(dock: &Dock, rest: &str) {
     if let Some(panel) = rest.strip_prefix("show-") {
-        let panel = panel.to_string();
-        let shown = ws.live.place(&panel).is_none_or(|p| p.shown);
-        ws.edit(|l| l.set_shown(&panel, !shown));
-    } else if let Some(rest) = rest.strip_prefix("dock-") {
-        if let Some((dock, panel)) = rest.split_once('-')
-            && let Some(dock) = Dock::from_key(dock)
-        {
-            let panel = panel.to_string();
-            ws.edit(|l| l.move_to(&panel, dock));
+        let _ = dock.toggle(panel);
+    } else if let Some(panel) = rest.strip_prefix("fold-") {
+        if dock.is_shown(panel) {
+            toggle_fold(dock, panel);
         }
-    } else if let Some(panel) = rest.strip_prefix("up-") {
-        let panel = panel.to_string();
-        ws.edit(|l| l.shift(&panel, true));
-    } else if let Some(panel) = rest.strip_prefix("down-") {
-        let panel = panel.to_string();
-        ws.edit(|l| l.shift(&panel, false));
+    } else if let Some(panel) = rest.strip_prefix("window-") {
+        let _ = if dock.window_of(panel) > 0 {
+            dock.attach(panel)
+        } else {
+            dock.detach(panel)
+        };
+    } else if let Some(rest) = rest.strip_prefix("edge-")
+        && let Some((edge, panel)) = rest.split_once('-')
+        && let Some(edge) = Edge::from_key(edge)
+    {
+        move_to_edge(dock, panel, edge);
     }
 }
 
-/// The dialog's panel list, one row per panel, dock by dock.
-fn panel_list_markup(ws: &Workspace) -> String {
+/// The dialog's panel list, one row per panel.
+fn panel_list_markup(dock: &Dock) -> String {
+    let layout = dock.save();
     let mut out = String::new();
-    for dock in Dock::ALL {
-        for place in ws.live.in_dock(dock) {
-            if !ws.known.iter().any(|k| k.id == place.panel) {
-                continue;
-            }
-            let p = &place.panel;
-            let (state, label) = if place.shown {
-                ("on", "Shown")
-            } else {
-                ("off", "Hidden")
-            };
+    for (p, title) in listed_panels(dock) {
+        let shown = dock.is_shown(&p);
+        let (state, label) = if shown {
+            ("on", "Shown")
+        } else {
+            ("off", "Hidden")
+        };
+        out.push_str(&format!(
+            r#"<row id="ws-row-{p}" class="ws-row"><label class="ws-panel-name" text="{title}"/><button id="ws-show-{p}" class="ws-chip {state}" text="{label}"/>"#,
+            title = escape(&title),
+        ));
+        let in_window = dock.window_of(&p) > 0;
+        let edge = if shown && !in_window {
+            edge_of(&layout, &p)
+        } else {
+            None
+        };
+        for e in Edge::ALL {
+            let active = if edge == Some(e) { " active" } else { "" };
             out.push_str(&format!(
-                r#"<row id="ws-row-{p}" class="ws-row"><label class="ws-panel-name" text="{title}"/><button id="ws-show-{p}" class="ws-chip {state}" text="{label}"/>"#,
-                title = escape(&ws.title(p)),
-            ));
-            for d in Dock::ALL {
-                let active = if d == dock { " active" } else { "" };
-                out.push_str(&format!(
-                    r#"<button id="ws-dock-{key}-{p}" class="ws-chip{active}" text="{short}"/>"#,
-                    key = d.key(),
-                    short = d.short(),
-                ));
-            }
-            out.push_str(&format!(
-                r#"<button id="ws-up-{p}" class="ws-chip" text="Up"/><button id="ws-down-{p}" class="ws-chip" text="Down"/></row>"#
+                r#"<button id="ws-edge-{key}-{p}" class="ws-chip{active}" text="{short}"/>"#,
+                key = e.key(),
+                short = e.short(),
             ));
         }
+        let window = if in_window { " active" } else { "" };
+        let fold = if shown && folded(&layout, &p) {
+            " active"
+        } else {
+            ""
+        };
+        out.push_str(&format!(
+            r#"<button id="ws-window-{p}" class="ws-chip{window}" text="Window"/><button id="ws-fold-{p}" class="ws-chip{fold}" text="Folded"/></row>"#
+        ));
     }
     out
 }
@@ -982,12 +611,8 @@ fn panel_list_markup(ws: &Workspace) -> String {
 /// The dialog's layout list: the built-in layouts, then the user's.
 fn layout_list_markup(ws: &Workspace) -> String {
     let mut out = String::new();
-    for (k, name) in ws.names().iter().enumerate() {
-        let current = if *name == ws.live.name {
-            " current"
-        } else {
-            ""
-        };
+    for (k, name) in ws.names.iter().enumerate() {
+        let current = if *name == ws.layout { " current" } else { "" };
         let kind = if BUILT_IN.contains(&name.as_str()) {
             "built in"
         } else {
@@ -1001,50 +626,99 @@ fn layout_list_markup(ws: &Workspace) -> String {
     out
 }
 
-/// Finds the panels once the markup is in, puts the live layout on the
-/// window whenever it changes (checking on later ticks that it took, since
-/// DOM edits land a tick later), and keeps the dialog's lists current.
+/// Gives the dock its first arrangement once it has read the markup: the
+/// one it kept, else the one carried over from `workspace.json`, else the
+/// Paint layout. Then keeps the layout name and the names pixl lists in
+/// step with the dock, and the dialog's lists current.
 pub fn show_workspace(
     mut ws: ResMut<Workspace>,
+    dock: Dock,
     signals: Signals,
-    wake: Option<Res<WakeDeadline>>,
+    (persist, wake): (Option<Res<Persist>>, Option<Res<WakeDeadline>>),
 ) {
-    if ws.known.is_empty() {
-        let known = discover();
-        if known.is_empty() {
+    if !ws.started {
+        if !dock.panels().iter().any(|p| p == CANVAS) {
             return;
         }
-        for k in &known {
-            if let Some(header) = dom::get_by_id(&k.id).and_then(|n| n.first_child()) {
-                add_header_tools(&k.id, header);
-            }
+        ws.started = true;
+        if !dock_kept_one(persist.as_deref()) && !carry_over(&dock, &ws.legacy) {
+            let _ = dock.apply_layout("Paint");
         }
-        ws.known = known;
-        let docks = ws.known_docks();
-        ws.live = ws.live.completed(&docks);
-        ws.dirty = true;
+        crate::repaint_soon(&wake);
     }
-    if ws.dirty {
-        let places = ws.live.resolve(&ws.known_docks());
-        if on_screen(&places) {
-            ws.dirty = false;
-        } else {
-            put_on_screen(&places);
-            crate::repaint_soon(&wake);
-        }
+    let layout = signals.get::<String>("dock.layout").unwrap_or_default();
+    if layout != ws.layout {
+        ws.layout = layout;
         ws.shown_lists = None;
     }
-    if signals.get::<bool>("ws_open") == Some(true) {
-        let lists = (panel_list_markup(&ws), layout_list_markup(&ws));
-        if ws.shown_lists.as_ref() != Some(&lists)
-            && let (Some(panels), Some(layouts)) = (
-                dom::get_by_id("ws-panel-list"),
-                dom::get_by_id("ws-layout-list"),
-            )
-        {
-            panels.set_inner_markup(&lists.0);
-            layouts.set_inner_markup(&lists.1);
-            ws.shown_lists = Some(lists);
+    let names = ordered_names(&dock);
+    if names != ws.names {
+        ws.names = names;
+        ws.shown_lists = None;
+    }
+    if signals.get::<bool>("ws_open") != Some(true) {
+        ws.shown_lists = None;
+        return;
+    }
+    let lists = (panel_list_markup(&dock), layout_list_markup(&ws));
+    if ws.shown_lists.as_ref() != Some(&lists)
+        && let (Some(panels), Some(layouts)) = (
+            dom::get_by_id("ws-panel-list"),
+            dom::get_by_id("ws-layout-list"),
+        )
+    {
+        panels.set_inner_markup(&lists.0);
+        layouts.set_inner_markup(&lists.1);
+        ws.shown_lists = Some(lists);
+        crate::repaint_soon(&wake);
+    }
+}
+
+/// Keeps each tab's caption, accessible name and close button on the panel
+/// it shows, and takes the close button off a panel that cannot close.
+/// lumen-dock 0.0.11 sets them only when a tab's button is made, and moving
+/// panels hands buttons to other panels, so a tab read another panel's
+/// title and its close button closed that other panel
+/// (lumen-fx/lumen#640).
+pub fn retitle_reused_tabs(
+    buttons: Query<(Entity, &TabStripButton, &Children), Changed<TabStripButton>>,
+    tabs: Query<&DockTab>,
+    mut captions: Query<&mut TextContent, With<DockTabCaption>>,
+    mut closes: Query<&mut DockCloseButton>,
+    mut commands: Commands,
+    wake: Option<Res<WakeDeadline>>,
+) {
+    for (button, b, children) in &buttons {
+        let Ok(tab) = tabs.get(b.tab) else {
+            continue;
+        };
+        let node = dom::get_by_id(&tab.panel);
+        let title = node
+            .and_then(|n| n.get_attr("title"))
+            .unwrap_or_else(|| tab.panel.clone());
+        let closable = node.and_then(|n| n.get_attr("closable")).as_deref() != Some("false");
+        let mut changed = false;
+        for &child in children {
+            if let Ok(mut text) = captions.get_mut(child)
+                && text.0 != title
+            {
+                text.0 = title.clone();
+                commands.entity(child).insert(DirtyLayout);
+                changed = true;
+            }
+            if let Ok(mut close) = closes.get_mut(child) {
+                if !closable {
+                    // A button handed to the canvas keeps no close button.
+                    commands.entity(child).despawn();
+                    changed = true;
+                } else if close.panel != tab.panel {
+                    close.panel = tab.panel.clone();
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            commands.entity(button).insert(A11yLabel(title));
             crate::repaint_soon(&wake);
         }
     }
@@ -1054,143 +728,55 @@ pub fn show_workspace(
 mod tests {
     use super::*;
 
-    fn known() -> Vec<(String, Dock)> {
-        [
-            "panel-color",
-            "panel-palette",
-            "panel-layers",
-            "panel-rig",
-            "panel-history",
-            "panel-brushes",
-            "panel-tileset",
-        ]
-        .iter()
-        .map(|p| (p.to_string(), Dock::Right))
-        .chain(
-            ["panel-timeline", "panel-preview"]
-                .iter()
-                .map(|p| (p.to_string(), Dock::Bottom)),
-        )
-        .collect()
-    }
-
-    fn order(l: &Layout, dock: Dock) -> Vec<&str> {
-        l.in_dock(dock).iter().map(|p| p.panel.as_str()).collect()
+    /// A layout as pixl's are: a column of panels left of the canvas, the
+    /// canvas above the timeline, and a column on the right.
+    fn layout() -> Layout {
+        let json = r#"{
+          "lumen-dock": 2,
+          "docks": { "dock": { "root": { "split": "row", "id": "r", "children": [
+            { "basis": 264, "node": { "stack": "s1", "panels": ["panel-color"], "active": "panel-color" } },
+            { "grow": 1, "node": { "split": "column", "id": "c", "children": [
+              { "grow": 1, "node": { "stack": "s2", "panels": ["panel-canvas"], "active": "panel-canvas", "center": true } },
+              { "basis": 230, "node": { "stack": "s3", "panels": ["panel-timeline"], "active": "panel-timeline" } } ] } },
+            { "basis": 264, "node": { "split": "column", "id": "rr", "children": [
+              { "node": { "stack": "s4", "panels": ["panel-rig", "panel-history"], "active": "panel-rig", "collapsed": true } },
+              { "grow": 1, "node": { "stack": "s5", "panels": ["panel-brushes"], "active": "panel-brushes" } } ] } }
+          ] } } }
+        }"#;
+        Layout::from_json(json, 0).expect("a layout")
     }
 
     #[test]
-    fn a_panel_the_layout_does_not_name_keeps_its_default_place() {
-        let mut k = known();
-        k.push(("panel-new".to_string(), Dock::Bottom));
-        let rig = Layout::built_in("Rig").unwrap().completed(&k);
-        assert_eq!(order(&rig, Dock::Left), ["panel-color", "panel-palette"]);
+    fn a_panel_is_on_the_side_of_the_canvas_its_column_is() {
+        let l = layout();
+        assert_eq!(edge_of(&l, "panel-color"), Some(Edge::Left));
+        assert_eq!(edge_of(&l, "panel-timeline"), Some(Edge::Bottom));
+        assert_eq!(edge_of(&l, "panel-history"), Some(Edge::Right));
+        assert_eq!(edge_of(&l, CANVAS), None);
+        assert_eq!(edge_of(&l, "panel-layers"), None, "not docked");
         assert_eq!(
-            order(&rig, Dock::Bottom),
-            ["panel-timeline", "panel-preview", "panel-new"]
-        );
-        assert!(rig.place("panel-new").unwrap().shown);
-    }
-
-    #[test]
-    fn a_layout_drops_panels_the_window_lacks_but_remembers_them() {
-        let mut l = Layout::built_in("Paint").unwrap();
-        l.panels.push(Place {
-            panel: "panel-gone".to_string(),
-            dock: Dock::Left,
-            collapsed: true,
-            shown: true,
-        });
-        assert!(l.resolve(&known()).iter().all(|p| p.panel != "panel-gone"));
-        assert!(l.completed(&known()).place("panel-gone").is_some());
-    }
-
-    #[test]
-    fn moving_and_shifting_keep_each_dock_in_order() {
-        let mut l = Layout::built_in("Paint").unwrap().completed(&known());
-        l.move_to("panel-palette", Dock::Left);
-        assert_eq!(order(&l, Dock::Left), ["panel-palette"]);
-        assert_eq!(
-            order(&l, Dock::Right),
-            [
-                "panel-color",
-                "panel-layers",
-                "panel-rig",
-                "panel-history",
-                "panel-brushes",
-                "panel-tileset"
-            ]
-        );
-        l.shift("panel-history", true);
-        assert_eq!(
-            order(&l, Dock::Right),
-            [
-                "panel-color",
-                "panel-layers",
-                "panel-history",
-                "panel-rig",
-                "panel-brushes",
-                "panel-tileset"
-            ]
-        );
-        // At the ends a shift does nothing.
-        l.shift("panel-color", true);
-        l.shift("panel-tileset", false);
-        assert_eq!(
-            order(&l, Dock::Right),
-            [
-                "panel-color",
-                "panel-layers",
-                "panel-history",
-                "panel-rig",
-                "panel-brushes",
-                "panel-tileset"
-            ]
+            panels_on(&l, Edge::Right),
+            ["panel-rig", "panel-history", "panel-brushes"]
         );
     }
 
     #[test]
-    fn moving_a_hidden_panel_shows_it() {
-        let mut l = Layout::built_in("Animate").unwrap().completed(&known());
-        assert!(!l.place("panel-history").unwrap().shown);
-        assert!(!l.dock_shows(Dock::Left));
-        l.move_to("panel-history", Dock::Left);
-        assert!(l.place("panel-history").unwrap().shown);
-        assert!(l.dock_shows(Dock::Left));
+    fn a_folded_stack_folds_every_panel_in_it() {
+        let l = layout();
+        assert!(folded(&l, "panel-history"));
+        assert!(!folded(&l, "panel-color"));
     }
 
     #[test]
-    fn layouts_save_switch_reset_and_keep() {
-        let dir = std::env::temp_dir().join(format!("pixl-ws-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut ws = Workspace::load(Store::at(&dir));
-        ws.known = known()
-            .into_iter()
-            .map(|(id, dock)| Known {
-                title: id.clone(),
-                id,
-                dock,
-            })
-            .collect();
-        assert_eq!(ws.live.name, "Paint");
-        assert!(ws.save_as("Paint").is_err(), "built-in names stay built in");
-        ws.edit(|l| l.move_to("panel-color", Dock::Bottom));
-        ws.live.sizes.right = Some(300.0);
-        ws.save_as("Mine").unwrap();
-        ws.switch("Rig");
-        assert_eq!(ws.live.place("panel-color").unwrap().dock, Dock::Left);
-        // The saved layout and the one in use survive a restart.
-        let again = Workspace::load(Store::at(&dir));
-        assert_eq!(again.live.name, "Rig");
-        let mine = again.layout("Mine").unwrap();
-        assert_eq!(mine.place("panel-color").unwrap().dock, Dock::Bottom);
-        assert_eq!(mine.sizes.right, Some(300.0));
-        assert_eq!(again.names(), ["Paint", "Animate", "Rig", "Tiles", "Mine"]);
-        // Reset puts the live layout back to what its layout says.
-        ws.edit(|l| l.set_shown("panel-history", false));
-        ws.reset();
-        assert!(ws.live.place("panel-history").unwrap().shown);
-        assert!(ws.delete("Mine"));
-        assert!(!ws.delete("Paint"));
-        let _ = std::fs::remove_dir_all(dir);
+    fn workspace_json_reads_as_an_earlier_pixl_wrote_it() {
+        let text = r#"{"live":{"name":"Rig","panels":[
+            {"panel":"panel-color","dock":"left","collapsed":false,"shown":true},
+            {"panel":"panel-layers","dock":"right","collapsed":false,"shown":false}],
+            "sizes":{"left":null,"right":300.0,"bottom":null}},"layouts":[]}"#;
+        let old: Legacy = serde_json::from_str(text).expect("it reads");
+        let live = old.live.expect("a live arrangement");
+        assert_eq!(live.name, "Rig");
+        assert!(!live.panels[1].shown);
+        assert_eq!(live.sizes.right, Some(300.0));
     }
 }

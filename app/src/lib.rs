@@ -45,6 +45,8 @@ pub fn app(file: Option<PathBuf>) -> App {
         .insert_resource(settings)
         .insert_resource(store)
         .insert_resource(Workspace::user())
+        // The program keeps the panels' arrangement between runs.
+        .insert_resource(lumenui_dock::Persist::Auto)
         .insert_resource(Themes::user())
         .insert_resource(files::exports::Exports::user())
         .insert_resource(clipboard::Pasteboard::system())
@@ -78,6 +80,9 @@ pub fn ui() -> CompiledUi {
 pub fn editor(ui: CompiledUi) -> App {
     let side = u64::from(MAX_VIEW_SIDE);
     let app = App::new(ui)
+        // The panels around the canvas, kept only in memory unless `app`
+        // keeps them.
+        .add_plugin(lumenui_dock::DockPlugin::default())
         // A buffer per layer: room for many, each up to the largest side.
         .add_plugin(CanvasPlugin::with_caps(1 << 20, side * side, 4096))
         .insert_resource(Look::default())
@@ -310,9 +315,8 @@ pub fn editor(ui: CompiledUi) -> App {
         .on_click("lp-cancel", panels::layers::properties_cancel)
         // A row of the history list.
         .on_click("history-rows", panels::history_row_click)
-        // After the tick's systems, the splits' among them, so the end of a
-        // gutter drag is kept on the tick it happens.
-        .add_systems(TickStage::LayoutSync, workspace::keep_dock_sizes)
+        // After the dock's own systems have handed the tabs their buttons.
+        .add_systems(TickStage::LayoutSync, workspace::retitle_reused_tabs)
         .add_systems(
             TickStage::A11ySync,
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),

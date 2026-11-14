@@ -1,15 +1,3 @@
-<menu id="panel-menu">
-  <menuitem id="panel-menu-left" label="Move to the left dock"/>
-  <menuitem id="panel-menu-right" label="Move to the right dock"/>
-  <menuitem id="panel-menu-bottom" label="Move to the bottom dock"/>
-  <separator/>
-  <menuitem id="panel-menu-up" label="Move up"/>
-  <menuitem id="panel-menu-down" label="Move down"/>
-  <separator/>
-  <menuitem id="panel-menu-collapse" label="Collapse or expand"/>
-  <menuitem id="panel-menu-hide" label="Hide"/>
-</menu>
-
 <dialog open="ws_open">
   <column class="dialog-card ws-card">
     <label class="dialog-title" text="Panels and layouts"/>

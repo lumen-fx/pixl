@@ -324,22 +324,27 @@ Show only selected, Show all layers and Hide selected act on the selection;
 its other commands act on the active layer. Each visibility change is an
 undo step.
 
-Panels sit in docks left, right and below the canvas. Drag the gutter beside
-a dock to resize it. A dock keeps the size you give it, also the next time
-pixl opens, and a dock you have not sized keeps its usual size, also when it
-shows again after being empty. The canvas gives way when docks take room,
-never the docks or the tool bar. A side dock with more panels than fit
-scrolls. Each panel's header collapses it to its title or hides it, and a
-right-click on the header moves it to another dock or up and down its dock;
-panels do not drag between docks. Window > Panels and layouts lists every
-panel with its dock, its
-order and whether it shows, and switches between layouts: the built-in Paint,
-Animate, Rig and Tiles (the Tileset panel beside the colors), and any the
-user saves under a name of their own. Window >
-Reset layout puts the current layout back as it was saved. The arrangement in
-use and the saved layouts are kept in `workspace.json` in pixl's data folder,
-so the window reopens as it was left; an arrangement saved while the Layers
-panel showed keeps showing it until you switch layouts.
+Panels sit around the canvas, each under a tab: Lumen's dock lays them out.
+Drag a tab to move its panel: onto another panel to share its place as a
+tab, near one of its edges to sit beside it, or over no panel to float it
+over the canvas. Move to new window in a tab's right-click menu opens the
+panel in a window of its own, and Dock back in that window's tab menu puts
+it back. A tab's close button, Close in its menu, or Delete on a focused tab
+hides the panel. Drag the gutter between two panels to resize them. The
+canvas gives way when panels take room, never the panels or the tool bar.
+
+Window > Panels and layouts lists every panel and whether it shows, puts one
+on the left, the right or below the canvas, pops it out into a window of its
+own or docks it back, and folds it to its tab, giving its room to the panels
+beside it. It switches between layouts: the built-in Paint, Animate, Rig and
+Tiles (the Tileset panel beside the colors), and any you save under a name
+of your own. Window > Reset layout puts the current layout back as it was
+saved, and Window > Show all panels shows the hidden ones. The arrangement,
+windows of their own included, and your layouts are kept in
+`dock-layout.json` in pixl's data folder, so pixl reopens as it was left.
+The first time this version opens, it takes over the arrangement and the
+layouts an earlier pixl kept in `workspace.json` there, and removes that
+file.
 
 Window > Customize the tool bar picks which tools the tool bar shows and in
 what order, one column or two, and groups related tools on one button: the

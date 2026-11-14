@@ -580,6 +580,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumenui-dock"
+version = "0.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4092907fa8f58b84c18ea4779cab1e41ece94c9436b63d05d2d6e3d28fc068ab"
+dependencies = [
+ "lumenui",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -639,6 +648,7 @@ dependencies = [
  "lumenui",
  "lumenui-build",
  "lumenui-canvas",
+ "lumenui-dock",
  "pixl-document",
  "pixl-io",
  "pixl-paint",

@@ -29,7 +29,7 @@
 .tab { align: center; gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-4); }
 .tab.home-tab { padding: 0 var(--space-4); }
 #workspace { grow: 1; min-height: 0; }
-#docks { grow: 1; flex-basis: 0; min-width: 0; }
+#dock { grow: 1; flex-basis: 0; min-width: 0; }
 #toolbar { shrink: 0; padding: var(--space-2); gap: var(--space-1); align: center; }
 #stage { grow: 1; min-width: 0; overflow: hidden; cursor: crosshair; }
 #stage.panning { cursor: grab; }

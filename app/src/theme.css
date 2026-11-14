@@ -26,11 +26,6 @@
   --bar-h: 26;
   --options-h: 32;
   --header-h: 22;
-  --panel-w: 264;
-  --dock-bottom-h: 200;
-  --panel-fill-min: 160;
-  --panel-tools-w: 40;
-  --gutter: 4;
   --toolbar-w: 71;
   --swatch: 16;
   --scrollbar: 6;
@@ -285,11 +280,6 @@ dropdown { height: var(--control-h); min-width: 90; }
 
 #stage { bg: var(--canvas-bg); }
 
-.dock {
-  bg: var(--edge);
-}
-.dock.side { width: var(--panel-w); }
-#dock-bottom { height: var(--dock-bottom-h); }
 .panel { bg: var(--surface-2); }
 .panel-header {
   height: var(--header-h);

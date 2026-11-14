@@ -112,93 +112,115 @@
       <include src="parts/toolbar.lmn"/>
     </column>
 
-    <split id="docks" class="docks">
-    <column id="dock-left" class="dock side empty"/>
-    <split id="center">
-    <column id="stage">
-      <canvas id="checker"/>
-      <canvas id="art"/>
-      <canvas id="rig"/>
-      <canvas id="overlay"/>
-      <include src="parts/perf.lmn"/>
-      <include src="parts/tutorial.lmn"/>
-      <canvas id="ruler-top" class="ruler"/>
-      <canvas id="ruler-left" class="ruler"/>
-    </column>
-    <column id="dock-bottom" class="dock">
-      <include src="parts/timeline.lmn"/>
-      <include src="parts/preview.lmn"/>
-    </column>
-    </split>
-
-    <column id="dock-right" class="dock side">
-      <include src="parts/color.lmn"/>
-      <column id="panel-palette" class="panel">
-        <row class="panel-header"><label class="panel-title" text="Palette"/></row>
-        <column id="palette-body" class="panel-body">
-          <row id="palette-swatches" class="swatches"/>
-        </column>
-      </column>
-      <column id="panel-layers" class="panel fill">
-        <row class="panel-header"><label class="panel-title" text="Layers"/></row>
-        <column id="layers-body" class="panel-body fill">
-          <row class="layer-props">
-            <dropdown id="layer-blend" class="blend" bind-value="layer_blend">
-              <option value="Normal"/>
-              <option value="Multiply"/>
-              <option value="Screen"/>
-              <option value="Overlay"/>
-              <option value="Darken"/>
-              <option value="Lighten"/>
-              <option value="Color dodge"/>
-              <option value="Color burn"/>
-              <option value="Hard light"/>
-              <option value="Soft light"/>
-              <option value="Difference"/>
-              <option value="Exclusion"/>
-              <option value="Hue"/>
-              <option value="Saturation"/>
-              <option value="Color"/>
-              <option value="Luminosity"/>
-              <option value="Add"/>
-              <option value="Subtract"/>
-            </dropdown>
-            <slider id="layer-opacity" class="opacity-slider" min="0" max="100" step="1" value="100" bind-value="layer_opacity"/>
-            <label class="channel-value" bind-text="layer_opacity_text" text="100%"/>
-          </row>
-          <scroll id="layer-list" class="layer-list"/>
-          <row class="layer-actions">
-            <tooltip text="New layer"><button id="layer-add" class="flat small" text="New"/></tooltip>
-            <tooltip text="New group"><button id="layer-group" class="flat small" text="Group"/></tooltip>
-            <tooltip text="Duplicate layer"><button id="layer-duplicate" class="flat small" text="Copy"/></tooltip>
-            <tooltip text="Delete layer"><button id="layer-delete" class="flat small" text="Delete"/></tooltip>
-            <tooltip text="Layer properties"><button id="layer-properties" class="flat small" text="Props"/></tooltip>
-            <spacer/>
-            <tooltip text="Move up"><button id="layer-up" class="flat small" text="Up"/></tooltip>
-            <tooltip text="Move down"><button id="layer-down" class="flat small" text="Down"/></tooltip>
-          </row>
-        </column>
-      </column>
-      <include src="parts/rig.lmn"/>
-      <include src="parts/brushes.lmn"/>
-      <include src="parts/tileset.lmn"/>
-      <column id="panel-history" class="panel">
-        <row class="panel-header">
-          <label class="panel-title" text="History"/>
-          <spacer/>
-          <button id="history-undo" class="flat small" text="Undo"/>
-          <button id="history-redo" class="flat small" text="Redo"/>
-        </row>
-        <column id="history-body" class="panel-body">
-          <scroll id="history-list" class="history-list" bind-scroll="history_scroll">
-            <for id="history-rows" each="$history" key="k">
-              <row id="history-{row.k}" class="{row.class}"><label class="history-label" text="{row.label}"/></row>
-            </for>
-          </scroll>
-        </column>
-      </column>
-    </column>
-    </split>
+    <!-- The panels around the canvas. The tree is the Paint layout; the
+         named layouts below rearrange it. -->
+    <dock id="dock" label="Panels">
+      <dock-split axis="row">
+        <dock-split axis="column">
+          <dock-stack center="true">
+            <dock-panel id="panel-canvas" title="Canvas" closable="false" movable="false" floatable="false">
+              <column id="stage">
+                <canvas id="checker"/>
+                <canvas id="art"/>
+                <canvas id="rig"/>
+                <canvas id="overlay"/>
+                <include src="parts/perf.lmn"/>
+                <include src="parts/tutorial.lmn"/>
+                <canvas id="ruler-top" class="ruler"/>
+                <canvas id="ruler-left" class="ruler"/>
+              </column>
+            </dock-panel>
+          </dock-stack>
+          <dock-split axis="row" basis="230">
+            <dock-stack>
+              <include src="parts/timeline.lmn"/>
+            </dock-stack>
+            <dock-stack basis="220">
+              <include src="parts/preview.lmn"/>
+            </dock-stack>
+          </dock-split>
+        </dock-split>
+        <dock-split axis="column" basis="264">
+          <dock-stack basis="400">
+            <include src="parts/color.lmn"/>
+          </dock-stack>
+          <dock-stack basis="92">
+            <dock-panel id="panel-palette" title="Palette" class="panel">
+              <column id="palette-body" class="panel-body">
+                <row id="palette-swatches" class="swatches"/>
+              </column>
+            </dock-panel>
+          </dock-stack>
+          <dock-stack grow="40">
+            <dock-panel id="panel-layers" title="Layers" class="panel fill" hidden="true">
+              <column id="layers-body" class="panel-body fill">
+                <row class="layer-props">
+                  <dropdown id="layer-blend" class="blend" bind-value="layer_blend">
+                    <option value="Normal"/>
+                    <option value="Multiply"/>
+                    <option value="Screen"/>
+                    <option value="Overlay"/>
+                    <option value="Darken"/>
+                    <option value="Lighten"/>
+                    <option value="Color dodge"/>
+                    <option value="Color burn"/>
+                    <option value="Hard light"/>
+                    <option value="Soft light"/>
+                    <option value="Difference"/>
+                    <option value="Exclusion"/>
+                    <option value="Hue"/>
+                    <option value="Saturation"/>
+                    <option value="Color"/>
+                    <option value="Luminosity"/>
+                    <option value="Add"/>
+                    <option value="Subtract"/>
+                  </dropdown>
+                  <slider id="layer-opacity" class="opacity-slider" min="0" max="100" step="1" value="100" bind-value="layer_opacity"/>
+                  <label class="channel-value" bind-text="layer_opacity_text" text="100%"/>
+                </row>
+                <scroll id="layer-list" class="layer-list"/>
+                <row class="layer-actions">
+                  <tooltip text="New layer"><button id="layer-add" class="flat small" text="New"/></tooltip>
+                  <tooltip text="New group"><button id="layer-group" class="flat small" text="Group"/></tooltip>
+                  <tooltip text="Duplicate layer"><button id="layer-duplicate" class="flat small" text="Copy"/></tooltip>
+                  <tooltip text="Delete layer"><button id="layer-delete" class="flat small" text="Delete"/></tooltip>
+                  <tooltip text="Layer properties"><button id="layer-properties" class="flat small" text="Props"/></tooltip>
+                  <spacer/>
+                  <tooltip text="Move up"><button id="layer-up" class="flat small" text="Up"/></tooltip>
+                  <tooltip text="Move down"><button id="layer-down" class="flat small" text="Down"/></tooltip>
+                </row>
+              </column>
+            </dock-panel>
+          </dock-stack>
+          <dock-stack grow="0" collapsed="true">
+            <include src="parts/rig.lmn"/>
+          </dock-stack>
+          <dock-stack grow="23">
+            <dock-panel id="panel-history" title="History" class="panel" hidden="true">
+              <row class="panel-header">
+                <spacer/>
+                <button id="history-undo" class="flat small" text="Undo"/>
+                <button id="history-redo" class="flat small" text="Redo"/>
+              </row>
+              <column id="history-body" class="panel-body">
+                <scroll id="history-list" class="history-list" bind-scroll="history_scroll">
+                  <for id="history-rows" each="$history" key="k">
+                    <row id="history-{row.k}" class="{row.class}"><label class="history-label" text="{row.label}"/></row>
+                  </for>
+                </scroll>
+              </column>
+            </dock-panel>
+          </dock-stack>
+          <dock-stack grow="20">
+            <include src="parts/brushes.lmn"/>
+          </dock-stack>
+          <dock-stack grow="26">
+            <include src="parts/tileset.lmn"/>
+          </dock-stack>
+        </dock-split>
+      </dock-split>
+      <include src="parts/layouts.lmn"/>
+    </dock>
   </row>
 
   <include src="parts/workspace.lmn"/>

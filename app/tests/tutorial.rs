@@ -261,7 +261,7 @@ fn the_lesson_works_in_the_rig_layout() {
     let seen = Arc::clone(&layout);
     let app = editor_over(Document::new(16, 16, ColorMode::Rgba).unwrap())
         .add_systems(TickStage::Systems, move |ws: Res<Workspace>| {
-            *seen.lock().unwrap() = ws.live.name.clone()
+            *seen.lock().unwrap() = ws.layout.clone()
         });
     drive(
         app,

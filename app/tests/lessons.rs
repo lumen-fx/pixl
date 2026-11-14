@@ -47,7 +47,7 @@ fn every_lesson_opens_from_help_in_its_layout() {
         let layout: Arc<Mutex<String>> = Arc::default();
         let seen = Arc::clone(&layout);
         let app = blank().add_systems(TickStage::Systems, move |ws: Res<Workspace>| {
-            *seen.lock().unwrap() = ws.live.name.clone()
+            *seen.lock().unwrap() = ws.layout.clone()
         });
         // With the eraser in use, no lesson's first step is done yet.
         let mut steps = vec![Step::Key("e", false), Step::Wait];
