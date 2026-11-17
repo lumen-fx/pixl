@@ -634,7 +634,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pixl"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "lumenui",
  "lumenui-build",
@@ -650,7 +650,7 @@ dependencies = [
 
 [[package]]
 name = "pixl-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pixl-document",
  "pixl-io",
@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "pixl-document"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crc32fast",
  "flate2",
@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "pixl-io"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "gif",
  "pixl-document",
@@ -679,14 +679,14 @@ dependencies = [
 
 [[package]]
 name = "pixl-paint"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pixl-document",
 ]
 
 [[package]]
 name = "pixl-script"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "candela-lang",
  "candela-vm",

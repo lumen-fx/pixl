@@ -1,9 +1,20 @@
 name: release
 
-# A `v*` tag builds pixl for Windows, Linux and macOS and publishes the three
-# packages on one GitHub pre-release. A manual run builds and checks the same
-# packages and keeps them as workflow artifacts only, without creating a
-# release.
+# Builds pixl for Windows, Linux and macOS and publishes the three packages on
+# one GitHub pre-release.
+#
+# A release starts from one click: run this workflow by hand on main (the
+# Actions tab, or `gh workflow run release.yml -f version=X.Y.Z`), typing back
+# the version the workspace Cargo.toml carries. The run refuses unless the
+# typed version is that one, refuses a version that is already tagged or is
+# not newer than the last release, and waits for `ci` to pass on the commit
+# main was at when the run started. It then tags that commit, builds the
+# three packages, and publishes them. The tag is pushed with the workflow's
+# own token, which starts no second run, so the same run builds and
+# publishes.
+#
+# Pushing a `v*` tag by hand releases too: the builds check that the tag names
+# the workspace version, and the release is published under that tag.
 #
 # Every package holds the executable, lumen.toml, LICENSE and assets/. The
 # markup and stylesheets are compiled into the executable, every part and
@@ -15,16 +26,167 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          The version to release, typed back as the workspace Cargo.toml on
+          main carries it (for example 0.1.1). The run stops if it differs.
+        type: string
+        required: true
 
+# The tag and publish jobs write to the repository and ask for it themselves.
 permissions:
-  contents: write
+  contents: read
+
+# Two clicks cannot race each other to the tag: the second waits for the first
+# and then finds the tag already there.
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && 'release-cut' || format('release-{0}', github.ref) }}
+  cancel-in-progress: false
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  # Everything a click can get wrong is refused here, before anything is
+  # written, and each refusal says what to fix. The commit released is the
+  # one main was at when the run started (github.sha), so a merge to main
+  # during the run is not released by accident.
+  preflight:
+    name: check what is being released
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version
+        id: version
+        env:
+          TYPED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="$(awk -F'"' '
+            /^\[workspace\.package\]/ { in_section = 1; next }
+            /^\[/                     { in_section = 0 }
+            in_section && /^version[[:space:]]*=/ { print $2; exit }
+          ' Cargo.toml)"
+          if ! printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "release.yml: the [workspace.package] version in Cargo.toml is '${version}', not X.Y.Z." >&2
+            exit 1
+          fi
+
+          # Typing the number back proves the person starting the run knows
+          # which release they are about to publish, and catches a main that
+          # is not at the version they expect.
+          if [ "${TYPED#v}" != "$version" ]; then
+            echo "release.yml: you typed '${TYPED}', and Cargo.toml on ${GITHUB_REF_NAME} says ${version}." >&2
+            echo "Nothing was released. Start the run again and type ${version}, or move" >&2
+            echo "main to the version you meant first." >&2
+            exit 1
+          fi
+
+          if [ "${GITHUB_REF}" != refs/heads/main ]; then
+            echo "release.yml: a release is cut from main, and this run was started on ${GITHUB_REF}." >&2
+            echo "Start it again with main selected as the branch." >&2
+            exit 1
+          fi
+
+          tag="v${version}"
+          tags="$(git ls-remote --tags --refs origin 'refs/tags/v*' | sed 's|.*refs/tags/||')"
+          if printf '%s\n' "$tags" | grep -qx "$tag"; then
+            echo "release.yml: ${tag} is already tagged, so it is already released or being released." >&2
+            echo "If its release run failed part way, re-run the failed jobs of that run," >&2
+            echo "rather than starting a new one." >&2
+            exit 1
+          fi
+          newest="$(printf '%s\n' "$tags" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [ -n "$newest" ] && [ "$(printf '%s\n%s\n' "$newest" "$tag" | sort -V | tail -n 1)" != "$tag" ]; then
+            echo "release.yml: ${tag} is not newer than the last release, ${newest}." >&2
+            exit 1
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "### Releasing ${tag} from main at \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # The `ci` run ci.yml started for the push of this commit to main, its
+      # latest attempt. A run still queued or in progress is waited for; one
+      # that does not exist yet is waited for too, because a commit pushed a
+      # moment ago has none until GitHub starts it.
+      - name: Wait for ci on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$(($(date +%s) + 90 * 60))
+          errors=0
+          while :; do
+            if ! out=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&event=push&branch=main&per_page=20" \
+              --jq '.workflow_runs | sort_by(.created_at) | last | select(. != null) |
+                    "\(.status) \(.conclusion // "none") \(.html_url)"'); then
+              errors=$((errors + 1))
+              if [ "$errors" -ge 5 ]; then
+                echo "release.yml: cannot read the ci runs of ${GITHUB_REPOSITORY}" >&2
+                exit 1
+              fi
+              sleep 30
+              continue
+            fi
+            errors=0
+            status="" conclusion="" url=""
+            read -r status conclusion url <<< "$out" || true
+            if [ "$status" = completed ]; then
+              if [ "$conclusion" = success ]; then
+                echo "ci passed on main for ${GITHUB_SHA}: $url"
+                exit 0
+              fi
+              echo "release.yml: ci on main for ${GITHUB_SHA} finished as $conclusion: $url" >&2
+              echo "Fix main, or re-run the failed jobs of that run, and start the release again." >&2
+              exit 1
+            fi
+            echo "ci on main for ${GITHUB_SHA} is ${status:-not started}${url:+: $url}"
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "release.yml: ci on main for ${GITHUB_SHA} had not finished after 90 minutes." >&2
+              echo "Start the release again once it has." >&2
+              exit 1
+            fi
+            sleep 30
+          done
+
+  # An annotated tag on the commit preflight checked. A tag pushed by hand
+  # while preflight waited makes the push fail here rather than move it.
+  tag:
+    name: tag the release
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push the tag
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "pixl ${VERSION}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${tag}"
+
   windows:
+    needs: tag
+    # A tag push skips preflight and tag; a click builds only once the tag is
+    # pushed.
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.tag.result == 'success') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -140,6 +302,10 @@ jobs:
           if-no-files-found: error
 
   linux:
+    needs: tag
+    # A tag push skips preflight and tag; a click builds only once the tag is
+    # pushed.
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.tag.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -254,6 +420,10 @@ jobs:
           if-no-files-found: error
 
   macos:
+    needs: tag
+    # A tag push skips preflight and tag; a click builds only once the tag is
+    # pushed.
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.tag.result == 'success') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -387,9 +557,17 @@ jobs:
 
   # One release for the three packages, made once every build has passed.
   publish:
-    if: github.ref_type == 'tag'
-    needs: [windows, linux, macos]
+    needs: [preflight, windows, linux, macos]
+    if: >-
+      ${{ !cancelled()
+      && needs.windows.result == 'success'
+      && needs.linux.result == 'success'
+      && needs.macos.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', needs.preflight.outputs.version) }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -402,8 +580,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -l dist
-          gh release create "$GITHUB_REF_NAME" dist/* \
+          gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
             --prerelease \
-            --title "pixl ${GITHUB_REF_NAME#v}" \
+            --title "pixl ${TAG#v}" \
             --notes "A pre-release of pixl for Windows (x86_64), Linux (x86_64) and macOS (Apple silicon). The builds are not signed; the README's Download section says what each system asks on first start. Keep the files that come with pixl beside it, pixl reads them at start."
