@@ -362,7 +362,7 @@ fn busy(world: &World) -> Option<&'static str> {
         .resource::<crate::tools::transform::FreeTransform>()
         .active()
     {
-        return Some("Apply the free transform first, or cancel it with Escape");
+        return Some(crate::tools::transform::FIRST);
     }
     if world.resource::<crate::menus::adjust::Adjust>().active() {
         return Some("Apply or cancel the filter first");

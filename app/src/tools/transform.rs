@@ -30,6 +30,9 @@ use crate::view::aids::Aids;
 use crate::view::input::{Pointer, PointerInput};
 use crate::view::jobs::{TileJob, WRITE_BUDGET, finishes_at_once, tiles_of};
 
+/// What a command that cannot run under the free transform says.
+pub const FIRST: &str = "Apply the free transform first, or cancel it with Escape";
+
 /// How near, in screen pixels, a press takes a handle.
 const HANDLE_REACH: f64 = 6.0;
 
@@ -183,6 +186,27 @@ impl FreeTransform {
     /// which makes the free transform the tool.
     pub fn float(&mut self, floating: Floating) {
         self.floating = Some(floating);
+    }
+
+    /// Keeps what the box shows, as one undo step, and closes it: the
+    /// pasted or lifted pixels land where the box puts them, at once even
+    /// when the preview of a large box is still filling in. A command that
+    /// edits the whole image runs this first, as Aseprite does. Returns
+    /// whether a box was open.
+    pub fn apply(&mut self, editor: &mut Editor) -> bool {
+        if let Some(f) = self.floating.take() {
+            if let Some(s) = self.session.take() {
+                finish(editor, s, true);
+            }
+            self.session = start_paste(editor, f);
+        }
+        let Some(mut s) = self.session.take() else {
+            return false;
+        };
+        preview(editor, &mut s, self.resample);
+        finish(editor, s, true);
+        editor.tool = Tool::Move;
+        true
     }
 }
 
@@ -470,6 +494,9 @@ pub fn use_transform(
         pointer.events();
         if let Some(s) = ft.session.take() {
             finish(editor, s, true);
+        }
+        // The box goes, also when a command applied it.
+        if aids.transform_box.is_some() {
             aids.transform_box = None;
             aids.revision += 1;
         }

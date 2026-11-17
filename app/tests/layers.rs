@@ -47,10 +47,10 @@ fn in_list(list: List, mut steps: Vec<Step>) -> Vec<Step> {
         out.extend([
             // What the Shown switch in Window > Panels and layouts runs.
             Step::Menu("ws-show-panel-layers"),
-            Step::Click("panel-color-close"),
-            Step::Click("panel-palette-close"),
-            Step::Click("panel-history-close"),
-            Step::Click("panel-brushes-close"),
+            Step::Menu("ws-show-panel-color"),
+            Step::Menu("ws-show-panel-palette"),
+            Step::Menu("ws-show-panel-history"),
+            Step::Menu("ws-show-panel-brushes"),
             Step::Wait,
             Step::Wait,
         ]);

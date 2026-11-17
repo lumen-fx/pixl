@@ -131,7 +131,7 @@ pub fn entries(
             }
         })
         .collect();
-    for name in workspace.names() {
+    for name in &workspace.names {
         out.push(Entry {
             label: format!("{name} layout"),
             group: "Layout".to_string(),

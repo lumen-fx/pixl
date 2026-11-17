@@ -45,6 +45,8 @@ pub fn app(file: Option<PathBuf>) -> App {
         .insert_resource(settings)
         .insert_resource(store)
         .insert_resource(Workspace::user())
+        // The program keeps the panels' arrangement between runs.
+        .insert_resource(lumenui_dock::Persist::Auto)
         .insert_resource(Themes::user())
         .insert_resource(files::exports::Exports::user())
         .insert_resource(clipboard::Pasteboard::system())
@@ -78,6 +80,9 @@ pub fn ui() -> CompiledUi {
 pub fn editor(ui: CompiledUi) -> App {
     let side = u64::from(MAX_VIEW_SIDE);
     let app = App::new(ui)
+        // The panels around the canvas, kept only in memory unless `app`
+        // keeps them.
+        .add_plugin(lumenui_dock::DockPlugin::default())
         // A buffer per layer: room for many, each up to the largest side.
         .add_plugin(CanvasPlugin::with_caps(1 << 20, side * side, 4096))
         .insert_resource(Look::default())
@@ -126,6 +131,7 @@ pub fn editor(ui: CompiledUi) -> App {
         .insert_resource(view::View::default())
         .insert_resource(view::ViewColors::default())
         .insert_resource(view::Preview::default())
+        .insert_resource(view::Hover::default())
         .insert_resource(view::Drawn::default())
         .insert_resource(view::Layers::default())
         .insert_resource(view::input::Navigation::default())
@@ -247,12 +253,14 @@ pub fn editor(ui: CompiledUi) -> App {
                         panels::timeline::timeline_input,
                         panels::preview::preview_controls,
                         tools::pick_tool,
+                        tools::blur_on_stage_press,
                         tools::tool_options,
                         tools::use_tools,
                         tools::toolbox::toolbox_options,
                         tools::toolbox::use_toolbox,
                         tools::transform::use_transform,
                         tools::reference::place_reference,
+                        tools::hover_preview,
                         perf::note_stroke,
                     )
                     .chain(),
@@ -307,6 +315,8 @@ pub fn editor(ui: CompiledUi) -> App {
         .on_click("lp-cancel", panels::layers::properties_cancel)
         // A row of the history list.
         .on_click("history-rows", panels::history_row_click)
+        // After the dock's own systems have handed the tabs their buttons.
+        .add_systems(TickStage::LayoutSync, workspace::retitle_reused_tabs)
         .add_systems(
             TickStage::A11ySync,
             perf::tick_end.after(lumenui::lumen_core::render_world::roll_up_frame_dirty),

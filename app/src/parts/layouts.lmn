@@ -1,0 +1,76 @@
+<!-- The built-in layouts. Each names every panel it shows; the rest are
+     hidden, each remembering its place. The Layers panel is in none of
+     them: the timeline lists the layers against the frames, as
+     Aseprite's does, so it waits in the Window menu's list. -->
+<!-- Drawing: color at hand, the timeline below the canvas for the layers and frames. -->
+<dock-layout name="Paint">
+  <dock-split axis="row">
+    <dock-split axis="column">
+      <dock-stack center="true"><dock-ref panel="panel-canvas"/></dock-stack>
+      <dock-split axis="row" basis="230">
+        <dock-stack><dock-ref panel="panel-timeline"/></dock-stack>
+      </dock-split>
+    </dock-split>
+    <dock-split axis="column" basis="264">
+      <dock-stack basis="400"><dock-ref panel="panel-color"/></dock-stack>
+      <dock-stack basis="92"><dock-ref panel="panel-palette"/></dock-stack>
+      <dock-stack grow="0" collapsed="true"><dock-ref panel="panel-rig"/></dock-stack>
+      <dock-stack grow="23"><dock-ref panel="panel-history"/></dock-stack>
+      <dock-stack grow="20"><dock-ref panel="panel-brushes"/></dock-stack>
+    </dock-split>
+  </dock-split>
+</dock-layout>
+<!-- Animation: the frames and the preview below the canvas, history out of the way. -->
+<dock-layout name="Animate">
+  <dock-split axis="row">
+    <dock-split axis="column">
+      <dock-stack center="true"><dock-ref panel="panel-canvas"/></dock-stack>
+      <dock-split axis="row" basis="230">
+        <dock-stack><dock-ref panel="panel-timeline"/></dock-stack>
+        <dock-stack basis="220"><dock-ref panel="panel-preview"/></dock-stack>
+      </dock-split>
+    </dock-split>
+    <dock-split axis="column" basis="264">
+      <dock-stack basis="400"><dock-ref panel="panel-color"/></dock-stack>
+      <dock-stack basis="92"><dock-ref panel="panel-palette"/></dock-stack>
+      <dock-stack grow="0" collapsed="true"><dock-ref panel="panel-rig"/></dock-stack>
+    </dock-split>
+  </dock-split>
+</dock-layout>
+<!-- Rigging: the rig and history on the right, colors on the left. -->
+<dock-layout name="Rig">
+  <dock-split axis="row">
+    <dock-split axis="column" basis="264">
+      <dock-stack basis="400"><dock-ref panel="panel-color"/></dock-stack>
+      <dock-stack basis="92"><dock-ref panel="panel-palette"/></dock-stack>
+    </dock-split>
+    <dock-split axis="column">
+      <dock-stack center="true"><dock-ref panel="panel-canvas"/></dock-stack>
+      <dock-split axis="row" basis="230">
+        <dock-stack><dock-ref panel="panel-timeline"/></dock-stack>
+      </dock-split>
+    </dock-split>
+    <dock-split axis="column" basis="264">
+      <dock-stack grow="30"><dock-ref panel="panel-rig"/></dock-stack>
+      <dock-stack grow="23"><dock-ref panel="panel-history"/></dock-stack>
+    </dock-split>
+  </dock-split>
+</dock-layout>
+<!-- Tile work: the tileset beside the colors, the map's layers and frames below. -->
+<dock-layout name="Tiles">
+  <dock-split axis="row">
+    <dock-split axis="column">
+      <dock-stack center="true"><dock-ref panel="panel-canvas"/></dock-stack>
+      <dock-split axis="row" basis="230">
+        <dock-stack><dock-ref panel="panel-timeline"/></dock-stack>
+      </dock-split>
+    </dock-split>
+    <dock-split axis="column" basis="264">
+      <dock-stack basis="400"><dock-ref panel="panel-color"/></dock-stack>
+      <dock-stack basis="92"><dock-ref panel="panel-palette"/></dock-stack>
+      <dock-stack grow="26"><dock-ref panel="panel-tileset"/></dock-stack>
+      <dock-stack grow="0" collapsed="true"><dock-ref panel="panel-rig"/></dock-stack>
+      <dock-stack grow="23"><dock-ref panel="panel-history"/></dock-stack>
+    </dock-split>
+  </dock-split>
+</dock-layout>

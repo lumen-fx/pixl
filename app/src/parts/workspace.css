@@ -1,37 +1,33 @@
-/* The docks around the canvas and the panels in them. */
+/* The dock around the canvas, in pixl's colors: its tab strips are the
+   panels' headers. */
 
-#center { flex-direction: column; grow: 1; min-width: 0; min-height: 0; }
-.dock { gap: 1; min-width: 0; min-height: 0; }
-.dock.side { min-width: 160; }
-#dock-bottom { min-height: 80; flex-direction: row; }
-#dock-bottom .panel { grow: 1; min-width: 0; }
-.dock.empty { display: none; }
-.split-gutter { flex-basis: var(--gutter); bg: var(--edge); }
-.split-gutter:hover { bg: var(--accent-soft); }
-.split-gutter:focus { bg: var(--accent); }
-
-/* An empty side dock takes its gutter with it: the docks split's children
-   are the left dock, a gutter, the center, a gutter and the right dock. */
-#docks.no-left > .split-gutter:nth-child(2) { display: none; }
-#docks.no-right > .split-gutter:nth-child(4) { display: none; }
-#center.no-bottom > .split-gutter { display: none; }
-
-.panel.closed { display: none; }
-.panel.collapsed { grow: 0; }
-.panel.collapsed > .panel-body { display: none; }
-.panel-title { grow: 1; }
-.panel-tools { align: center; gap: 1; }
-.panel-btn {
-  width: 16;
-  height: 16;
-  min-height: 16;
-  padding: 0;
-  bg: #00000000;
-  border: none;
-  text-color: var(--text-faint);
-  font-size: var(--font-size-small);
+.pixl {
+  --lumen-dock-stack-bg: var(--surface-2);
+  --lumen-dock-border: var(--edge);
+  --lumen-dock-strip-bg: var(--surface-3);
+  --lumen-dock-tab-height: var(--header-h);
+  --lumen-dock-tab-font-size: var(--font-size-small);
+  --lumen-dock-tab-text: var(--text-dim);
+  --lumen-dock-tab-hover-bg: var(--surface-4);
+  --lumen-dock-tab-active-bg: var(--surface-2);
+  --lumen-dock-tab-active-text: var(--text);
+  --lumen-dock-accent: var(--accent);
+  --lumen-dock-window-bg: var(--surface-1);
+  --lumen-dock-drop-bg: var(--accent-soft);
+  --lumen-dock-drop-border: var(--accent);
+  --lumen-dock-float-bg: var(--surface-2);
+  --lumen-dock-float-border: var(--edge);
+  --lumen-dock-sidebar-bg: var(--surface-1);
 }
-.panel-btn:hover { bg: var(--surface-4); text-color: var(--text); }
+#dock { bg: var(--edge); }
+/* The canvas shows no tab while it is alone in its stack; a panel dropped
+   beside it brings the tabs back, so the canvas can be picked again. */
+.dock-stack.center.single > .tab-strip { display: none; }
+.dock-stack.center { border: none; }
+.dock-panel.panel { bg: var(--surface-2); }
+/* A folded panel shows its tab. */
+.dock-stack.collapsed { min-height: var(--header-h); }
+.panel.fill { min-height: 120; }
 
 /* The Panels and layouts dialog. */
 .ws-card { min-width: 720; }

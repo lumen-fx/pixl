@@ -28,6 +28,7 @@ zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 # keep rust-toolchain.toml on the compiler that release names.
 lumenui = "0.0.11"
 lumenui-canvas = "0.0.11"
+lumenui-dock = "0.0.11"
 # Compiles the UI lumen.toml names into the executable, in app/build.rs.
 lumenui-build = "0.0.11"
 

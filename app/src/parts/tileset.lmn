@@ -1,6 +1,5 @@
-<column id="panel-tileset" class="panel">
+<dock-panel id="panel-tileset" title="Tileset" class="panel" hidden="true">
   <row class="panel-header">
-    <label class="panel-title" text="Tileset"/>
     <spacer/>
     <label class="ts-name" bind-text="ts_name" text=""/>
   </row>
@@ -17,4 +16,4 @@
       <tooltip text="Delete every tile no cell shows"><button id="ts-unused" class="flat small" text="Unused"/></tooltip>
     </row>
   </column>
-</column>
+</dock-panel>

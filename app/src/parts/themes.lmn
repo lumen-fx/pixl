@@ -43,6 +43,7 @@
           <row class="th-row"><label class="th-label" text="Selection outline"/><input id="th-marquee-a" class="th-color" type="color" alpha="true" bind-value="th_marquee_a"/></row>
           <row class="th-row"><label class="th-label" text="Selection outline, second"/><input id="th-marquee-b" class="th-color" type="color" alpha="true" bind-value="th_marquee_b"/></row>
           <row class="th-row"><label class="th-label" text="Shape preview"/><input id="th-preview" class="th-color" type="color" alpha="true" bind-value="th_preview"/></row>
+          <row class="th-row"><label class="th-label" text="Tool preview"/><input id="th-tool-ghost" class="th-color" type="color" alpha="true" bind-value="th_tool_ghost"/></row>
           </column>
         </scroll>
       </column>
@@ -89,4 +90,4 @@
   </column>
 </dialog>
 
-<tile id="token-probes" class="probe"><tile id="tok-surface-0"/><tile id="tok-surface-1"/><tile id="tok-surface-2"/><tile id="tok-surface-3"/><tile id="tok-surface-4"/><tile id="tok-surface-5"/><tile id="tok-edge"/><tile id="tok-edge-soft"/><tile id="tok-text"/><tile id="tok-text-dim"/><tile id="tok-text-faint"/><tile id="tok-accent"/><tile id="tok-accent-hover"/><tile id="tok-accent-press"/><tile id="tok-accent-soft"/><tile id="tok-on-accent"/><tile id="tok-canvas-bg"/><tile id="tok-checker-a"/><tile id="tok-checker-b"/><tile id="tok-pixel-grid"/><tile id="tok-marquee-a"/><tile id="tok-marquee-b"/><tile id="tok-preview"/></tile>
+<tile id="token-probes" class="probe"><tile id="tok-surface-0"/><tile id="tok-surface-1"/><tile id="tok-surface-2"/><tile id="tok-surface-3"/><tile id="tok-surface-4"/><tile id="tok-surface-5"/><tile id="tok-edge"/><tile id="tok-edge-soft"/><tile id="tok-text"/><tile id="tok-text-dim"/><tile id="tok-text-faint"/><tile id="tok-accent"/><tile id="tok-accent-hover"/><tile id="tok-accent-press"/><tile id="tok-accent-soft"/><tile id="tok-on-accent"/><tile id="tok-canvas-bg"/><tile id="tok-checker-a"/><tile id="tok-checker-b"/><tile id="tok-pixel-grid"/><tile id="tok-marquee-a"/><tile id="tok-marquee-b"/><tile id="tok-preview"/><tile id="tok-tool-ghost"/></tile>

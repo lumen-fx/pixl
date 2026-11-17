@@ -313,3 +313,116 @@ fn escape_deselects() {
     let out = drive(editor_over(doc()), steps);
     assert!(out.selection.is_none());
 }
+
+/// The theme's ghost alpha, from the dark theme's `--tool-ghost`.
+const GHOST_ALPHA: u8 = 0x80;
+
+/// The pointer resting over `at` with `tool` in hand at brush size `size`.
+fn resting(tool: &'static str, size: f64, at: (i32, i32)) -> Vec<Step> {
+    vec![
+        Step::Key(tool, false),
+        Step::Number("opt_size", size),
+        Step::Wait,
+        Step::Move(At::Doc(at.0, at.1)),
+        Step::Wait,
+        Step::Move(At::Doc(at.0, at.1)),
+        Step::Wait,
+    ]
+}
+
+#[test]
+fn the_brush_footprint_shows_see_through_where_the_pointer_rests() {
+    let out = drive(editor_over(doc()), resting("b", 5.0, (10, 10)));
+    common::save(&out.frame, "hover-pencil");
+    let brush = pixl_paint::Brush::circle(5);
+    assert_eq!(out.hover.0, brush.offsets().len(), "the round 5 px brush");
+    assert_eq!(
+        out.hover.1,
+        Rgba::new(0, 0, 0, GHOST_ALPHA),
+        "the foreground, see-through"
+    );
+    assert_eq!(painted(&out.doc), 0, "resting paints nothing");
+
+    // At the canvas edge only the part over the canvas shows.
+    let edge = drive(editor_over(doc()), resting("b", 5.0, (0, 0)));
+    assert!(edge.hover.0 > 0 && edge.hover.0 < brush.offsets().len());
+
+    // The eraser shows its footprint in the theme's ghost color.
+    let eraser = drive(editor_over(doc()), resting("e", 3.0, (10, 10)));
+    assert_eq!(eraser.hover.0, pixl_paint::Brush::circle(3).offsets().len());
+    assert_eq!(eraser.hover.1, Rgba::new(255, 255, 255, GHOST_ALPHA));
+}
+
+#[test]
+fn the_footprint_goes_off_the_canvas_during_a_stroke_and_for_other_tools() {
+    let mut off = resting("b", 4.0, (10, 10));
+    off.extend([Step::Move(At::Element("tool-pencil")), Step::Wait]);
+    assert_eq!(
+        drive(editor_over(doc()), off).hover.0,
+        0,
+        "over the tool bar"
+    );
+
+    let mut stroke = resting("b", 4.0, (10, 10));
+    stroke.extend([
+        Step::Down(At::Doc(10, 10), L),
+        Step::Move(At::Doc(12, 10)),
+        Step::Wait,
+    ]);
+    let out = drive(editor_over(doc()), stroke);
+    assert_eq!(out.hover.0, 0, "the stroke itself shows");
+    assert!(painted(&out.doc) > 0);
+
+    let picker = drive(editor_over(doc()), resting("i", 4.0, (10, 10)));
+    assert_eq!(picker.tool, Tool::Eyedropper);
+    assert_eq!(picker.hover.0, 0, "the eyedropper paints nothing");
+}
+
+/// A 32x32 document with a black ring around (4, 4)-(11, 11): its inside
+/// is the 6x6 square from (5, 5).
+fn ring() -> Document {
+    let mut d = doc();
+    let l = d.layers()[0].id;
+    let t = d.target(l, 0).unwrap();
+    for i in 4..12 {
+        for (x, y) in [(i, 4), (i, 11), (4, i), (11, i)] {
+            t.raster.set_raw(x, y, BLACK.to_u32());
+        }
+    }
+    d
+}
+
+#[test]
+fn the_bucket_shows_the_area_it_would_fill() {
+    let inside = drive(editor_over(ring()), resting("g", 1.0, (7, 7)));
+    common::save(&inside.frame, "hover-bucket");
+    assert_eq!(inside.hover.0, 36, "the inside of the ring");
+    assert_eq!(inside.doc, ring(), "resting fills nothing");
+    let outside = drive(editor_over(ring()), resting("g", 1.0, (20, 20)));
+    assert_eq!(outside.hover.0, 32 * 32 - 64, "everything around the ring");
+}
+
+#[test]
+fn the_shape_a_drag_will_draw_shows_see_through_before_the_release() {
+    let mut steps = vec![Step::Key("l", false)];
+    steps.extend(hover((4, 4)));
+    steps.extend([
+        Step::Down(At::Doc(4, 4), L),
+        Step::Move(At::Doc(20, 4)),
+        Step::Wait,
+        Step::Wait,
+    ]);
+    let out = drive(editor_over(doc()), steps);
+    common::save(&out.frame, "hover-line");
+    assert_eq!(out.preview, 17, "the line from 4 to 20");
+    assert_eq!(painted(&out.doc), 0, "nothing drawn before the release");
+    let v = out.views.last().unwrap().clone();
+    let at = pixl::tools::screen_of(&v, Point::new(12, 4));
+    let [r, g, b, _] = out.frame.pixel(at.x as u32, at.y as u32).unwrap();
+    // Black at half strength over the checkerboard: darker than the
+    // checker, lighter than black.
+    assert!(
+        r > 0 && r == g && g == b,
+        "a see-through black: {r} {g} {b}"
+    );
+}

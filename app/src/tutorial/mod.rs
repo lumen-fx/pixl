@@ -263,7 +263,7 @@ pub fn run_tutorial(
     (rig, timeline, home, view): (Res<RigUi>, Res<Timeline>, Res<Home>, Res<View>),
     (gesture, toolbox): (Res<Gesture>, Res<Toolbox>),
     mut files: ResMut<Files>,
-    workspace: Option<ResMut<Workspace>>,
+    (workspace, dock): (Res<Workspace>, lumenui_dock::Dock),
     (mut menu, mut clicks, ids, keys): (
         MessageReader<MenuClicked>,
         MessageReader<ClickEvent>,
@@ -291,10 +291,8 @@ pub fn run_tutorial(
         t.open = true;
         let mark = Mark::of(&editor, &t.motion);
         t.marks = Some((mark.clone(), mark));
-        if let Some(mut ws) = workspace
-            && ws.live.name != LESSONS[i].layout
-        {
-            ws.switch(LESSONS[i].layout);
+        if workspace.layout != LESSONS[i].layout {
+            crate::workspace::switch(&dock, LESSONS[i].layout);
         }
     }
     if home.open {

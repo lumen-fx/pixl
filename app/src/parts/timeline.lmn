@@ -1,6 +1,5 @@
-<column id="panel-timeline" class="panel timeline">
+<dock-panel id="panel-timeline" title="Timeline" class="panel timeline">
   <row class="panel-header tl-bar">
-    <label class="panel-title" text="Timeline"/>
     <tooltip text="First frame"><button id="tl-first" class="flat small" text="|&lt;"/></tooltip>
     <tooltip text="Previous frame (, or Alt+Left)"><button id="tl-prev" class="flat small" text="&lt;"/></tooltip>
     <tooltip text="Play or pause"><button id="tl-play" class="flat small tl-play" bind-text="tl_play_label" text="Play"/></tooltip>
@@ -55,4 +54,4 @@
       <scroll id="tl-grid" class="tl-grid" scroll="both" bind-scroll="tl_scroll"/>
     </row>
   </column>
-</column>
+</dock-panel>

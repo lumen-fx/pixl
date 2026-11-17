@@ -6,8 +6,6 @@
   --cel-w: 18;
   --cel-h: 20;
   --tl-names-w: 210;
-  --timeline-h: 230;
-  --preview-w: 220;
 }
 
 .pixl.dark {
@@ -46,12 +44,8 @@
   --tag-8: #8c8c8c;
 }
 
-/* The timeline and the preview are panels; below the canvas by default,
-   the timeline takes the width the preview leaves. */
-#dock-bottom { flex-basis: var(--timeline-h); }
-#panel-timeline { grow: 1; min-width: 0; }
-#panel-preview { flex-basis: var(--preview-w); grow: 0; min-width: 80; min-height: 80; }
-.timeline .panel-title { grow: 0; }
+/* The timeline and the preview are panels, below the canvas by default. */
+#panel-preview { min-width: 80; min-height: 80; }
 .tl-main { grow: 1; min-height: 0; padding: 0; gap: 0; }
 
 .tl-bar { gap: var(--space-1); overflow: hidden; min-width: 0; }

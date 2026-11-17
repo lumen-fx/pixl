@@ -26,6 +26,7 @@
   --marquee-a: #ffd400;
   --marquee-b: #000000;
   --preview: #ffd400;
+  --tool-ghost: #ffffffa0;
 }
 
 /* Retro: the four greens of a handheld's screen. */
@@ -52,6 +53,7 @@
   --marquee-a: #0f380f;
   --marquee-b: #9bbc0f;
   --preview: #306230;
+  --tool-ghost: #0f380f80;
 }
 
 /* -- The theme editor ------------------------------------------------------- */
@@ -127,3 +129,4 @@
 #tok-marquee-a { bg: var(--marquee-a); }
 #tok-marquee-b { bg: var(--marquee-b); }
 #tok-preview { bg: var(--preview); }
+#tok-tool-ghost { bg: var(--tool-ghost); }

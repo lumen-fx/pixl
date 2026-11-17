@@ -140,6 +140,17 @@ background colors, the secondary button paints with the background color,
 and Shift snaps lines to clean pixel steps and shapes to squares and
 circles. Every tool keeps to the selection. The pen's eraser end erases.
 
+Before the click, the canvas shows see-through what the tool in hand will
+do where the pointer rests: the brush's footprint at its size and shape in
+the foreground color for the pencil, the shape tools and the sized brush
+tools, the eraser's, the smudge's and the blur's in the theme's ghost color,
+and the area the bucket would fill. A line, rectangle, ellipse or other
+shape shows see-through while it is dragged, until the release draws it.
+The preview goes when the pointer leaves the canvas or a stroke starts. On a
+document larger than about a million pixels the bucket marks only the pixel
+under the pointer. The theme's `--tool-ghost` token sets the ghost color,
+and its alpha how see-through every preview draws.
+
 The brush tools (the pencil, eraser, soft brush, shading, dither, clone and
 pattern stamps, smudge, blur and replace color) have a Dynamics button in
 the tool options. Its popup sets what pen pressure and the pointer's speed
@@ -171,8 +182,13 @@ merged (Ctrl+Shift+C) copies what all the visible layers show there. Paste
 (Ctrl+V) floats the clipboard's image in the free transform box, where it
 was copied from when that place is in view and in the middle of the view
 otherwise; move, scale and turn it with the box's handles, then Enter keeps
-it as one undo step and Escape drops it. Paste as new layer (Ctrl+Shift+V)
-puts it on a new layer above the active one, and Paste as new document
+it as one undo step and Escape drops it. Pressing the canvas takes the
+keyboard focus from the button clicked before it, so Enter applies the box
+and does not also press that button. An Image or Filter menu command
+chosen while the box is open applies the box first, as its own undo step,
+and then runs on the result. Paste as
+new layer (Ctrl+Shift+V) puts it on a new layer above the active one, and
+Paste as new document
 (Ctrl+Alt+V) opens it in a tab of its own. An image copied in another
 program, such as a screenshot, pastes the same way. Between pixl documents a
 copy keeps its exact pixels and its place; an indexed copy keeps its palette
@@ -308,17 +324,27 @@ Show only selected, Show all layers and Hide selected act on the selection;
 its other commands act on the active layer. Each visibility change is an
 undo step.
 
-Panels sit in docks left, right and below the canvas. Drag the gutter beside
-a dock to resize it. Each panel's header collapses it to its title or hides
-it, and a right-click on the header moves it to another dock or up and down
-its dock. Window > Panels and layouts lists every panel with its dock, its
-order and whether it shows, and switches between layouts: the built-in Paint,
-Animate, Rig and Tiles (the Tileset panel beside the colors), and any the
-user saves under a name of their own. Window >
-Reset layout puts the current layout back as it was saved. The arrangement in
-use and the saved layouts are kept in `workspace.json` in pixl's data folder,
-so the window reopens as it was left; an arrangement saved while the Layers
-panel showed keeps showing it until you switch layouts.
+Panels sit around the canvas, each under a tab: Lumen's dock lays them out.
+Drag a tab to move its panel: onto another panel to share its place as a
+tab, near one of its edges to sit beside it, or over no panel to float it
+over the canvas. Move to new window in a tab's right-click menu opens the
+panel in a window of its own, and Dock back in that window's tab menu puts
+it back. A tab's close button, Close in its menu, or Delete on a focused tab
+hides the panel. Drag the gutter between two panels to resize them. The
+canvas gives way when panels take room, never the panels or the tool bar.
+
+Window > Panels and layouts lists every panel and whether it shows, puts one
+on the left, the right or below the canvas, pops it out into a window of its
+own or docks it back, and folds it to its tab, giving its room to the panels
+beside it. It switches between layouts: the built-in Paint, Animate, Rig and
+Tiles (the Tileset panel beside the colors), and any you save under a name
+of your own. Window > Reset layout puts the current layout back as it was
+saved, and Window > Show all panels shows the hidden ones. The arrangement,
+windows of their own included, and your layouts are kept in
+`dock-layout.json` in pixl's data folder, so pixl reopens as it was left.
+The first time this version opens, it takes over the arrangement and the
+layouts an earlier pixl kept in `workspace.json` there, and removes that
+file.
 
 Window > Customize the tool bar picks which tools the tool bar shows and in
 what order, one column or two, and groups related tools on one button: the
@@ -406,7 +432,7 @@ The editor has its own theme, written entirely in CSS over its own tokens: a
 dark set of neutral greys so the colors in the art read true, and light, high
 contrast and retro sets built from the same tokens. Window > Themes picks a
 set and edits its color tokens (surfaces, text, accent, canvas background,
-checkerboard, grid and selection colors) with a preview beside them, along
+checkerboard, grid, selection and tool preview colors) with a preview beside them, along
 with the UI font and scale, and saves the result as a theme of the user's
 own. A theme is a `.pixltheme` file of plain CSS custom properties, kept in
 the `themes` folder of pixl's data folder; Import and Export share one. The

@@ -524,3 +524,129 @@ fn a_paste_on_a_tilemap_layer_lands_in_its_tiles_by_the_draw_mode() {
     assert_eq!(grid.get(0, 0).index(), 1, "a cell the paste missed");
     assert_ne!(grid.get(1, 1).index(), 1, "a cell the paste covered");
 }
+
+/// A red bar at 4..12 x 6..8 with a white end pixel at (11, 6).
+fn bar() -> Document {
+    let mut d = Document::new(32, 32, ColorMode::Rgba).unwrap();
+    let l = d.layers()[0].id;
+    let t = d.target(l, 0).unwrap();
+    for y in 6..8 {
+        for x in 4..12 {
+            t.raster.set_raw(x, y, RED.to_u32());
+        }
+    }
+    t.raster.set_raw(11, 6, Rgba::WHITE.to_u32());
+    d
+}
+
+/// Copy on one layer, a new layer from the timeline's button, paste, a
+/// quarter turn dragged outside the box with Shift, and Enter.
+fn copy_new_layer_paste_turn() -> Vec<Step> {
+    use lumenui::lumen_core::input::PointerButton::Primary;
+    steps(&[
+        &[
+            Step::Ctrl("c", false),
+            Step::Wait,
+            // Pressed with the pointer, the button takes the focus.
+            Step::Move(At::Element("tl-new-layer")),
+            Step::Down(At::Element("tl-new-layer"), Primary),
+            Step::Up(At::Element("tl-new-layer"), Primary),
+            Step::Wait,
+            Step::Ctrl("v", false),
+            Step::Wait,
+            Step::Wait,
+            // The box turns about (8, 7): from its right to below it.
+            Step::Shift(true),
+            Step::Move(At::Doc(16, 7)),
+            Step::Down(At::Doc(16, 7), Primary),
+            Step::Move(At::Doc(14, 12)),
+            Step::Move(At::Doc(8, 15)),
+            Step::Up(At::Doc(8, 15), Primary),
+            Step::Shift(false),
+            Step::Wait,
+        ],
+        &enter(),
+        &[Step::Wait, Step::Wait],
+    ])
+}
+
+#[test]
+fn a_paste_on_another_layer_turns_there_and_enter_only_applies_it() {
+    let out = drive(editor_over(bar()), copy_new_layer_paste_turn());
+    common::save(&out.frame, "clipboard-paste-turn");
+    assert_eq!(
+        out.doc.layers().len(),
+        2,
+        "Enter applied the paste; it did not also press the New layer button again"
+    );
+    assert_eq!(out.undo, vec!["New layer", "Paste"]);
+    let bottom = out.doc.layers()[0].id;
+    let top = out.doc.layers()[1].id;
+    assert_eq!(out.at.1, top, "the new layer stays the active one");
+    let bounds = |l| {
+        out.doc
+            .cel_raster(l, 0)
+            .unwrap()
+            .map(|r| r.content_bounds())
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        out.doc.cel_raster(bottom, 0).unwrap(),
+        bar().cel_raster(bar().layers()[0].id, 0).unwrap(),
+        "the layer copied from is untouched"
+    );
+    let b = bounds(top);
+    assert_eq!((b.w, b.h), (2, 8), "the pasted bar stands up: {b:?}");
+    let colors: Vec<Rgba> = b
+        .points()
+        .map(|p| {
+            out.doc
+                .cel_raster(top, 0)
+                .unwrap()
+                .map_or(Rgba::TRANSPARENT, |r| Rgba::from_u32(r.get_raw(p.x, p.y)))
+        })
+        .collect();
+    assert_eq!(colors.iter().filter(|c| **c == RED).count(), 15);
+    assert_eq!(colors.iter().filter(|c| **c == Rgba::WHITE).count(), 1);
+}
+
+/// Copy the bar, paste it, turn the paste a quarter turn, then `then`.
+fn turned_paste(then: &[Step]) -> Vec<Step> {
+    steps(&[
+        &[
+            Step::Ctrl("c", false),
+            Step::Wait,
+            Step::Ctrl("v", false),
+            Step::Wait,
+            Step::Text("opt_angle", "90"),
+            Step::Wait,
+        ],
+        then,
+        &[Step::Wait, Step::Wait],
+    ])
+}
+
+#[test]
+fn image_and_filter_commands_apply_the_floating_paste_first() {
+    let rotated = drive(
+        editor_over(bar()),
+        turned_paste(&[Step::Menu("image-rotate-cw"), Step::Wait]),
+    );
+    assert_eq!(rotated.undo, vec!["Paste", "Rotate canvas"]);
+    assert_eq!(rotated.tool, pixl::Tool::Move, "the box closed");
+    assert_eq!(rotated.message, None);
+    // The same as applying with Enter and rotating after.
+    let mut by_hand = enter().to_vec();
+    by_hand.extend([Step::Wait, Step::Menu("image-rotate-cw"), Step::Wait]);
+    let expected = drive(editor_over(bar()), turned_paste(&by_hand));
+    assert_eq!(expected.undo, rotated.undo);
+    assert_eq!(rotated.doc, expected.doc, "the rotation took in the paste");
+
+    let inverted = drive(
+        editor_over(bar()),
+        turned_paste(&[Step::Menu("filter-invert"), Step::Wait, Step::Wait]),
+    );
+    assert_eq!(inverted.undo.first().map(String::as_str), Some("Paste"));
+    assert_eq!(inverted.undo.len(), 2, "{:?}", inverted.undo);
+    assert_eq!(inverted.tool, pixl::Tool::Move);
+}

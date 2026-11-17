@@ -1,5 +1,4 @@
-<column id="panel-brushes" class="panel">
-  <row class="panel-header"><label class="panel-title" text="Brushes"/></row>
+<dock-panel id="panel-brushes" title="Brushes" class="panel" hidden="true">
   <column id="brushes-body" class="panel-body">
     <scroll id="brush-list" class="brush-list"/>
     <row class="brush-actions">
@@ -15,4 +14,4 @@
       <button id="brush-delete" class="flat small" text="Delete"/>
     </row>
   </column>
-</column>
+</dock-panel>

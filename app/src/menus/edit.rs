@@ -77,8 +77,7 @@ pub fn edit_commands(
         }
         let copying = matches!(id.as_str(), "edit-cut" | "edit-copy" | "edit-copy-merged");
         if copying && ft.active() {
-            editor.message =
-                Some("Apply the free transform first, or cancel it with Escape".to_string());
+            editor.message = Some(crate::tools::transform::FIRST.to_string());
             continue;
         }
         let done = match id.as_str() {

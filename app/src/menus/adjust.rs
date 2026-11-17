@@ -271,7 +271,10 @@ pub fn filter_commands(
     mut adjust: ResMut<Adjust>,
     view: Res<View>,
     mut signals: Signals,
-    wake: Option<Res<WakeDeadline>>,
+    (wake, mut ft): (
+        Option<Res<WakeDeadline>>,
+        ResMut<crate::tools::transform::FreeTransform>,
+    ),
 ) {
     let editor = &mut *editor;
     let focus = view.to_doc(view.middle());
@@ -280,6 +283,9 @@ pub fn filter_commands(
             if adjust.session.is_some() {
                 continue;
             }
+            // A box over the cel is applied first, so the filter takes in
+            // what it held.
+            ft.apply(editor);
             let Some(mut s) = open(editor, fid, title) else {
                 continue;
             };

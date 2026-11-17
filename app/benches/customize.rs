@@ -134,14 +134,11 @@ fn main() {
     theme.name = "Bench".into();
     let mut themes = pixl::Themes::in_memory();
     themes.put(theme).unwrap();
-    let mut workspace = pixl::Workspace::in_memory();
-    workspace.live = pixl::workspace::Layout::built_in("Rig").unwrap();
 
     pixl::editor(pixl::ui())
         .app_dir(app_dir(&backend))
         .insert_resource(Editor::new(doc))
         .insert_resource(themes)
-        .insert_resource(workspace)
         .add_systems(TickStage::Systems, |mut s: ResMut<pixl::Settings>| {
             if s.interface.user_theme.is_none() {
                 s.interface.user_theme = Some("Bench".into());

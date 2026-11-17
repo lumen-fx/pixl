@@ -1,6 +1,5 @@
-<column id="panel-rig" class="panel">
+<dock-panel id="panel-rig" title="Rig" class="panel">
   <row class="panel-header">
-    <label class="panel-title" text="Rig"/>
     <spacer/>
     <tooltip text="Draw bones and bind layers to them"><button id="rig-mode-bones" class="flat small" text="Bones"/></tooltip>
     <tooltip text="Pose the bones"><button id="rig-mode-pose" class="flat small" text="Pose"/></tooltip>
@@ -91,4 +90,4 @@
     <tile id="probe-bone-pivot"/>
     <tile id="probe-bone-link"/>
   </tile>
-</column>
+</dock-panel>

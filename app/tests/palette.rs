@@ -23,13 +23,13 @@ type Seen = Arc<Mutex<(bool, Option<String>)>>;
 fn watch(app: App) -> (App, Seen) {
     let seen: Seen = Arc::default();
     let out = Arc::clone(&seen);
-    let app = app.add_systems(TickStage::Systems, move |signals: Signals| {
-        let open = signals.get::<bool>("cp_open") == Some(true);
-        let dock = dom::get_by_id("panel-color")
-            .and_then(|n| n.parent())
-            .and_then(|p| p.id());
-        *out.lock().unwrap() = (open, dock);
-    });
+    let app = app.add_systems(
+        TickStage::Systems,
+        move |signals: Signals, ws: Res<pixl::Workspace>| {
+            let open = signals.get::<bool>("cp_open") == Some(true);
+            *out.lock().unwrap() = (open, Some(ws.layout.clone()));
+        },
+    );
     (app, seen)
 }
 
@@ -88,7 +88,7 @@ fn the_arrow_keys_pick_and_a_layout_runs() {
             Step::Wait,
         ],
     );
-    assert_eq!(seen.lock().unwrap().1.as_deref(), Some("dock-left"));
+    assert_eq!(seen.lock().unwrap().1.as_deref(), Some("Rig"));
 }
 
 #[test]

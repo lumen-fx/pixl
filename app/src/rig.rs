@@ -412,7 +412,7 @@ pub fn rig_clicks(
     mut clicks: MessageReader<ClickEvent>,
     ids: ElementIds,
     keys: Res<KeyCommands>,
-    workspace: Option<ResMut<crate::workspace::Workspace>>,
+    dock: lumenui_dock::Dock,
     signals: Signals,
 ) {
     let editor = &mut *editor;
@@ -631,19 +631,8 @@ pub fn rig_clicks(
         }
     }
     // Entering a mode unfolds the panel it works in.
-    if (unfold || (ui.mode.is_some() && ui.mode != was))
-        && let Some(mut ws) = workspace
-        && ws
-            .live
-            .place("panel-rig")
-            .is_some_and(|p| p.collapsed || !p.shown)
-    {
-        ws.edit(|l| {
-            if let Some(p) = l.panels.iter_mut().find(|p| p.panel == "panel-rig") {
-                p.collapsed = false;
-                p.shown = true;
-            }
-        });
+    if unfold || (ui.mode.is_some() && ui.mode != was) {
+        crate::workspace::unfold(&dock, "panel-rig");
     }
 }
 
