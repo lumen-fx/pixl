@@ -1,7 +1,7 @@
 name: release
 
 # Builds pixl for Windows, Linux and macOS and publishes the three packages on
-# one GitHub pre-release.
+# one GitHub release, marked as the latest.
 #
 # A release starts from one click: run this workflow by hand on main (the
 # Actions tab, or `gh workflow run release.yml -f version=X.Y.Z`), typing back
@@ -575,7 +575,7 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Publish the pre-release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -583,6 +583,6 @@ jobs:
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --prerelease \
+            --latest \
             --title "pixl ${TAG#v}" \
-            --notes "A pre-release of pixl for Windows (x86_64), Linux (x86_64) and macOS (Apple silicon). The builds are not signed; the README's Download section says what each system asks on first start. Keep the files that come with pixl beside it, pixl reads them at start."
+            --notes "pixl for Windows (x86_64), Linux (x86_64) and macOS (Apple silicon). The builds are not signed; the README's Download section says what each system asks on first start. Keep the files that come with pixl beside it, pixl reads them at start."

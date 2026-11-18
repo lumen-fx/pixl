@@ -12,8 +12,8 @@ from the command line for build pipelines. It is built on
 
 ## Download
 
-Builds are pre-releases on the
-[releases page](https://github.com/lumen-fx/pixl/releases). Each package holds
+Download the latest build from the
+[releases page](https://github.com/lumen-fx/pixl/releases/latest). Each package holds
 pixl and the files it reads at start; keep them together.
 
 - Windows (x86_64): unzip `pixl-<version>-windows-x86_64.zip` and run

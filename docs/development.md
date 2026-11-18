@@ -93,7 +93,7 @@ A release starts from a manual run of the `release` workflow on main
 (`gh workflow run release.yml -f version=X.Y.Z`), typing back the version in
 the workspace `Cargo.toml`. It waits for CI on that commit, tags it, builds
 the Windows, Linux and macOS packages, and publishes them as one
-pre-release. Pushing a `v*` tag that matches the workspace version releases
+release, marked as the latest. Pushing a `v*` tag that matches the workspace version releases
 too.
 
 Each package holds the executable, `lumen-crash` (which writes a report and
